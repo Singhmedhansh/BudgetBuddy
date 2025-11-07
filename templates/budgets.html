@@ -1,0 +1,108 @@
+<!doctype html>
+{% extends "layout.html" %}
+{% from "components.html" import render_alerts %}
+{% block content %}
+  <div class="page page-budgets">
+    <h2>Budgets</h2>
+
+    <div class="grid">
+      <section class="panel panel-form">
+        <h3>Create / Update Budget</h3>
+        <form method="post" action="{{ url_for('budgets') }}">
+          {{ form.hidden_tag() }}
+          <div class="form-row">
+            <label for="category">Category</label>
+            {{ form.category(class="input", id="category", list="category-suggestions") }}
+            <datalist id="category-suggestions">
+              <option value="Groceries"></option>
+              <option value="Rent"></option>
+              <option value="Utilities"></option>
+              <option value="Transport"></option>
+              <option value="Dining Out"></option>
+              <option value="Subscriptions"></option>
+              <option value="Healthcare"></option>
+              <option value="Entertainment"></option>
+              <option value="Savings"></option>
+            </datalist>
+          </div>
+          <div class="form-row">
+            <label for="amount">Monthly Budget ({{ CURRENCY_SYMBOL }})</label>
+            {{ form.amount(class="input", id="amount", step="0.01") }}
+          </div>
+          <div class="form-row form-actions">
+            {{ form.submit(class="btn btn-primary") }}
+          </div>
+        </form>
+      </section>
+
+      <aside class="panel panel-info">
+        <h3>Tips</h3>
+        <p>Set monthly budgets per category. If a category already has a budget, submitting the same category will update the existing budget.</p>
+        <p>Budgets with no spent data will display as zero spent.</p>
+      </aside>
+    </div>
+
+    <section class="panel panel-list">
+      <h3>Your Budgets</h3>
+      {% if budgets %}
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Budget ({{ CURRENCY_SYMBOL }})</th>
+              <th>Spent ({{ CURRENCY_SYMBOL }})</th>
+              <th>Progress</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in budgets %}
+              {# Attempt to find spent amount passed in as spent_map or fallback to 0 #}
+              {% set spent_map = spent_map if (spent_map is defined) else {} %}
+              {% set spent = spent_map.get(b.category, 0) %}
+              {% set pct = (spent / b.amount * 100) if (b.amount and b.amount > 0) else None %}
+              <tr class="budget-row">
+                <td>{{ b.category }}</td>
+                <td>{{ b.amount | round(2) }} {{ CURRENCY_SYMBOL }}</td>
+                <td>{{ spent | round(2) }} {{ CURRENCY_SYMBOL }}</td>
+                <td>
+                  {% if pct is not none %}
+                    <div class="progress">
+                      <div class="progress-bar" style="width: {{ pct if pct <= 100 else 100 }}%"></div>
+                    </div>
+                    <small>{{ pct | round(1) }}%</small>
+                    {% if pct >= 100 %}
+                      <span class="badge badge-danger">Over</span>
+                    {% elif pct >= (config.ALERT_NEAR_THRESHOLD * 100) %}
+                      <span class="badge badge-warning">Near</span>
+                    {% endif %}
+                  {% else %}
+                    <small>No budget</small>
+                  {% endif %}
+                </td>
+                <td>
+                  {# No dedicated edit route for budgets in Phase 1; we allow updating via the form above. #}
+                  <form method="post" action="{{ url_for('budgets') }}" style="display:inline;">
+                    {{ form.hidden_tag() }}
+                    <input type="hidden" name="category" value="{{ b.category }}">
+                    <input type="number" name="amount" value="{{ b.amount }}" step="0.01" style="display:none;">
+                    <button class="btn btn-sm" type="submit" title="Edit">Edit</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p>No budgets set yet. Create one using the form above.</p>
+      {% endif %}
+    </section>
+
+    {# If alerts or a dynamic alerts block are passed in, render them using the macro #}
+    <section class="panel panel-alerts">
+      {% if alerts is defined %}
+        {{ render_alerts(alerts) }}
+      {% endif %}
+    </section>
+  </div>
+{% endblock %}

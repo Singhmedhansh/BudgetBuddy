@@ -1,0 +1,104 @@
+<!doctype html>
+{% extends "layout.html" %}
+{% from "components.html" import render_alerts %}
+{% block content %}
+  <div class="page page-index">
+    <div class="grid">
+      <section class="panel panel-primary">
+        <h2>Add Transaction</h2>
+        <form method="post" action="{{ url_for('index') }}">
+          {{ form.hidden_tag() }}
+          <div class="form-row">
+            <label for="amount">Amount ({{ CURRENCY_SYMBOL }})</label>
+            {{ form.amount(class="input", id="amount") }}
+          </div>
+          <div class="form-row">
+            <label for="date">Date</label>
+            {{ form.date(class="input", id="date") }}
+          </div>
+          <div class="form-row">
+            <label for="category">Category</label>
+            {{ form.category(class="input", id="category", list="category-suggestions") }}
+            <datalist id="category-suggestions">
+              <option value="Groceries"></option>
+              <option value="Rent"></option>
+              <option value="Utilities"></option>
+              <option value="Transport"></option>
+              <option value="Dining Out"></option>
+              <option value="Subscriptions"></option>
+              <option value="Healthcare"></option>
+              <option value="Entertainment"></option>
+              <option value="Savings"></option>
+            </datalist>
+          </div>
+          <div class="form-row">
+            <label for="merchant">Merchant</label>
+            {{ form.merchant(class="input", id="merchant") }}
+          </div>
+          <div class="form-row">
+            <label for="notes">Notes</label>
+            {{ form.notes(class="input", id="notes") }}
+          </div>
+          <div class="form-row form-actions">
+            {{ form.submit(class="btn btn-primary") }}
+          </div>
+        </form>
+      </section>
+
+      <aside class="panel panel-secondary">
+        <h2>Quick Links</h2>
+        <ul class="links">
+          <li><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+          <li><a href="{{ url_for('transactions_list') }}">All Transactions</a></li>
+          <li><a href="{{ url_for('budgets') }}">Budgets</a></li>
+          <li><a href="{{ url_for('goals') }}">Goals</a></li>
+        </ul>
+
+        {% if recent %}
+          <h3>Recent Transactions</h3>
+          <table class="table table-compact">
+            <thead>
+              <tr>
+                <th>Date</th><th>Category</th><th>Merchant</th><th>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tx in recent %}
+                <tr>
+                  <td>{{ tx.date.isoformat() if tx.date else '' }}</td>
+                  <td>{{ tx.category }}</td>
+                  <td>{{ tx.merchant or '' }}</td>
+                  <td class="amount">{{ tx.amount | round(2) }} {{ CURRENCY_SYMBOL }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p>No recent transactions. Add your first transaction above.</p>
+        {% endif %}
+      </aside>
+    </div>
+
+    <section class="panel panel-alerts">
+      {# If we pass alerts to index in future, render them here; otherwise dashboard shows alerts #}
+      {% if alerts is defined %}
+        {{ render_alerts(alerts) }}
+      {% endif %}
+    </section>
+  </div>
+
+  <script>
+    // If JS is available, set date input default to today for convenience.
+    (function () {
+      try {
+        const d = document.getElementById('date');
+        if (d && !d.value) {
+          const today = new Date().toISOString().slice(0, 10);
+          d.value = today;
+        }
+      } catch (e) {
+        // silent
+      }
+    })();
+  </script>
+{% endblock %}

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BudgetBuddy</title>
+  <!-- Basic stylesheet -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <!-- Chart.js loaded only where needed (dashboard will include CDN script) -->
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <h1 class="brand"><a href="{{ url_for('index') }}">BudgetBuddy</a></h1>
+      <nav class="main-nav">
+        {% if current_user.is_authenticated %}
+          <span class="nav-item">Hi, {{ current_user.username }}</span>
+          <a class="nav-item" href="{{ url_for('dashboard') }}">Dashboard</a>
+          <a class="nav-item" href="{{ url_for('transactions_list') }}">Transactions</a>
+          <a class="nav-item" href="{{ url_for('budgets') }}">Budgets</a>
+          <a class="nav-item" href="{{ url_for('goals') }}">Goals</a>
+          <a class="nav-item" href="{{ url_for('logout') }}">Logout</a>
+        {% else %}
+          <a class="nav-item" href="{{ url_for('login') }}">Login</a>
+          <a class="nav-item" href="{{ url_for('register') }}">Register</a>
+        {% endif %}
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flashes">
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <!-- Main page content -->
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <small>BudgetBuddy — Local only. Data stored in SQLite on your machine. Currency: {{ CURRENCY_SYMBOL }} ({{ CURRENCY_CODE }})</small>
+    </div>
+  </footer>
+
+  <!-- Tiny helper JS loaded site-wide -->
+  <script src="{{ url_for('static', filename='main.js') }}"></script>
+</body>
+</html>
