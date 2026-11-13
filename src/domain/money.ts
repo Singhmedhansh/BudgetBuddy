@@ -4,7 +4,7 @@
  * parsed with exact decimal arithmetic.
  */
 
-/** ISO 4217 minor-unit exponents for the currencies Budget Buddy supports. */
+/** ISO 4217 minor-unit exponents for the currencies FinTrack supports. */
 const EXPONENTS: Record<string, number> = {
   INR: 2,
   USD: 2,

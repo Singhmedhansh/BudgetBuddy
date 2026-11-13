@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AuthShell } from "@/components/auth/AuthShell";
-import { SignupForm } from "@/components/auth/forms";
+import { Suspense } from "react";
+import { AuthShell, FormSkeleton } from "@/components/auth/AuthShell";
+import { SignupForm, SocialButtons } from "@/components/auth/forms";
+import { getEnabledProviders } from "@/lib/auth/providers";
 
 export const metadata: Metadata = { title: "Create your account" };
 
@@ -19,7 +21,24 @@ export default function SignupPage() {
         </>
       }
     >
-      <SignupForm />
+      <Suspense fallback={<FormSkeleton />}>
+        <SignupContent />
+      </Suspense>
     </AuthShell>
+  );
+}
+
+async function SignupContent() {
+  const { social } = await getEnabledProviders();
+  return (
+    <div className="space-y-5">
+      {social.length > 0 ? (
+        <>
+          <SocialButtons providers={social} next="/app/onboarding" verb="Sign up" />
+          <p className="text-center text-xs text-muted">or sign up with your email</p>
+        </>
+      ) : null}
+      <SignupForm />
+    </div>
   );
 }

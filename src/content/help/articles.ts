@@ -1,5 +1,5 @@
 /**
- * Help Centre content. Articles describe only what Budget Buddy does today; when
+ * Help Centre content. Articles describe only what FinTrack does today; when
  * a module ships, its article is added in the same change. Inline links use
  * [label](/internal/path) and are rendered as internal links only.
  */
@@ -36,7 +36,7 @@ export const CATEGORIES: { id: CategoryId; title: string; blurb: string }[] = [
 export const ARTICLES: Article[] = [
   {
     slug: "getting-started",
-    title: "Set up Budget Buddy in a few minutes",
+    title: "Set up FinTrack in a few minutes",
     category: "getting-started",
     summary: "The shortest path from a new account to a working dashboard.",
     keywords: ["start", "begin", "setup", "first", "onboarding", "new"],
@@ -54,7 +54,7 @@ export const ARTICLES: Article[] = [
           "Create a monthly budget from [Budgets](/app/budgets/new).",
         ],
       },
-      { t: "note", text: "Budget Buddy does not connect to your bank. Balances come from what you enter and the transactions you record." },
+      { t: "note", text: "FinTrack does not connect to your bank. Balances come from what you enter and the transactions you record." },
     ],
   },
   {
@@ -79,7 +79,7 @@ export const ARTICLES: Article[] = [
     keywords: ["balance", "bank balance", "live", "reconcile", "wrong balance", "mismatch", "doesn't match"],
     related: ["add-an-account", "reverse-a-transaction"],
     body: [
-      { t: "p", text: "An account balance is the opening balance you entered plus every posted transaction since. Budget Buddy never reads your bank, so a balance here can differ from your bank if something has not been recorded yet." },
+      { t: "p", text: "An account balance is the opening balance you entered plus every posted transaction since. FinTrack never reads your bank, so a balance here can differ from your bank if something has not been recorded yet." },
       { t: "list", items: ["Check that every recent transaction is recorded in [Transactions](/app/transactions).", "Check transfers: both accounts must be recorded, from one account to the other.", "If a transaction was recorded wrongly, reverse it and record it again."] },
     ],
   },
@@ -211,8 +211,8 @@ export const ARTICLES: Article[] = [
     destination: { label: "Add a bill", href: "/app/bills/new" },
     related: ["financial-calendar", "expected-income"],
     body: [
-      { t: "steps", items: ["Open [Bills](/app/bills/new) or [Subscriptions](/app/subscriptions/new) and add one.", "Choose the amount, how often it repeats, the first due date, the account it is paid from and a category.", "When you pay it, choose Mark paid. Budget Buddy records the expense and ticks off that due date."] },
-      { t: "list", items: ["A due date can be marked paid once, so it cannot be recorded twice.", "A monthly item on the 31st falls on the last day of shorter months.", "Overdue means the due date has passed without being marked paid. Due soon uses your reminder days.", "Budget Buddy cannot cancel a subscription with the provider. Mark it cancelled here once you have cancelled it with them."] },
+      { t: "steps", items: ["Open [Bills](/app/bills/new) or [Subscriptions](/app/subscriptions/new) and add one.", "Choose the amount, how often it repeats, the first due date, the account it is paid from and a category.", "When you pay it, choose Mark paid. FinTrack records the expense and ticks off that due date."] },
+      { t: "list", items: ["A due date can be marked paid once, so it cannot be recorded twice.", "A monthly item on the 31st falls on the last day of shorter months.", "Overdue means the due date has passed without being marked paid. Due soon uses your reminder days.", "FinTrack cannot cancel a subscription with the provider. Mark it cancelled here once you have cancelled it with them."] },
     ],
   },
   {
@@ -317,7 +317,7 @@ export const ARTICLES: Article[] = [
     destination: { label: "Security and privacy", href: "/security" },
     related: ["reset-your-password"],
     body: [
-      { t: "list", items: ["Use a password you do not use anywhere else. The sign-up form shows how strong it is.", "Log out from the menu at the top right, especially on shared devices.", "Your data is protected by access rules in the database, not only by the screens you see.", "Card details never reach Budget Buddy."] },
+      { t: "list", items: ["Use a password you do not use anywhere else. The sign-up form shows how strong it is.", "Log out from the menu at the top right, especially on shared devices.", "Your data is protected by access rules in the database, not only by the screens you see.", "Card details never reach FinTrack."] },
     ],
   },
   {

@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { LoadSampleButton } from "@/components/app/sample-data-forms";
+import { ProfileBanner } from "@/components/app/ProfileBanner";
 import { EmptyState, formatDate, Money, PageHeader } from "@/components/app/ui";
 import { TrendChart } from "@/components/app/TrendChart";
 import { monthsBack, shares } from "@/domain/analytics";
 import { displayAmount } from "@/domain/display";
+import { normalizeDashboardPrefs } from "@/domain/profile";
 import { periodTotals, spendingByCategory, type LedgerAccount } from "@/domain/ledger";
 import { localDate, monthRange } from "@/domain/period";
 import { requireSpace } from "@/server/context";
@@ -18,6 +21,7 @@ export default async function DashboardPage() {
   const ctx = await requireSpace();
   const { space, profile } = ctx;
   const tz = profile.timezone;
+  const prefs = normalizeDashboardPrefs(profile.dashboard_prefs);
   const now = localDate(new Date(), tz);
   const trendMonths = monthsBack(now.year, now.month, 6);
   const trendStart = monthRange(trendMonths[0].year, trendMonths[0].month, tz).from;
@@ -27,11 +31,17 @@ export default async function DashboardPage() {
     return (
       <>
         <PageHeader title="Dashboard" description="Your overview will fill in as you add accounts and transactions." />
+        <ProfileBanner profile={profile} />
         <EmptyState
           title="Start with an account"
-          body="Add a bank account, wallet or card so Budget Buddy has somewhere to record your money. Then add a transaction or create a budget."
+          body="Add a bank account, wallet or card so FinTrack has somewhere to record your money. Then add a transaction or create a budget."
           action={{ href: "/app/accounts/new", label: "Add an account" }}
         />
+        <div className="mt-8 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          <h2 className="font-semibold">Just looking around?</h2>
+          <p className="mb-4 mt-1 text-sm text-muted">Load a fictional household to see the dashboard, budgets and reports with real-looking numbers. You can remove it later.</p>
+          <LoadSampleButton />
+        </div>
       </>
     );
   }
@@ -59,6 +69,7 @@ export default async function DashboardPage() {
   return (
     <>
       <PageHeader title="Dashboard" description={`${monthLabel}. Figures come from the transactions you have recorded.`} action={{ href: "/app/transactions/new", label: "Add transaction" }} help={{ slug: "how-totals-work", label: "how these figures are worked out" }} />
+      <ProfileBanner profile={profile} />
 
       <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
         {/* Net worth: the one dark, high-contrast card on the page */}
@@ -118,7 +129,8 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+      {prefs.categories || prefs.budgets ? <div className={`mt-6 grid gap-6 ${prefs.categories && prefs.budgets ? "lg:grid-cols-2" : ""}`}>
+        {prefs.categories ? (
         <Panel title="Where it went" action={{ href: "/app/analytics", label: "Analytics" }}>
           {top.length === 0 ? (
             <p className="text-sm text-muted">No spending recorded this month yet.</p>
@@ -145,7 +157,9 @@ export default async function DashboardPage() {
             </>
           )}
         </Panel>
+        ) : null}
 
+        {prefs.budgets ? (
         <Panel title="Budget watch" action={{ href: "/app/budgets", label: "Budgets" }}>
           {budgets.length === 0 ? (
             <p className="text-sm text-muted">
@@ -184,9 +198,11 @@ export default async function DashboardPage() {
             </p>
           ) : null}
         </Panel>
-      </div>
+        ) : null}
+      </div> : null}
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+      {prefs.recent || prefs.trend ? <div className={`mt-6 grid gap-6 ${prefs.recent && prefs.trend ? "lg:grid-cols-[1.3fr_1fr]" : ""}`}>
+        {prefs.recent ? (
         <Panel title="Recent transactions" action={{ href: "/app/transactions", label: "View all" }}>
           {recent.length === 0 ? (
             <EmptyState title="No transactions yet" body="Record your first expense or income and it will show up here." action={{ href: "/app/transactions/new", label: "Add transaction" }} />
@@ -212,11 +228,14 @@ export default async function DashboardPage() {
             </ul>
           )}
         </Panel>
+        ) : null}
 
+        {prefs.trend ? (
         <Panel title="Six months" action={{ href: "/app/analytics?range=6m", label: "Details" }}>
           <TrendChart data={trend} currency={space.currency} />
         </Panel>
-      </div>
+        ) : null}
+      </div> : null}
     </>
   );
 }

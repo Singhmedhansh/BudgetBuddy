@@ -27,7 +27,7 @@ export const getContext = cache(async () => {
   const { data: profileData } = await supabase.rpc("ensure_profile");
   const profile = (Array.isArray(profileData) ? profileData[0] : profileData) as Profile;
 
-  const { data: spaces } = await supabase.from("financial_spaces").select("id,name,kind,currency").order("created_at");
+  const { data: spaces } = await supabase.from("financial_spaces").select("*").order("created_at");
   const list = (spaces ?? []) as Space[];
   // The active space is the one the person chose, if they still belong to it; otherwise the first.
   const wanted = (await cookies()).get(ACTIVE_SPACE_COOKIE)?.value;

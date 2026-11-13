@@ -12,6 +12,16 @@ export interface Profile {
   theme: "light" | "dark" | "system";
   onboarding_completed_at: string | null;
   onboarding_state: { accountSkipped?: boolean };
+  // Added by migration 9. Undefined until it is applied, so every reader treats them as empty.
+  avatar_path?: string | null;
+  phone?: string | null;
+  country?: string | null;
+  date_format?: "dmy" | "mdy" | "ymd" | null;
+  number_format?: "en-IN" | "en-US" | "de-DE" | "fr-FR";
+  profile_completed_at?: string | null;
+  banner_dismissed_until?: string | null;
+  dashboard_prefs?: Record<string, unknown>;
+  notification_prefs?: Record<string, unknown>;
 }
 
 export interface Space {
@@ -19,6 +29,7 @@ export interface Space {
   name: string;
   kind: string;
   currency: string;
+  is_sample?: boolean;
 }
 
 export interface Account {

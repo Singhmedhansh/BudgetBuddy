@@ -6,6 +6,7 @@ import { LedgerPreview } from "@/components/landing/LedgerPreview";
 import { SiteFooter, SiteHeader } from "@/components/landing/SiteChrome";
 import { BackToTop } from "@/components/motion/BackToTop";
 import { Reveal } from "@/components/motion/Reveal";
+import { BRAND } from "@/config/brand";
 import { PLANS, priceFor, type Plan } from "@/config/plans";
 import { formatMoney } from "@/domain/money";
 
@@ -32,8 +33,8 @@ const AUDIENCES = [
 ];
 
 const FAQ = [
-  { q: "Does Budget Buddy connect to my bank?", a: "Not today. You add transactions yourself or import a statement file. Any bank connection in future will use a regulated provider and ask for your consent first." },
-  { q: "Can Budget Buddy move money or pay bills?", a: "No. It records and explains your finances. It never makes payments or transfers for you." },
+  { q: "Does FinTrack connect to my bank?", a: "Not today. You add transactions yourself or import a statement file. Any bank connection in future will use a regulated provider and ask for your consent first." },
+  { q: "Can FinTrack move money or pay bills?", a: "No. It records and explains your finances. It never makes payments or transfers for you." },
   { q: "Is the free plan enough to start?", a: "Yes. Transactions, accounts, budgets, goals, CSV import and the core dashboard are free. You can always export or delete your data." },
   { q: "Who can see my data?", a: "You, and the people you add to a shared space with the role you choose. Personal accounts stay private even inside a shared space." },
   { q: "Is the AI assistant making up numbers?", a: "Amounts it quotes come from calculations on your recorded data, not from the model. It asks before it changes anything." },
@@ -41,7 +42,7 @@ const FAQ = [
 
 const SECURITY = [
   "Each person's data is protected by database-level access rules, not just by the interface.",
-  "Card details never reach Budget Buddy. Payments go through the payment provider's own checkout.",
+  "Card details never reach FinTrack. Payments go through the payment provider's own checkout.",
   "Export your data or delete your account whenever you like, on any plan.",
   "The AI assistant only works from your own recorded data and asks before it changes anything.",
 ];
@@ -60,7 +61,7 @@ export default function Home() {
           <div aria-hidden className="absolute -right-40 -top-40 -z-10 h-[34rem] w-[34rem] rounded-full bg-primary/15 blur-3xl" />
           <div className="mx-auto grid max-w-6xl items-center gap-10 px-5 pb-16 pt-14 lg:grid-cols-[1.05fr_1fr] lg:pb-24 lg:pt-20">
             <div>
-              <h1 className="font-display anim-rise max-w-[14ch] text-[2.6rem] leading-[1.02] sm:text-6xl lg:text-[4.4rem]">Your money deserves better management.</h1>
+              <h1 className="font-display anim-rise max-w-[14ch] text-[2.6rem] leading-[1.02] sm:text-6xl lg:text-[4.4rem]">{BRAND.tagline}</h1>
               <p className="anim-rise mt-6 max-w-[46ch] text-lg leading-relaxed text-muted" style={{ animationDelay: "90ms" }}>
                 Track expenses, plan budgets, manage subscriptions and understand your finances, all in one place.
               </p>
@@ -86,7 +87,7 @@ export default function Home() {
           <div aria-hidden className="absolute left-1/2 top-0 h-72 w-[52rem] -translate-x-1/2 rounded-full bg-primary/30 blur-3xl" />
           <div className="relative mx-auto max-w-6xl px-5">
             <Reveal>
-              <h2 className={`${h2} max-w-[18ch] text-white`}>See Budget Buddy at work</h2>
+              <h2 className={`${h2} max-w-[18ch] text-white`}>See FinTrack at work</h2>
               <p className="mt-4 max-w-[52ch] text-white/65">These previews run on example data right here on the page. Try the buttons: nothing is saved, and none of it belongs to a real person.</p>
             </Reveal>
             <Reveal className="mt-12" delay={80}>
@@ -101,7 +102,7 @@ export default function Home() {
             <Reveal>
               <h2 className={`${h2} max-w-[16ch]`}>One record you can trace</h2>
               <p className="mt-5 max-w-[46ch] leading-relaxed text-muted">
-                Money gets scattered: balances live in several apps, subscriptions renew quietly, and a month-end total rarely matches memory. Budget Buddy keeps a single ledger, so every figure on the dashboard can be followed back to the transactions behind it.
+                Money gets scattered: balances live in several apps, subscriptions renew quietly, and a month-end total rarely matches memory. FinTrack keeps a single ledger, so every figure on the dashboard can be followed back to the transactions behind it.
               </p>
             </Reveal>
             <Reveal delay={100}>
@@ -199,7 +200,7 @@ export default function Home() {
           <div className="mx-auto max-w-6xl px-5">
             <Reveal>
               <h2 className={h2}>Pricing</h2>
-              <p className="mt-4 max-w-[56ch] text-muted">Start free. Upgrade when you want forecasting and deeper reports.</p>
+              <p className="mt-4 max-w-[56ch] text-muted">Start with FinTrack Free. Move to FinTrack One when you want forecasting and deeper reports.</p>
             </Reveal>
             <div className="mt-12 grid gap-6 md:grid-cols-2">
               {PLANS.map((p, i) => (

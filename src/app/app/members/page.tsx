@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
-import { removeMemberAction, revokeInviteAction, setMemberRoleAction } from "@/app/app/space-actions";
+import { removeMemberAction, revokeInviteAction, setMemberRoleAction, transferOwnershipAction } from "@/app/app/space-actions";
 import { InviteForm } from "@/components/app/space-ui";
 import { EmptyState, formatDate, Notice, PageHeader } from "@/components/app/ui";
 import { atLeast, requireSpace } from "@/server/context";
@@ -42,6 +42,7 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
       {sp.updated ? <Notice kind="success">Role updated.</Notice> : null}
       {sp.removed ? <Notice kind="success">Member removed. Their access ended immediately.</Notice> : null}
       {sp.revoked ? <Notice kind="success">Invitation revoked.</Notice> : null}
+      {sp.transferred ? <Notice kind="success">Ownership transferred. You are now an admin of this space.</Notice> : null}
       {sp.error ? <Notice kind="error">{sp.error === "invalid" ? "That request was not valid." : sp.error}</Notice> : null}
 
       {error ? (
@@ -81,6 +82,21 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
                             Save
                           </button>
                         </form>
+                      ) : null}
+                      {isOwner && !m.is_you ? (
+                        <details className="group">
+                          <summary className="cursor-pointer list-none text-primary underline hover:no-underline">Make owner</summary>
+                          <form action={transferOwnershipAction} className="mt-2 flex items-center gap-2 rounded-lg border border-line bg-sunken p-2">
+                            <input type="hidden" name="user" value={m.user_id} />
+                            <label htmlFor={`own-${m.user_id}`} className="sr-only">
+                              Type TRANSFER to hand ownership to {name}
+                            </label>
+                            <input id={`own-${m.user_id}`} name="confirm" autoComplete="off" placeholder="Type TRANSFER" className="w-32 rounded-md border border-line-strong bg-surface px-2 py-1.5 text-xs" />
+                            <button type="submit" className="rounded-md border border-line-strong px-3 py-1.5 hover:border-primary">
+                              Hand over
+                            </button>
+                          </form>
+                        </details>
                       ) : null}
                       {canManage || (m.is_you && m.role !== "owner") ? (
                         <form action={removeMemberAction}>

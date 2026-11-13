@@ -1,7 +1,7 @@
 /**
  * Coexistence with another application in the same Supabase project. The stand-in
  * "other app" mirrors HireCheck's shape: a public.profiles table filled by an
- * unconditional trigger on auth.users. Budget Buddy's migrations must not touch
+ * unconditional trigger on auth.users. FinTrack's migrations must not touch
  * it, add their own auth trigger, or create anything in `public`, and Budget
  * Buddy's profile creation must never write into the other app's tables.
  */
@@ -82,12 +82,12 @@ describe("coexistence with another app on the same project", () => {
     expect(bb.rows).toHaveLength(1);
   });
 
-  it("Budget Buddy never creates a profile for a user until that user actually uses it", async () => {
+  it("FinTrack never creates a profile for a user until that user actually uses it", async () => {
     const r = await db.query(`select 1 from budgetbuddy.profiles where user_id = '${OTHER_APP_USER}'`);
     expect(r.rows).toHaveLength(0);
   });
 
-  it("another app's user can use Budget Buddy only as themselves and sees none of its data", async () => {
+  it("another app's user can use FinTrack only as themselves and sees none of its data", async () => {
     await as(OTHER_APP_USER, () => db.query(`select * from budgetbuddy.ensure_profile()`));
     const rows = await as(OTHER_APP_USER, async () => ({
       profiles: (await db.query(`select 1 from budgetbuddy.profiles`)).rows.length,

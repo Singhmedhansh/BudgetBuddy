@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
- * Budget Buddy design tokens. Light is the default; dark is a designed theme
+ * FinTrack design tokens. Light is the default; dark is a designed theme
  * (green-tinted charcoal, not an inversion). Components use the semantic names
  * below, never raw hex. `*-text` variants exist where the brand fill colour is
  * too light to read as small text on the surface.

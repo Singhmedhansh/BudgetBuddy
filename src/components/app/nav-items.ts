@@ -10,6 +10,7 @@ import {
   ChartColumn,
   LineChart,
   Settings,
+  Sparkles,
   Target,
   Users,
   TrendingUp,
@@ -51,6 +52,7 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/app/analytics", label: "Analytics", Icon: ChartColumn },
       { href: "/app/forecast", label: "Forecast", Icon: LineChart },
+      { href: "/app/assistant", label: "Assistant", Icon: Sparkles },
     ],
   },
   {

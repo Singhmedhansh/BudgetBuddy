@@ -2,6 +2,7 @@ import { Sparkles } from "lucide-react";
 import Link from "next/link";
 import { BackButton } from "@/components/nav/BackButton";
 import { formatMoney } from "@/domain/money";
+import { formatInstant, getFormatPrefs } from "@/lib/format-prefs";
 
 export function PageHeader({ title, description, action, help, back }: { title: string; description?: string; action?: { href: string; label: string }; help?: { slug: string; label: string }; back?: { href: string; label?: string } }) {
   return (
@@ -53,17 +54,17 @@ export function Notice({ kind, children }: { kind: "success" | "error"; children
 }
 
 export function Money({ minor, currency, signed, className = "" }: { minor: number; currency: string; signed?: boolean; className?: string }) {
-  const text = formatMoney(Math.abs(minor), currency);
+  const text = formatMoney(Math.abs(minor), currency, getFormatPrefs().numberLocale);
   const sign = minor < 0 ? "-" : signed && minor > 0 ? "+" : "";
   return <span className={`num ${className}`}>{sign}{text}</span>;
 }
 
 export function formatDate(iso: string, timeZone: string) {
-  return new Intl.DateTimeFormat("en-IN", { timeZone, day: "numeric", month: "short", year: "numeric" }).format(new Date(iso));
+  return formatInstant(new Date(iso), timeZone);
 }
 
 /** Formats a calendar date ("2026-11-13") without any timezone shift. */
 export function formatDay(date: string) {
   const [y, m, d] = date.split("-").map(Number);
-  return new Intl.DateTimeFormat("en-IN", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(Date.UTC(y, m - 1, d)));
+  return formatInstant(new Date(Date.UTC(y, m - 1, d)), "UTC");
 }

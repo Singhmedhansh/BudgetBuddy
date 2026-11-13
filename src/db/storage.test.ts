@@ -1,7 +1,7 @@
 /**
  * Verifies the storage policies against a stand-in for Supabase's storage schema
  * (PGlite has no storage service). Proves the policy logic and, importantly,
- * that Budget Buddy policies grant nothing on any other bucket.
+ * that FinTrack policies grant nothing on any other bucket.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

@@ -79,7 +79,7 @@ export function RecurringForm({
       {kind === "subscription" ? (
         <label className="flex items-start gap-3 text-sm">
           <input type="checkbox" name="autoRenews" defaultChecked={v.autoRenews ? v.autoRenews === "on" : true} className="mt-1 accent-[var(--primary)]" />
-          <span>Renews automatically<span className="block text-xs text-muted">Only a note for you. Budget Buddy cannot cancel a subscription with the provider.</span></span>
+          <span>Renews automatically<span className="block text-xs text-muted">Only a note for you. FinTrack cannot cancel a subscription with the provider.</span></span>
         </label>
       ) : null}
       <Field label={kind === "subscription" ? "Cancellation notes (optional)" : "Notes (optional)"} name="notes" defaultValue={v.notes} error={fe.notes} />

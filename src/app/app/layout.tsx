@@ -1,12 +1,18 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
-import { signOut } from "@/app/(auth)/actions";
 import { Logo } from "@/components/brand/Logo";
 import { BottomNav, SidebarNav } from "@/components/app/AppNav";
 import { SpaceSwitcher } from "@/components/app/SpaceSwitcher";
+import { AccountMenu } from "@/components/app/AccountMenu";
 import { BackToTop } from "@/components/motion/BackToTop";
+import { saveThemeAction } from "@/app/app/settings-actions";
+import { ThemeSync } from "@/components/theme/ThemeSync";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { profileCompletion } from "@/domain/profile";
+import { setFormatPrefs } from "@/lib/format-prefs";
+import { avatarUrl } from "@/server/account";
+import { isSampleSpace } from "@/server/sample-data";
 import { getContext } from "@/server/context";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -18,14 +24,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 }
 
 async function Shell({ children }: { children: React.ReactNode }) {
-  const { user, profile, space, spaces, role } = await getContext();
+  const { supabase, user, profile, space, spaces, role } = await getContext();
   const name = profile.display_name || user.email || "Account";
-  const initial = (name.trim()[0] ?? "?").toUpperCase();
+  const completion = profileCompletion(profile);
+  const avatar = await avatarUrl(supabase, profile);
+  // Number and date preferences apply to everything rendered below this point in the request.
+  setFormatPrefs({ numberLocale: profile.number_format ?? "en-IN", dateFormat: profile.date_format ?? null });
   return (
     <div className="min-h-screen md:grid md:grid-cols-[15.5rem_minmax(0,1fr)]">
       {/* Sidebar: deep ink in both themes, so navigation reads as a fixed frame around the work */}
       <aside className="hidden bg-ink text-white md:sticky md:top-0 md:flex md:h-screen md:flex-col md:p-4">
-        <Link href="/app" aria-label="Budget Buddy dashboard" className="rounded-md px-2 py-2 [&_span]:!text-white">
+        <Link href="/app" aria-label="FinTrack dashboard" className="rounded-md px-2 py-2 [&_span]:!text-white">
           <Logo />
         </Link>
         <div className="mt-4 text-white">
@@ -45,43 +54,25 @@ async function Shell({ children }: { children: React.ReactNode }) {
 
       <div className="flex min-w-0 flex-col pb-20 md:pb-0">
         <header className="glass sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-x-0 border-t-0 px-5">
-          <Link href="/app" className="md:hidden" aria-label="Budget Buddy dashboard">
+          <Link href="/app" className="md:hidden" aria-label="FinTrack dashboard">
             <Logo size={24} />
           </Link>
           <p className="hidden truncate text-sm text-muted md:block">{space?.name ?? "Set up your finances"}{role === "viewer" ? " · view only" : ""}</p>
+          {isSampleSpace(space) ? <span className="rounded-full bg-warn/15 px-2.5 py-1 text-xs font-medium text-warn-text">Sample data · fictional</span> : null}
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-            <ThemeToggle />
-            <details className="group relative">
-              <summary aria-label="Account menu" className="flex h-9 cursor-pointer list-none items-center gap-2 rounded-full border border-line-strong bg-surface py-1 pl-1 pr-3 text-sm transition-colors hover:border-primary">
-                <span aria-hidden className="grid h-7 w-7 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-fg">
-                  {initial}
-                </span>
-                <span className="hidden max-w-[9rem] truncate sm:block">{name}</span>
-              </summary>
-              <div className="anim-pop glass absolute right-0 z-40 mt-2 w-60 rounded-xl p-2 shadow-float">
-                <p className="truncate px-2 py-1.5 text-xs text-muted">{user.email}</p>
-                <div className="md:hidden">
-                  <SpaceSwitcher spaces={spaces} activeId={space?.id ?? null} role={role} />
-                </div>
-                <Link href="/help" className="block rounded-lg px-2 py-2 text-sm hover:bg-sage md:hidden">
-                  Help Centre
-                </Link>
-                <Link href="/contact" className="block rounded-lg px-2 py-2 text-sm hover:bg-sage">
-                  Contact support
-                </Link>
-                <form action={signOut}>
-                  <button type="submit" className="w-full rounded-lg px-2 py-2 text-left text-sm hover:bg-sage">
-                    Log out
-                  </button>
-                </form>
+            <ThemeToggle onChoose={saveThemeAction} />
+            <AccountMenu name={name} email={user.email ?? ""} avatarUrl={avatar} profile={{ percent: completion.percent, status: completion.status }}>
+              <div className="md:hidden">
+                <SpaceSwitcher spaces={spaces} activeId={space?.id ?? null} role={role} />
               </div>
-            </details>
+            </AccountMenu>
           </div>
         </header>
         <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-5 py-8 md:px-8 md:py-10">
           {children}
         </main>
       </div>
+      <ThemeSync theme={profile.theme} />
       <BottomNav />
       <BackToTop />
     </div>

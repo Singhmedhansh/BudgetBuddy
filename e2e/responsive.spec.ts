@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 /** Runs at 1440, 1280, 768 and 390 px as real browser viewports (see playwright.config.ts). */
 const PUBLIC = ["/", "/help", "/help/getting-started", "/contact", "/security", "/legal/privacy", "/login", "/signup", "/forgot-password"];
-const APP = ["/app", "/app/transactions", "/app/transactions/new", "/app/accounts", "/app/accounts/new", "/app/budgets", "/app/budgets/new", "/app/goals", "/app/goals/new", "/app/bills", "/app/subscriptions", "/app/income", "/app/calendar", "/app/debt", "/app/analytics", "/app/forecast", "/app/import", "/app/more", "/app/members", "/app/settings", "/app/spaces/new", "/app/join"];
+const APP = ["/app", "/app/transactions", "/app/transactions/new", "/app/accounts", "/app/accounts/new", "/app/budgets", "/app/budgets/new", "/app/goals", "/app/goals/new", "/app/bills", "/app/subscriptions", "/app/income", "/app/calendar", "/app/debt", "/app/analytics", "/app/forecast", "/app/import", "/app/more", "/app/members", "/app/settings", "/app/settings/preferences", "/app/settings/security", "/app/settings/notifications", "/app/settings/connected", "/app/settings/privacy", "/app/assistant", "/app/spaces/new", "/app/join"];
 
 async function overflow(page: Page) {
   return page.evaluate(() => {

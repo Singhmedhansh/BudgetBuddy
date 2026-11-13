@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "Contact us",
-  description: "Send Budget Buddy support a message and get a reference number.",
+  description: "Send FinTrack support a message and get a reference number.",
   alternates: { canonical: "/contact" },
 };
 

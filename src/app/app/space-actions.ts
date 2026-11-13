@@ -87,6 +87,18 @@ export async function setMemberRoleAction(form: FormData) {
   redirect(error ? `/app/members?error=${encodeURIComponent(memberError(error.message))}` : "/app/members?updated=1");
 }
 
+/** Hands the space to another member. The previous owner stays on as an admin, so nobody loses access by surprise. */
+export async function transferOwnershipAction(form: FormData) {
+  const ctx = await requireSpace();
+  const user = z.string().uuid().safeParse(form.get("user"));
+  if (!user.success) redirect("/app/members?error=invalid");
+  // Typing the word is the confirmation: this changes who can delete the space.
+  if (String(form.get("confirm") ?? "").trim().toLowerCase() !== "transfer") redirect(`/app/members?error=${encodeURIComponent("Type TRANSFER to confirm handing over ownership.")}`);
+  const { error } = await ctx.supabase.rpc("transfer_ownership", { p_space: ctx.space.id, p_user: user.data });
+  revalidatePath("/app", "layout");
+  redirect(error ? `/app/members?error=${encodeURIComponent(memberError(error.message))}` : "/app/members?transferred=1");
+}
+
 export async function removeMemberAction(form: FormData) {
   const ctx = await requireSpace();
   const user = z.string().uuid().safeParse(form.get("user"));

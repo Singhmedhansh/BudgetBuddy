@@ -1,61 +1,64 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { DeleteDataForm, ProfileForm } from "@/components/app/settings-forms";
-import { PageHeader } from "@/components/app/ui";
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { AvatarUploader, EmailChangeForm, ProfileForm } from "@/components/app/settings-forms";
+import { profileCompletion } from "@/domain/profile";
+import { avatarUrl, hasPassword } from "@/server/account";
 import { getContext } from "@/server/context";
 
-export const metadata: Metadata = { title: "Settings" };
+export const metadata: Metadata = { title: "Profile settings" };
 
-export default async function SettingsPage() {
-  const { profile, user, space, role } = await getContext();
+export default async function ProfilePage() {
+  const { supabase, user, profile } = await getContext();
+  const c = profileCompletion(profile);
+  const photo = await avatarUrl(supabase, profile);
+  const name = profile.display_name ?? "";
   return (
     <>
-      <PageHeader title="Settings" description="Your profile, appearance and data." />
-      <div className="max-w-xl space-y-14">
-        <section aria-labelledby="profile">
-          <h2 id="profile" className="mb-4 font-semibold">
-            Profile
+      <section aria-labelledby="completion" className="rounded-xl border border-line bg-surface p-5">
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="completion" className="font-semibold">
+            Profile completion
           </h2>
-          <p className="mb-4 text-sm text-muted">Signed in as {user.email}. {space ? `Money in ${space.name} is recorded in ${space.currency}; a space's currency is fixed when it is created.` : null}</p>
-          <ProfileForm name={profile.display_name ?? ""} timezone={profile.timezone} />
-        </section>
+          <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${c.status === "complete" ? "bg-pos/15 text-pos-text" : "bg-warn/15 text-warn-text"}`}>{c.status === "complete" ? "Complete" : "Pending"}</span>
+        </div>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-line" role="progressbar" aria-label="Profile completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={c.percent}>
+          <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${c.percent}%` }} />
+        </div>
+        <p className="mt-3 text-sm text-muted">
+          {c.status === "complete" ? "Everything needed is filled in. Thank you." : `${c.percent}% done. Still to add: ${c.missing.map((m) => m.label.toLowerCase()).join(", ")}.`}
+        </p>
+        {c.optionalMissing.length > 0 ? <p className="mt-1 text-sm text-muted">Optional: {c.optionalMissing.map((m) => m.label.toLowerCase()).join(", ")}.</p> : null}
+      </section>
 
-        <section aria-labelledby="appearance">
-          <h2 id="appearance" className="mb-4 font-semibold">
-            Appearance
-          </h2>
-          <ThemeToggle />
-        </section>
+      <section aria-labelledby="photo">
+        <h2 id="photo" className="mb-4 font-semibold">
+          Photo
+        </h2>
+        <AvatarUploader userId={user.id} name={name || user.email || "Account"} url={photo} />
+      </section>
 
-        <section aria-labelledby="plan">
-          <h2 id="plan" className="mb-2 font-semibold">
-            Plan
-          </h2>
-          <p className="text-sm leading-relaxed text-muted">
-            You are on the Free plan. Paid plans and checkout are not available yet, so nothing here can charge you. See <Link href="/#pricing" className="text-primary hover:underline">what is planned</Link>.
-          </p>
-        </section>
+      <section aria-labelledby="details">
+        <h2 id="details" className="mb-4 font-semibold">
+          Personal details
+        </h2>
+        <ProfileForm
+          initial={{
+            name,
+            country: profile.country ?? "",
+            persona: profile.persona ?? "",
+            currency: profile.currency,
+            timezone: profile.timezone,
+            dateFormat: profile.date_format ?? "",
+            phone: profile.phone ?? "",
+          }}
+        />
+      </section>
 
-        <section aria-labelledby="data">
-          <h2 id="data" className="mb-2 font-semibold">
-            Your data
-          </h2>
-          <p className="text-sm leading-relaxed text-muted">Download everything you have recorded at any time, on any plan.</p>
-          <p className="mt-3 flex flex-wrap gap-4 text-sm">
-            <a href="/app/export/all" className="text-primary hover:underline">Download all data (JSON)</a>
-            <a href="/app/export/transactions" className="text-primary hover:underline">Download transactions (CSV)</a>
-          </p>
-          <div className="mt-8 rounded-xl border border-neg/40 p-5">
-            <h3 className="font-medium text-neg-text">Delete my Budget Buddy data</h3>
-            <p className="mb-4 mt-1 text-sm leading-relaxed text-muted">
-              This permanently deletes your profile and every space you own on your own, including all accounts, transactions, budgets and goals. Spaces you only belong to are left, and you are removed from them. It cannot be undone, so download your data first.
-              {role === "owner" ? " If other people use a space you own, remove them first." : ""}
-            </p>
-            <DeleteDataForm />
-          </div>
-        </section>
-      </div>
+      <section aria-labelledby="email">
+        <h2 id="email" className="mb-4 font-semibold">
+          Email
+        </h2>
+        <EmailChangeForm email={user.email ?? ""} pendingEmail={user.new_email ?? null} verified={Boolean(user.email_confirmed_at)} needsPassword={hasPassword(user)} />
+      </section>
     </>
   );
 }

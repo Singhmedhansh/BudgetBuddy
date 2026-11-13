@@ -1,36 +1,39 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FinTrack
 
-## Getting Started
+**Your finances. In focus.**
 
-First, run the development server:
+FinTrack is a personal finance app: accounts, transactions on a double-entry ledger, budgets, goals, bills and
+subscriptions, CSV import, shared spaces, and a grounded assistant (off until credentials exist). Built with Next.js 16
+(Cache Components, `proxy.ts`), TypeScript, Tailwind v4 and Supabase.
+
+| Plan | Price |
+| --- | --- |
+| FinTrack Free | ₹0 |
+| FinTrack One | ₹149 / month, or ₹1,199 / year |
+
+Prices and plan names live in one place, [src/config/plans.ts](src/config/plans.ts). Live payments are disabled in code;
+see [docs/ai-and-payments.md](docs/ai-and-payments.md).
+
+## Run it
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local   # then fill in the Supabase values
+npm install
+npm run dev                  # http://localhost:3100
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+| Command | What it does |
+| --- | --- |
+| `npm test` | Unit and database tests (Vitest, with PGlite running the real migrations) |
+| `npm run lint` / `npm run typecheck` | ESLint and TypeScript |
+| `npm run build` | Production build |
+| `npx playwright test` | End-to-end suite. `E2E_PROD=1 E2E_PORT=3200` runs it against `next start` |
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Configuration
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Environment variables are documented in [.env.example](.env.example). Provider setup (Google, GitHub, magic links) is in
+[docs/auth-providers.md](docs/auth-providers.md); AI and payments in [docs/ai-and-payments.md](docs/ai-and-payments.md).
+The brand, logo and the identifiers that deliberately did not change are in [docs/brand.md](docs/brand.md).
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The public site URL is read from `NEXT_PUBLIC_SITE_URL` only. No domain is hard-coded, so the final domain is a one-line
+change once it is chosen.

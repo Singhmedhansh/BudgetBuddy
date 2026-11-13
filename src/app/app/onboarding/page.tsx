@@ -5,7 +5,7 @@ import { SubmitButton } from "@/components/auth/fields";
 import { getContext } from "@/server/context";
 import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Set up Budget Buddy" };
+export const metadata: Metadata = { title: "Set up FinTrack" };
 
 /**
  * Setup is resumable: the step is derived from what already exists, so leaving
@@ -28,7 +28,7 @@ export default async function OnboardingPage() {
       </p>
       {step === 1 ? (
         <>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">Welcome to Budget Buddy</h1>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight">Welcome to FinTrack</h1>
           <p className="mt-2 text-sm leading-relaxed text-muted">Two quick questions so we can set up useful categories. It takes under a minute.</p>
           <div className="mt-8">
             <ProfileStepForm defaults={{ currency: profile.currency, timezone: profile.timezone }} />

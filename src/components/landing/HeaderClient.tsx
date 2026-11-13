@@ -83,7 +83,7 @@ export function HeaderClient({ menus }: { menus: Menu[] }) {
   return (
     <header ref={rootRef} className={`sticky top-0 z-40 transition-all duration-300 ${scrolled || mobile ? "glass shadow-card" : "border-b border-transparent bg-transparent"}`}>
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-5">
-        <Link href="/" aria-label="Budget Buddy home" className="shrink-0 rounded-md" onClick={close}>
+        <Link href="/" aria-label="FinTrack home" className="shrink-0 rounded-md" onClick={close}>
           <Logo />
         </Link>
 

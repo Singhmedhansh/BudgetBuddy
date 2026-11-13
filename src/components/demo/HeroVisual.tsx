@@ -8,7 +8,7 @@ export function HeroVisual() {
       <div aria-hidden className="absolute -inset-6 -z-10 rounded-[2rem] bg-gradient-to-br from-primary/20 via-transparent to-info/10 blur-2xl" />
 
       <div className="anim-rise" style={{ animationDelay: "120ms" }}>
-        <Window title="Budget Buddy · Dashboard">
+        <Window title="FinTrack · Dashboard">
           <div className="p-5">
             <div className="flex items-end justify-between gap-4">
               <div>

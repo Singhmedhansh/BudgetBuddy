@@ -6,7 +6,7 @@ import type { Block } from "@/content/help/articles";
 
 export const metadata: Metadata = {
   title: "Security and privacy",
-  description: "How Budget Buddy protects your data and what it cannot do.",
+  description: "How FinTrack protects your data and what it cannot do.",
   alternates: { canonical: "/security" },
 };
 
@@ -28,7 +28,7 @@ const SECTIONS: { heading: string; blocks: Block[] }[] = [
     ],
   },
   {
-    heading: "What Budget Buddy does not do",
+    heading: "What FinTrack does not do",
     blocks: [
       {
         t: "list",

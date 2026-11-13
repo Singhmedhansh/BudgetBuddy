@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Fraunces, Hanken_Grotesk } from "next/font/google";
 import { NavTracker } from "@/components/nav/NavTracker";
+import { BRAND } from "@/config/brand";
 import { THEME_INIT_SCRIPT } from "@/components/theme/theme";
 import "./globals.css";
 
@@ -17,13 +18,14 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: { default: "Budget Buddy: personal finance, in one place", template: "%s | Budget Buddy" },
-  description:
-    "Track expenses, plan budgets, manage subscriptions and understand your finances in one place.",
+  title: { default: `${BRAND.name}: ${BRAND.tagline}`, template: `%s | ${BRAND.name}` },
+  applicationName: BRAND.name,
+  description: BRAND.description,
   alternates: { canonical: "/" },
   openGraph: {
-    title: "Budget Buddy",
-    description: "Track expenses, plan budgets, manage subscriptions and understand your finances in one place.",
+    title: `${BRAND.name}: ${BRAND.tagline}`,
+    siteName: BRAND.name,
+    description: BRAND.description,
     type: "website",
   },
 };

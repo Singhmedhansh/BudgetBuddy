@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
+import { BRAND } from "@/config/brand";
 import { HeaderClient, type Menu } from "./HeaderClient";
 
 /** Header navigation. Kept here as plain data so the link-integrity test covers every href. */
@@ -97,10 +98,10 @@ export function SiteFooter() {
       <div aria-hidden className="pointer-events-none absolute -top-40 left-1/2 h-80 w-[60rem] -translate-x-1/2 rounded-full bg-primary/25 blur-3xl" />
       <div className="relative mx-auto grid max-w-6xl gap-12 px-5 pb-10 pt-16 md:grid-cols-[1.5fr_repeat(4,1fr)]">
         <div>
-          <Link href="/" aria-label="Budget Buddy home" className="inline-flex items-center gap-2.5 [&_span]:!text-white">
+          <Link href="/" aria-label="FinTrack home" className="inline-flex items-center gap-2.5 [&_span]:!text-white">
             <Logo />
           </Link>
-          <p className="font-display mt-5 max-w-[22ch] text-2xl leading-snug text-white/90">Your money. Your control.</p>
+          <p className="font-display mt-5 max-w-[22ch] text-2xl leading-snug text-white/90">{BRAND.tagline}</p>
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-white/60">A personal finance ledger for tracking, planning and understanding what you spend.</p>
         </div>
         {FOOTER.map((col) => (
@@ -120,8 +121,8 @@ export function SiteFooter() {
       </div>
       <div className="relative border-t border-white/10">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-5 py-6 text-xs text-white/50 sm:flex-row sm:justify-between">
-          <p>© Budget Buddy. All rights reserved.</p>
-          <p className="max-w-xl sm:text-right">Budget Buddy helps you record and understand your finances. It does not give financial advice or move money.</p>
+          <p>© FinTrack. All rights reserved.</p>
+          <p className="max-w-xl sm:text-right">FinTrack helps you record and understand your finances. It does not give financial advice or move money.</p>
         </div>
       </div>
     </footer>

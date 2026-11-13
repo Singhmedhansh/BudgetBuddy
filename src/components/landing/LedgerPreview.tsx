@@ -99,7 +99,7 @@ export function LedgerPreview() {
         </dl>
       </div>
       <figcaption id="ledger-caption" className="mt-3 max-w-prose text-xs leading-relaxed text-muted">
-        Example data, calculated by Budget Buddy&apos;s own ledger. The savings transfer is not spending, and the refund
+        Example data, calculated by FinTrack&apos;s own ledger. The savings transfer is not spending, and the refund
         reduces Transport instead of counting as income.
       </figcaption>
     </figure>

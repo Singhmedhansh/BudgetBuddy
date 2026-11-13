@@ -4,6 +4,10 @@
  * Amounts are minor units. Launch prices are illustrative and subject to
  * market validation (spec 11.1); change them here only.
  */
+/**
+ * `PlanId` values are stored in the database (entitlements.plan) and must not change with the brand;
+ * only `name` below is shown to people. "pro" is the stored id of FinTrack One.
+ */
 export type PlanId = "free" | "pro";
 export type Interval = "month" | "year";
 
@@ -24,7 +28,7 @@ export interface Plan {
 export const PLANS: Plan[] = [
   {
     id: "free",
-    name: "Free",
+    name: "FinTrack Free",
     summary: "Everything you need to run your money day to day.",
     features: [
       "Manual transactions, accounts and wallets",
@@ -38,7 +42,7 @@ export const PLANS: Plan[] = [
   },
   {
     id: "pro",
-    name: "Pro",
+    name: "FinTrack One",
     summary: "More depth for people who want to look ahead.",
     features: [
       "Everything in Free",
@@ -57,4 +61,18 @@ export const PLANS: Plan[] = [
 
 export function priceFor(plan: Plan, interval: Interval, currency: Price["currency"] = "INR"): Price | undefined {
   return plan.prices.find((p) => p.interval === interval && p.currency === currency);
+}
+
+export const planById = (id: PlanId): Plan => PLANS.find((p) => p.id === id) ?? PLANS[0];
+/** The name people see for a stored plan id. */
+export const planName = (id: PlanId): string => planById(id).name;
+
+/** "₹149" for a price, whole rupees when there is no fractional part. The one formatter for plan prices. */
+export function formatPrice(price: Price): string {
+  const major = price.amountMinor / 100;
+  return new Intl.NumberFormat(price.currency === "INR" ? "en-IN" : "en-US", {
+    style: "currency",
+    currency: price.currency,
+    maximumFractionDigits: Number.isInteger(major) ? 0 : 2,
+  }).format(major);
 }

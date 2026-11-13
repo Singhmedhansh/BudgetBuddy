@@ -46,7 +46,7 @@ export async function GET(request: Request) {
   return new Response(toCsv(out), {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": 'attachment; filename="budget-buddy-transactions.csv"',
+      "Content-Disposition": 'attachment; filename="fintrack-transactions.csv"',
       "Cache-Control": "no-store",
     },
   });

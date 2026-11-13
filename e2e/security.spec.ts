@@ -82,8 +82,8 @@ test.describe("a signed-in user cannot reach other people's data", () => {
     expect(forged.error).not.toBeNull();
   });
 
-  test("HireCheck's public schema is not exposed through Budget Buddy's session or key", async () => {
-    // Budget Buddy never needs the other app's data; the disposable user must not see other users' profiles.
+  test("HireCheck's public schema is not exposed through FinTrack's session or key", async () => {
+    // FinTrack never needs the other app's data; the disposable user must not see other users' profiles.
     const sb = createClient(URL_, KEY, { auth: { persistSession: false } });
     await sb.auth.signInWithPassword(USER);
     const { data } = await sb.from("profiles").select("id");
@@ -113,7 +113,7 @@ test.describe("storage and secrets", () => {
     };
     walk(dir);
     expect(files.length).toBeGreaterThan(0);
-    const forbidden = [/service_role/i, /SUPABASE_SERVICE/i, /RECOVERY_COOKIE_SECRET/, /eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]*c2VydmljZV9yb2xl/];
+    const forbidden = [/service_role/i, /SUPABASE_SERVICE/i, /RECOVERY_COOKIE_SECRET/, /GEMINI_API_KEYS/, /GROQ_API_KEYS/, /RAZORPAY_KEY_SECRET/, /RAZORPAY_WEBHOOK_SECRET/, /PAYPAL_CLIENT_SECRET/, /eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]*c2VydmljZV9yb2xl/];
     for (const f of files) {
       const text = readFileSync(f, "utf8");
       for (const re of forbidden) expect(re.test(text), `${f} matches ${re}`).toBe(false);

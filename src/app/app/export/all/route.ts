@@ -26,7 +26,7 @@ export async function GET() {
   const body = JSON.stringify(
     {
       exportedAt: new Date().toISOString(),
-      format: "budget-buddy-export-v1",
+      format: "fintrack-export-v1",
       note: "Amounts are integers in minor units (for example paise). In ledger entries, positive is a debit and negative a credit.",
       space: { id: s, name: ctx.space.name, currency: ctx.space.currency, timezone: ctx.profile.timezone },
       accounts,
@@ -46,7 +46,7 @@ export async function GET() {
   return new Response(body, {
     headers: {
       "Content-Type": "application/json; charset=utf-8",
-      "Content-Disposition": 'attachment; filename="budget-buddy-export.json"',
+      "Content-Disposition": 'attachment; filename="fintrack-export.json"',
       "Cache-Control": "no-store",
     },
   });

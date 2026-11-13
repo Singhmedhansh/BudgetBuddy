@@ -1,4 +1,9 @@
+import { PLANS, formatPrice, planName, priceFor } from "@/config/plans";
 import type { Block } from "./help/articles";
+
+const ONE = PLANS.find((x) => x.id === "pro")!;
+const oneMonthly = formatPrice(priceFor(ONE, "month")!);
+const oneYearly = formatPrice(priceFor(ONE, "year")!);
 
 /**
  * Policy text for the product as built today. These are drafts for qualified
@@ -23,14 +28,14 @@ export const LEGAL_DOCS: LegalDoc[] = [
   {
     slug: "privacy",
     title: "Privacy Policy",
-    summary: "What Budget Buddy collects, why, who handles it, and the choices you have.",
+    summary: "What FinTrack collects, why, who handles it, and the choices you have.",
     sections: [
       {
         heading: "What we collect",
         blocks: [
           list(
             "Account details: your name, email address and a password. Passwords are handled by our authentication provider and are not stored in readable form.",
-            "Financial records you enter: accounts, balances, transactions, categories, budgets and notes. You choose what to enter; Budget Buddy does not connect to your bank.",
+            "Financial records you enter: accounts, balances, transactions, categories, budgets and notes. You choose what to enter; FinTrack does not connect to your bank.",
             "Messages you send to support, including any file you attach.",
             "Technical data needed to run the service, such as the cookies described in the Cookie Policy and standard server logs.",
           ),
@@ -44,8 +49,8 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Who handles your data",
         blocks: [
-          p("We use service providers to run Budget Buddy. Today these are a database, authentication and file-storage provider (Supabase) and a web hosting provider. They process data on our behalf and only to provide those services."),
-          p("Paid plans, when they launch, will use Razorpay for customers in India and PayPal for international customers. Card numbers go to the payment provider and never reach Budget Buddy. Payments are not live today."),
+          p("We use service providers to run FinTrack. Today these are a database, authentication and file-storage provider (Supabase) and a web hosting provider. They process data on our behalf and only to provide those services."),
+          p("Paid plans, when they launch, will use Razorpay for customers in India and PayPal for international customers. Card numbers go to the payment provider and never reach FinTrack. Payments are not live today."),
           p("An AI assistant is planned but is not available. Before it launches we will describe here what data it uses and give you a way to opt out."),
           p("We do not sell your personal data."),
         ],
@@ -75,10 +80,10 @@ export const LEGAL_DOCS: LegalDoc[] = [
   {
     slug: "terms",
     title: "Terms and Conditions",
-    summary: "The rules for using Budget Buddy.",
+    summary: "The rules for using FinTrack.",
     sections: [
       {
-        heading: "Using Budget Buddy",
+        heading: "Using FinTrack",
         blocks: [
           p("By creating an account you agree to these terms. You must be old enough to form a binding contract where you live, and you must give accurate information."),
           p("You are responsible for your account and for keeping your password private. Tell us promptly if you think someone else has access."),
@@ -92,7 +97,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
         heading: "Your data and our service",
         blocks: [
           p("You own the financial records you enter. You give us permission to store and process them to run the service for you."),
-          p("Budget Buddy is a tool for recording and understanding your finances. It is not financial advice. See the [Financial disclaimer](/legal/disclaimer)."),
+          p("FinTrack is a tool for recording and understanding your finances. It is not financial advice. See the [Financial disclaimer](/legal/disclaimer)."),
         ],
       },
       {
@@ -105,7 +110,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       },
       {
         heading: "Ending your account",
-        blocks: [p("You can stop using Budget Buddy at any time and ask us to close your account through [Contact us](/contact). We may suspend or end accounts that break these terms.")],
+        blocks: [p("You can stop using FinTrack at any time and ask us to close your account through [Contact us](/contact). We may suspend or end accounts that break these terms.")],
       },
       {
         heading: "Liability and disputes",
@@ -140,12 +145,12 @@ export const LEGAL_DOCS: LegalDoc[] = [
   {
     slug: "cookies",
     title: "Cookie Policy",
-    summary: "The cookies and browser storage Budget Buddy uses, and why.",
+    summary: "The cookies and browser storage FinTrack uses, and why.",
     sections: [
       {
         heading: "What we set",
         blocks: [
-          p("Budget Buddy uses only what it needs to work. There are no advertising or analytics cookies today."),
+          p("FinTrack uses only what it needs to work. There are no advertising or analytics cookies today."),
           {
             t: "list",
             items: [
@@ -171,7 +176,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Plans",
         blocks: [
-          p("Budget Buddy has a Free plan and a Pro plan. Prices are shown on the [home page](/#pricing) in the currency they are charged in, and you will see the final amount before you pay. Paid plans are not available yet."),
+          p(`${planName("free")} costs nothing. ${planName("pro")} is ${oneMonthly} a month, or ${oneYearly} a year. Prices are shown on the [home page](/#pricing) in the currency they are charged in, and you will see the final amount before you pay. Paid plans are not available yet.`),
         ],
       },
       {
@@ -181,7 +186,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
             "Customers in India are billed in INR through Razorpay. International customers are billed through PayPal in a supported currency.",
             "Which provider applies is decided by us from your billing details, not guessed from your browser.",
             "We never silently change the currency you are charged in.",
-            "Whether you have Pro is decided by our servers after the payment provider confirms payment, never by your browser.",
+            `Whether you have ${planName("pro")} is decided by our servers after the payment provider confirms payment, never by your browser.`,
             "You can cancel at any time. Cancelling stops future renewals; see the [Refund policy](/legal/refunds).",
           ),
         ],
@@ -195,11 +200,11 @@ export const LEGAL_DOCS: LegalDoc[] = [
   {
     slug: "disclaimer",
     title: "Financial Disclaimer",
-    summary: "What Budget Buddy is, and what it is not.",
+    summary: "What FinTrack is, and what it is not.",
     sections: [
       {
         heading: "Not financial advice",
-        blocks: [p("Budget Buddy helps you record, organise and understand your own finances. It does not provide investment, tax, legal or other professional advice, and nothing in it is a recommendation to buy or sell anything. Speak to a qualified professional for advice about your situation.")],
+        blocks: [p("FinTrack helps you record, organise and understand your own finances. It does not provide investment, tax, legal or other professional advice, and nothing in it is a recommendation to buy or sell anything. Speak to a qualified professional for advice about your situation.")],
       },
       {
         heading: "Your numbers come from you",
@@ -210,7 +215,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       },
       {
         heading: "Your responsibility",
-        blocks: [p("You are responsible for decisions you make using Budget Buddy. We take care to calculate correctly, and we want to know if you find a mistake: [Contact us](/contact).")],
+        blocks: [p("You are responsible for decisions you make using FinTrack. We take care to calculate correctly, and we want to know if you find a mistake: [Contact us](/contact).")],
       },
     ],
   },

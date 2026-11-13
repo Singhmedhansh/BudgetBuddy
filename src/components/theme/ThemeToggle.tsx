@@ -21,7 +21,8 @@ const OPTIONS: { value: ThemePreference; label: string; Icon: typeof Sun }[] = [
   { value: "dark", label: "Dark theme", Icon: Moon },
 ];
 
-export function ThemeToggle() {
+/** `onChoose` lets the signed-in app save the choice to the profile so it follows the person to other devices. */
+export function ThemeToggle({ onChoose }: { onChoose?: (theme: ThemePreference) => void | Promise<unknown> }) {
   // Light is the server snapshot (the default); the stored preference is read
   // on the client without a hydration mismatch.
   const pref = useSyncExternalStore<ThemePreference>(subscribe, readStoredTheme, () => "light");
@@ -42,6 +43,8 @@ export function ThemeToggle() {
     }
     applyTheme(next);
     window.dispatchEvent(new Event(CHANGE_EVENT));
+    // Saving is best effort: the theme already applies here even if the save fails.
+    void Promise.resolve(onChoose?.(next)).catch(() => undefined);
   }
 
   return (

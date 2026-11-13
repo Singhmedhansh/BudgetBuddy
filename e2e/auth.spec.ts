@@ -58,8 +58,8 @@ test.describe("login", () => {
   test("after logout the session is gone, protected pages redirect, and Back does not reveal data", async ({ page }) => {
     await loginUi(page);
     await expect(page).toHaveURL(/\/app/);
-    await page.locator("summary[aria-label='Account menu']").click();
-    await page.getByRole("button", { name: "Log out" }).click();
+    await page.getByRole("button", { name: "Account menu" }).click();
+    await page.getByRole("menuitem", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/($|\?|login)/);
     await page.goto("/app/transactions");
     await expect(page).toHaveURL(/\/login/);
@@ -82,7 +82,7 @@ test.describe("login", () => {
 });
 
 test.describe("sessions are independent of other apps on the same project", () => {
-  test("a session stored under the default Supabase cookie name does not sign anyone into Budget Buddy", async ({ page, context, baseURL }) => {
+  test("a session stored under the default Supabase cookie name does not sign anyone into FinTrack", async ({ page, context, baseURL }) => {
     const sb = createClient(process.env.E2E_SUPABASE_URL!, process.env.E2E_SUPABASE_KEY!, { auth: { persistSession: false } });
     const { data } = await sb.auth.signInWithPassword(USER);
     const host = new URL(baseURL!).hostname;
@@ -94,11 +94,11 @@ test.describe("sessions are independent of other apps on the same project", () =
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test("signing out of Budget Buddy does not clear a cookie belonging to another app", async ({ page, context, baseURL }) => {
+  test("signing out of FinTrack does not clear a cookie belonging to another app", async ({ page, context, baseURL }) => {
     await context.addCookies([{ name: "sb-otherapp-auth-token", value: "other-app-session", domain: new URL(baseURL!).hostname, path: "/" }]);
     await loginUi(page);
-    await page.locator("summary[aria-label='Account menu']").click();
-    await page.getByRole("button", { name: "Log out" }).click();
+    await page.getByRole("button", { name: "Account menu" }).click();
+    await page.getByRole("menuitem", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/($|\?|login)/);
     const left = (await context.cookies()).find((c) => c.name === "sb-otherapp-auth-token");
     expect(left?.value).toBe("other-app-session");

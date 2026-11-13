@@ -73,7 +73,7 @@ export function ProductShowcase() {
           <span className="font-display block text-xl text-white">{tab.title}</span>
           <span className="mt-1 block text-sm text-white/65">{tab.body}</span>
         </p>
-        <Window title={`Budget Buddy · ${tab.label}`} className="min-h-[24rem]">
+        <Window title={`FinTrack · ${tab.label}`} className="min-h-[24rem]">
           <div key={tab.id} className="anim-rise">
             <tab.Demo />
           </div>

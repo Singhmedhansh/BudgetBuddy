@@ -15,6 +15,8 @@ export function Field({
   defaultValue,
   autoComplete,
   hint,
+  readOnly,
+  inputMode,
 }: {
   label: string;
   name: string;
@@ -23,6 +25,8 @@ export function Field({
   defaultValue?: string;
   autoComplete?: string;
   hint?: string;
+  readOnly?: boolean;
+  inputMode?: "text" | "tel" | "email" | "numeric";
 }) {
   const id = useId();
   const msgId = `${id}-msg`;
@@ -37,9 +41,11 @@ export function Field({
         type={type}
         defaultValue={defaultValue}
         autoComplete={autoComplete}
+        readOnly={readOnly}
+        inputMode={inputMode}
         aria-invalid={error ? true : undefined}
         aria-describedby={error || hint ? msgId : undefined}
-        className={inputCls}
+        className={`${inputCls}${readOnly ? " bg-sunken text-muted" : ""}`}
       />
       {error ? (
         <p id={msgId} className="mt-1.5 text-sm text-neg-text">
@@ -121,13 +127,13 @@ export function PasswordField({
   );
 }
 
-export function SubmitButton({ children, pendingLabel }: { children: React.ReactNode; pendingLabel: string }) {
+export function SubmitButton({ children, pendingLabel, compact }: { children: React.ReactNode; pendingLabel: string; compact?: boolean }) {
   const { pending } = useFormStatus();
   return (
     <button
       type="submit"
       disabled={pending}
-      className="w-full rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-fg transition-colors hover:bg-primary-hover disabled:opacity-60"
+      className={`${compact ? "" : "w-full "}rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-fg transition-colors hover:bg-primary-hover disabled:opacity-60`}
     >
       {pending ? pendingLabel : children}
     </button>

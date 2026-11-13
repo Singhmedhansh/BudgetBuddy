@@ -94,7 +94,7 @@ export function AccountForm({ mode, currency, cancelHref }: { mode: "onboarding"
         name="opening"
         defaultValue={s?.values?.opening}
         error={fe.opening}
-        hint="You enter this yourself. Budget Buddy does not read your bank, so it will not update on its own."
+        hint="You enter this yourself. FinTrack does not read your bank, so it will not update on its own."
       />
       <div className="flex items-center gap-3">
         <div className="flex-1">

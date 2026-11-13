@@ -16,7 +16,7 @@ export function AuthShell({
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex h-16 items-center justify-between px-5">
-        <Link href="/" aria-label="Budget Buddy home">
+        <Link href="/" aria-label="FinTrack home">
           <Logo />
         </Link>
         <ThemeToggle />

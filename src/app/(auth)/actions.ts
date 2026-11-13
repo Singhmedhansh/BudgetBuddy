@@ -56,7 +56,7 @@ function authMessage(code: string | undefined, status: number | undefined): stri
   return "Something went wrong. Check your connection and try again.";
 }
 
-async function finishSignIn(provider: "email" | "google") {
+async function finishSignIn(provider: "email" | "google" | "github") {
   const supabase = (await createClient())!;
   await supabase.rpc("ensure_profile");
   // A per-browser hint only: it stores the provider name, never an email.
@@ -127,6 +127,23 @@ export async function requestPasswordReset(_: FormState | undefined, form: FormD
     return { error: authMessage(error.code, error.status), email: parsed.data };
   }
   return { notice: "If an account exists for that address, we sent a link to reset the password. It expires in an hour.", email: parsed.data };
+}
+
+/** Passwordless sign-in for existing accounts. Same answer for known and unknown addresses; only rate limiting is shown. */
+export async function requestMagicLink(_: FormState | undefined, form: FormData): Promise<FormState> {
+  const supabase = await createClient();
+  if (!supabase) return NOT_CONFIGURED;
+  const parsed = email.safeParse(form.get("email"));
+  if (!parsed.success) return { fieldErrors: { email: "Enter a valid email address." }, email: String(form.get("email") ?? "") };
+  const next = safeNext(String(form.get("next") ?? ""));
+  const { error } = await supabase.auth.signInWithOtp({
+    email: parsed.data,
+    options: { shouldCreateUser: false, emailRedirectTo: `${await siteUrl()}/auth/callback?next=${encodeURIComponent(next)}` },
+  });
+  if (error && (error.code === "over_email_send_rate_limit" || error.code === "over_request_rate_limit" || error.status === 429)) {
+    return { error: authMessage(error.code, error.status), email: parsed.data };
+  }
+  return { notice: "If an account exists for that address, we sent a sign-in link. It expires in an hour.", email: parsed.data };
 }
 
 export async function updatePassword(_: FormState | undefined, form: FormData): Promise<FormState> {

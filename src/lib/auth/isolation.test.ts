@@ -1,7 +1,7 @@
 /**
- * Session isolation between Budget Buddy and any other app on the same Supabase
+ * Session isolation between FinTrack and any other app on the same Supabase
  * project (and the same host in development). Regression for the incident where
- * Budget Buddy accepted another app's session cookie.
+ * FinTrack accepted another app's session cookie.
  */
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest } from "next/server";
@@ -60,7 +60,7 @@ describe("session isolation", () => {
     expect(data.session?.user.id).toBe("bb-user");
   });
 
-  it("with both cookies present, only Budget Buddy's identity is used", async () => {
+  it("with both cookies present, only FinTrack's identity is used", async () => {
     const jar: Jar = [
       { name: OTHER_APP_COOKIE, value: cookieValue("other-app-user") },
       { name: AUTH_COOKIE_NAME, value: cookieValue("bb-user") },
@@ -78,7 +78,7 @@ describe("session isolation", () => {
 });
 
 describe("independent logout", () => {
-  it("signing out of Budget Buddy only ever clears Budget Buddy's cookies", async () => {
+  it("signing out of FinTrack only ever clears FinTrack's cookies", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
     const jar: Jar = [
       { name: OTHER_APP_COOKIE, value: cookieValue("other-app-user") },
@@ -92,7 +92,7 @@ describe("independent logout", () => {
     expect(touched).not.toContain(OTHER_APP_COOKIE);
   });
 
-  it("every Supabase client in the app is created with the Budget Buddy cookie name", async () => {
+  it("every Supabase client in the app is created with the FinTrack cookie name", async () => {
     const { readFileSync } = await import("node:fs");
     for (const f of ["server.ts", "client.ts", "session.ts"]) {
       expect(readFileSync(`src/lib/supabase/${f}`, "utf8")).toContain("name: AUTH_COOKIE_NAME");
