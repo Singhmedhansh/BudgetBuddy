@@ -1,5 +1,6 @@
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
+import { makeRecoveryToken, RECOVERY_COOKIE, RECOVERY_MAX_AGE_SECONDS } from "@/lib/auth/recovery-guard";
 import { safeNext } from "@/lib/auth/safe-redirect";
 import { createClient } from "@/lib/supabase/server";
 
@@ -19,8 +20,24 @@ export async function GET(request: NextRequest) {
   if (supabase && tokenHash && type) {
     const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
     if (!error) {
-      if (type !== "recovery") await supabase.rpc("ensure_profile");
-      return NextResponse.redirect(new URL(type === "recovery" ? "/reset-password" : next, request.url));
+      if (type !== "recovery") {
+        await supabase.rpc("ensure_profile");
+        return NextResponse.redirect(new URL(next, request.url));
+      }
+      // Mark this session as arriving through a verified reset link. The reset
+      // action refuses to change a password without this short-lived cookie.
+      const { data } = await supabase.auth.getUser();
+      const res = NextResponse.redirect(new URL("/reset-password", request.url));
+      if (data.user) {
+        res.cookies.set(RECOVERY_COOKIE, makeRecoveryToken(data.user.id, Date.now()), {
+          httpOnly: true,
+          sameSite: "lax",
+          path: "/",
+          secure: process.env.NODE_ENV === "production",
+          maxAge: RECOVERY_MAX_AGE_SECONDS,
+        });
+      }
+      return res;
     }
   }
   const dest = new URL("/auth/link-error", request.url);

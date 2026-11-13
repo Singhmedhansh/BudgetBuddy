@@ -14,6 +14,18 @@ import { isLiability, type AccountType } from "@/server/types";
 export interface ActionState {
   error?: string;
   fieldErrors?: Record<string, string>;
+  /** Submitted values echoed back on failure: React resets uncontrolled fields after an action. */
+  values?: Record<string, string>;
+}
+
+function echo(form: FormData): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of form.entries()) if (typeof v === "string") out[k] = v;
+  return out;
+}
+
+function withEcho(res: ActionState, form: FormData): ActionState {
+  return res.error || res.fieldErrors ? { ...res, values: echo(form) } : res;
 }
 
 const ACCOUNT_TYPES = ["savings", "current", "cash", "credit_card", "wallet", "investment", "other_asset", "other_liability"] as const;
@@ -38,7 +50,11 @@ function validTimezone(tz: string): boolean {
 
 /* ───────────────────────── onboarding ───────────────────────── */
 
-export async function saveProfileStep(_: ActionState | undefined, form: FormData): Promise<ActionState> {
+export async function saveProfileStep(prev: ActionState | undefined, form: FormData): Promise<ActionState> {
+  return withEcho(await saveProfileStepImpl(prev, form), form);
+}
+
+async function saveProfileStepImpl(_: ActionState | undefined, form: FormData): Promise<ActionState> {
   const { supabase, user, profile, space } = await getContext();
   const parsed = z
     .object({
@@ -142,14 +158,14 @@ async function createAccount(form: FormData): Promise<ActionState> {
 
 export async function createAccountAction(_: ActionState | undefined, form: FormData): Promise<ActionState> {
   const res = await createAccount(form);
-  if (res.error || res.fieldErrors) return res;
+  if (res.error || res.fieldErrors) return withEcho(res, form);
   revalidatePath("/app", "layout");
   redirect("/app/accounts");
 }
 
 export async function createFirstAccountAction(_: ActionState | undefined, form: FormData): Promise<ActionState> {
   const res = await createAccount(form);
-  if (res.error || res.fieldErrors) return res;
+  if (res.error || res.fieldErrors) return withEcho(res, form);
   redirect("/app/onboarding");
 }
 
@@ -166,7 +182,11 @@ const transactionSchema = z.object({
   description: z.string().trim().max(300).optional(),
 });
 
-export async function createTransactionAction(_: ActionState | undefined, form: FormData): Promise<ActionState> {
+export async function createTransactionAction(prev: ActionState | undefined, form: FormData): Promise<ActionState> {
+  return withEcho(await createTransactionActionImpl(prev, form), form);
+}
+
+async function createTransactionActionImpl(_: ActionState | undefined, form: FormData): Promise<ActionState> {
   const { supabase, space, profile } = await requireSpace();
   const parsed = transactionSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
@@ -232,7 +252,11 @@ export async function reverseTransactionAction(form: FormData) {
 
 /* ───────────────────────── budgets ───────────────────────── */
 
-export async function createBudgetAction(_: ActionState | undefined, form: FormData): Promise<ActionState> {
+export async function createBudgetAction(prev: ActionState | undefined, form: FormData): Promise<ActionState> {
+  return withEcho(await createBudgetActionImpl(prev, form), form);
+}
+
+async function createBudgetActionImpl(_: ActionState | undefined, form: FormData): Promise<ActionState> {
   const { supabase, space, user, profile } = await requireSpace();
   const parsed = z
     .object({

@@ -36,10 +36,10 @@ async function Shell({ children }: { children: React.ReactNode }) {
             <Logo size={24} />
           </Link>
           <p className="hidden truncate text-sm text-muted md:block">{space?.name ?? "Set up your finances"}</p>
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <ThemeToggle />
             <details className="relative">
-              <summary className="flex h-8 max-w-[10rem] cursor-pointer list-none items-center rounded-md border border-line bg-surface px-3 text-sm">
+              <summary className="flex h-8 max-w-[6.5rem] cursor-pointer sm:max-w-[10rem] list-none items-center rounded-md border border-line bg-surface px-3 text-sm">
                 <span className="truncate">{name}</span>
               </summary>
               <div className="absolute right-0 z-30 mt-2 w-56 rounded-md border border-line-strong bg-surface p-2 shadow-sm">

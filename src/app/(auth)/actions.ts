@@ -3,6 +3,7 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { isRecoveryTokenValid, RECOVERY_COOKIE } from "@/lib/auth/recovery-guard";
 import { safeNext } from "@/lib/auth/safe-redirect";
 import { passwordProblems } from "@/lib/password";
 import { createClient } from "@/lib/supabase/server";
@@ -13,6 +14,7 @@ export interface FormState {
   fieldErrors?: Partial<Record<"email" | "password" | "confirm" | "name", string>>;
   /** Echoed back so a failed submit does not clear what the user typed. */
   email?: string;
+  name?: string;
 }
 
 const NOT_CONFIGURED: FormState = {
@@ -86,8 +88,9 @@ export async function signUp(_: FormState | undefined, form: FormData): Promise<
     })
     .refine((v) => v.password === v.confirm, { path: ["confirm"], message: "The passwords do not match." });
   const raw = String(form.get("email") ?? "");
+  const rawName = String(form.get("name") ?? "");
   const parsed = schema.safeParse(Object.fromEntries(form));
-  if (!parsed.success) return { fieldErrors: flatten(parsed.error), email: raw };
+  if (!parsed.success) return { fieldErrors: flatten(parsed.error), email: raw, name: rawName };
 
   const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
@@ -97,7 +100,7 @@ export async function signUp(_: FormState | undefined, form: FormData): Promise<
       emailRedirectTo: `${await siteUrl()}/auth/confirm?next=/app`,
     },
   });
-  if (error) return { error: authMessage(error.code, error.status), email: raw };
+  if (error) return { error: authMessage(error.code, error.status), email: raw, name: rawName };
 
   if (data.session) {
     // Email confirmation is off for this project: the user is already signed in.
@@ -106,7 +109,7 @@ export async function signUp(_: FormState | undefined, form: FormData): Promise<
     redirect("/app");
   }
   // Same message whether or not the address was already registered.
-  return { notice: "Check your email. We sent a link to confirm your address and finish creating your account.", email: raw };
+  return { notice: "Check your email. We sent a link to confirm your address and finish creating your account.", email: raw, name: rawName };
 }
 
 export async function requestPasswordReset(_: FormState | undefined, form: FormData): Promise<FormState> {
@@ -130,7 +133,12 @@ export async function updatePassword(_: FormState | undefined, form: FormData): 
   const supabase = await createClient();
   if (!supabase) return NOT_CONFIGURED;
   const { data: user } = await supabase.auth.getUser();
-  if (!user.user) return { error: "This reset link has expired or was already used. Request a new one." };
+  const expired: FormState = { error: "This reset link has expired or was already used. Request a new one." };
+  if (!user.user) return expired;
+  // Only a session created by verifying a reset link may set a new password.
+  // An ordinary signed-in session (or another app's) must never reach updateUser here.
+  const token = (await cookies()).get(RECOVERY_COOKIE)?.value;
+  if (!isRecoveryTokenValid(token, user.user.id, Date.now())) return expired;
 
   const parsed = z
     .object({ password: newPassword, confirm: z.string() })
@@ -142,6 +150,7 @@ export async function updatePassword(_: FormState | undefined, form: FormData): 
   if (error) return { error: authMessage(error.code, error.status) };
   // Revoke every other session so a stolen session cannot outlive the reset.
   await supabase.auth.signOut({ scope: "others" });
+  (await cookies()).delete(RECOVERY_COOKIE);
   redirect("/app");
 }
 

@@ -11,6 +11,14 @@
  */
 export const DB_SCHEMA = "budgetbuddy";
 
+/**
+ * Budget Buddy's own auth cookie name. Supabase's default name is derived from
+ * the project ref, so two apps sharing one project (and one host in
+ * development) would silently share a session. A distinct name keeps them
+ * apart: a visitor signed in to another app is NOT signed in to Budget Buddy.
+ */
+export const AUTH_COOKIE_NAME = "sb-budgetbuddy-auth-token";
+
 export interface SupabaseEnv {
   url: string;
   anonKey: string;

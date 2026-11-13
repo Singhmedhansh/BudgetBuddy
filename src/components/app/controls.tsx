@@ -60,9 +60,11 @@ export function ChoiceGroup({
   name,
   options,
   error,
+  defaultValue,
 }: {
   legend: string;
   name: string;
+  defaultValue?: string;
   options: { value: string; label: string; description: string }[];
   error?: string;
 }) {
@@ -72,7 +74,7 @@ export function ChoiceGroup({
       <div className="space-y-2">
         {options.map((o) => (
           <label key={o.value} className="flex cursor-pointer items-start gap-3 rounded-md border border-line-strong bg-surface p-3 has-[:checked]:border-primary has-[:checked]:bg-sage/50">
-            <input type="radio" name={name} value={o.value} className="mt-1 accent-[var(--primary)]" />
+            <input type="radio" name={name} value={o.value} defaultChecked={defaultValue === o.value} className="mt-1 accent-[var(--primary)]" />
             <span>
               <span className="block text-sm font-medium">{o.label}</span>
               <span className="block text-xs text-muted">{o.description}</span>

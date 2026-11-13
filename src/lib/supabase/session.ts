@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { getSupabaseEnv } from "./env";
+import { AUTH_COOKIE_NAME, getSupabaseEnv } from "./env";
 
 /** Paths that need a signed-in user. Everything else is public. */
 const PROTECTED_PREFIXES = ["/app"];
@@ -19,6 +19,7 @@ export async function updateSession(request: NextRequest) {
   if (!env) return response;
 
   const supabase = createServerClient(env.url, env.anonKey, {
+    cookieOptions: { name: AUTH_COOKIE_NAME },
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll(toSet) {

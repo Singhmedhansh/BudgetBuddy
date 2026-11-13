@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile, Space } from "./types";
 
@@ -9,6 +10,9 @@ import type { Profile, Space } from "./types";
  * relies on; the proxy redirect is only an optimistic convenience.
  */
 export const getContext = cache(async () => {
+  // Everything here is per-user, per-request. Opting out of prerendering up front
+  // also stops Next's prefetch prerender tripping on clock reads (Date.now) below.
+  await connection();
   const supabase = await createClient();
   if (!supabase) redirect("/login");
   const { data } = await supabase.auth.getUser();

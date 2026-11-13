@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { EmptyState, formatDate, Money, PageHeader } from "@/components/app/ui";
+import { displayAmount } from "@/domain/display";
 import { periodTotals, type LedgerAccount } from "@/domain/ledger";
 import { requireSpace } from "@/server/context";
 import { currentMonth, listAccounts, listBudgets, listTransactions, postingsInRange } from "@/server/queries";
@@ -75,7 +76,7 @@ export default async function DashboardPage() {
                       {formatDate(t.occurred_at, profile.timezone)} · {t.type === "transfer" ? "Transfer" : t.categoryName}
                     </p>
                   </div>
-                  <Money minor={t.type === "income" ? t.amount : t.type === "expense" ? -t.amount : t.amount} currency={t.currency} signed={t.type === "income"} className={`text-sm ${t.type === "income" ? "text-pos-text" : ""}`} />
+                  <Money minor={displayAmount({ type: t.type, amount: t.amount, isReversal: Boolean(t.reversal_of) })} currency={t.currency} signed={t.type !== "transfer" && t.type !== "adjustment"} className="text-sm" />
                 </li>
               ))}
             </ul>

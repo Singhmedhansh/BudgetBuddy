@@ -32,7 +32,8 @@ export default async function BudgetsPage() {
               </div>
               <ul className="divide-y divide-line border-y border-line">
                 {b.lines.map((l) => {
-                  const pct = Math.min(100, Math.round((l.status.usedRatio ?? 1) * 100));
+                  const used = Math.round((l.status.usedRatio ?? 1) * 100);
+                  const pct = Math.min(100, used);
                   const tone = l.level === "over" ? "bg-neg" : l.level === "warning" ? "bg-warn" : "bg-pos";
                   return (
                     <li key={l.categoryId} className="py-3.5">
@@ -46,7 +47,7 @@ export default async function BudgetsPage() {
                         <div className={`h-full ${tone}`} style={{ width: `${pct}%` }} />
                       </div>
                       <p className="num mt-1.5 text-xs text-muted">
-                        <Money minor={l.status.actual} currency={c} /> of <Money minor={l.status.allocated} currency={c} /> · {pct}% used{l.level === "warning" ? " · near your limit" : ""}
+                        <Money minor={l.status.actual} currency={c} /> of <Money minor={l.status.allocated} currency={c} /> · {used}% used{l.level === "warning" ? " · near your limit" : ""}
                       </p>
                     </li>
                   );

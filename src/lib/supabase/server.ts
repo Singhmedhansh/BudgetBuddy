@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { DB_SCHEMA, getSupabaseEnv } from "./env";
+import { AUTH_COOKIE_NAME, DB_SCHEMA, getSupabaseEnv } from "./env";
 
 /** Per-request Supabase client for Server Components, Actions and Route Handlers. */
 export async function createClient() {
@@ -9,6 +9,7 @@ export async function createClient() {
   const cookieStore = await cookies();
   return createServerClient(env.url, env.anonKey, {
     db: { schema: DB_SCHEMA },
+    cookieOptions: { name: AUTH_COOKIE_NAME },
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll(toSet) {

@@ -50,7 +50,7 @@ export function SignupForm() {
   return (
     <form action={action} className="space-y-4" noValidate>
       <FormMessage error={state?.error} />
-      <Field label="Name" name="name" autoComplete="name" error={state?.fieldErrors?.name} />
+      <Field label="Name" name="name" autoComplete="name" defaultValue={state?.name} error={state?.fieldErrors?.name} />
       <Field label="Email" name="email" type="email" autoComplete="email" defaultValue={state?.email} error={state?.fieldErrors?.email} />
       <PasswordField label="Password" name="password" autoComplete="new-password" showStrength error={state?.fieldErrors?.password} />
       <PasswordField label="Confirm password" name="confirm" autoComplete="new-password" error={state?.fieldErrors?.confirm} />

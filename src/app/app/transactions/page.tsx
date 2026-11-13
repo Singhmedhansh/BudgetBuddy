@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { reverseTransactionAction } from "@/app/app/actions";
 import { EmptyState, formatDate, Money, Notice, PageHeader } from "@/components/app/ui";
+import { displayAmount } from "@/domain/display";
 import { requireSpace } from "@/server/context";
 import { listAccounts, listTransactions } from "@/server/queries";
 
@@ -73,7 +74,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
                   </p>
                 </div>
                 <div className="flex items-center gap-4">
-                  <Money minor={t.type === "expense" ? -t.amount : t.amount} currency={t.currency} signed={t.type === "income"} className={`text-sm font-medium ${t.type === "income" ? "text-pos-text" : ""}`} />
+                  <Money minor={displayAmount({ type: t.type, amount: t.amount, isReversal })} currency={t.currency} signed={t.type !== "transfer" && t.type !== "adjustment"} className={`text-sm font-medium ${displayAmount({ type: t.type, amount: t.amount, isReversal }) > 0 && t.type !== "transfer" && t.type !== "adjustment" ? "text-pos-text" : ""}`} />
                   {!t.reversed && !isReversal && t.status === "posted" ? (
                     <form action={reverseTransactionAction}>
                       <input type="hidden" name="id" value={t.id} />
