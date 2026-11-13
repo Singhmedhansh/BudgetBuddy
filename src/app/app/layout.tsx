@@ -26,6 +26,9 @@ async function Shell({ children }: { children: React.ReactNode }) {
         <div className="mt-6 flex-1">
           <SidebarNav />
         </div>
+        <Link href="/help" className="mb-2 rounded-md px-3 py-2 text-sm text-muted hover:bg-sunken hover:text-fg">
+          Help Centre
+        </Link>
         <Link href="/app/transactions/new" className="mb-4 rounded-md bg-primary px-3 py-2.5 text-center text-sm font-semibold text-primary-fg hover:bg-primary-hover">
           Add transaction
         </Link>
@@ -44,6 +47,12 @@ async function Shell({ children }: { children: React.ReactNode }) {
               </summary>
               <div className="absolute right-0 z-30 mt-2 w-56 rounded-md border border-line-strong bg-surface p-2 shadow-sm">
                 <p className="truncate px-2 py-1.5 text-xs text-muted">{user.email}</p>
+                <Link href="/help" className="block rounded px-2 py-2 text-sm hover:bg-sunken md:hidden">
+                  Help Centre
+                </Link>
+                <Link href="/contact" className="block rounded px-2 py-2 text-sm hover:bg-sunken">
+                  Contact support
+                </Link>
                 <form action={signOut}>
                   <button type="submit" className="w-full rounded px-2 py-2 text-left text-sm hover:bg-sunken">
                     Log out

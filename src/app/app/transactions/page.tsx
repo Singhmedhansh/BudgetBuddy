@@ -4,7 +4,7 @@ import { reverseTransactionAction } from "@/app/app/actions";
 import { EmptyState, formatDate, Money, Notice, PageHeader } from "@/components/app/ui";
 import { displayAmount } from "@/domain/display";
 import { requireSpace } from "@/server/context";
-import { listAccounts, listTransactions } from "@/server/queries";
+import { listAccounts, listCategories, listTransactions } from "@/server/queries";
 
 export const metadata: Metadata = { title: "Transactions" };
 
@@ -15,15 +15,16 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   const sp = await searchParams;
   const ctx = await requireSpace();
   const type = TYPES.find((t) => t === sp.type);
-  const [rows, accounts] = await Promise.all([
-    listTransactions(ctx, { type, accountId: sp.account, q: sp.q?.slice(0, 80) }),
+  const [rows, accounts, categories] = await Promise.all([
+    listTransactions(ctx, { type, accountId: sp.account, category: sp.cat?.slice(0, 60), q: sp.q?.slice(0, 80) }),
     listAccounts(ctx, true),
+    listCategories(ctx),
   ]);
-  const filtered = Boolean(type || sp.account || sp.q);
+  const filtered = Boolean(type || sp.account || sp.cat || sp.q);
 
   return (
     <>
-      <PageHeader title="Transactions" description="Everything you have recorded. A transaction is never deleted: reversing one adds an offsetting entry so the history stays intact." action={{ href: "/app/transactions/new", label: "Add transaction" }} />
+      <PageHeader title="Transactions" description="Everything you have recorded. A transaction is never deleted: reversing one adds an offsetting entry so the history stays intact." action={{ href: "/app/transactions/new", label: "Add transaction" }} help={{ slug: "reverse-a-transaction", label: "reversing a transaction" }} />
       {sp.added ? <Notice kind="success">Transaction saved.</Notice> : null}
       {sp.reversed ? <Notice kind="success">Transaction reversed. The original and its reversal both stay in your history.</Notice> : null}
       {sp.error ? <Notice kind="error">{sp.error === "invalid" ? "That transaction could not be found." : sp.error}</Notice> : null}
@@ -45,6 +46,14 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           <select id="account" name="account" defaultValue={sp.account ?? ""} className="rounded-md border border-line-strong bg-surface px-3 py-2 text-sm">
             <option value="">All accounts</option>
             {accounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="cat" className="mb-1 block text-xs text-muted">Category</label>
+          <select id="cat" name="cat" defaultValue={sp.cat ?? ""} className="rounded-md border border-line-strong bg-surface px-3 py-2 text-sm">
+            <option value="">All categories</option>
+            {sp.cat && !categories.some((c) => c.name.toLowerCase() === sp.cat!.toLowerCase()) ? <option value={sp.cat}>{sp.cat}</option> : null}
+            {categories.map((c) => (<option key={c.id} value={c.name}>{c.name}</option>))}
           </select>
         </div>
         <button type="submit" className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium hover:border-primary">Apply</button>

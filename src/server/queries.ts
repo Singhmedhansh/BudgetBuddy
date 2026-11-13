@@ -1,6 +1,7 @@
 import type { Posting } from "@/domain/ledger";
-import { budgetStatus, alertLevel, type BudgetStatus, type AlertLevel } from "@/domain/budget";
+import { budgetStatus, alertLevel, carriedIn, type BudgetStatus, type AlertLevel } from "@/domain/budget";
 import { localDate, monthRange } from "@/domain/period";
+import { nameMatches } from "@/lib/text";
 import { requireSpace } from "./context";
 import type { Account, Category, TransactionRow } from "./types";
 import { isLiability } from "./types";
@@ -42,7 +43,7 @@ export interface TxnListItem extends TransactionRow {
   reversed: boolean;
 }
 
-export async function listTransactions(ctx: Ctx, opts: { type?: string; accountId?: string; q?: string; limit?: number } = {}): Promise<TxnListItem[]> {
+export async function listTransactions(ctx: Ctx, opts: { type?: string; accountId?: string; category?: string; q?: string; limit?: number } = {}): Promise<TxnListItem[]> {
   let q = ctx.supabase
     .from("transactions")
     .select("*, ledger_entries(account_id, category_id, amount)")
@@ -70,7 +71,8 @@ export async function listTransactions(ctx: Ctx, opts: { type?: string; accountI
       categoryName: r.ledger_entries.map((e) => (e.category_id ? categoryName.get(e.category_id) : undefined)).find(Boolean) ?? null,
       accountNames: r.ledger_entries.map((e) => (e.account_id ? accountName.get(e.account_id) : undefined)).filter((n): n is string => !!n),
       reversed: reversedIds.has(r.id),
-    }));
+    }))
+    .filter((r) => !opts.category || (r.categoryName !== null && nameMatches(r.categoryName, opts.category)));
 }
 
 /** Postings reconstructed from stored entries, for period totals via the domain layer. */
@@ -108,39 +110,60 @@ export interface BudgetView {
   name: string;
   warnAt: number;
   rollover: boolean;
-  lines: { categoryId: string; categoryName: string; status: BudgetStatus; level: AlertLevel }[];
+  lines: { categoryId: string; categoryName: string; status: BudgetStatus; level: AlertLevel; carried: number }[];
+  carriedFrom: string;
   total: BudgetStatus;
 }
 
 export async function listBudgets(ctx: Ctx): Promise<BudgetView[]> {
   const month = await currentMonth(ctx);
   const [{ data: budgets }, { data: allocs }, cats] = await Promise.all([
-    ctx.supabase.from("budgets").select("id,name,warn_at,rollover").eq("space_id", ctx.space.id).is("archived_at", null).order("created_at"),
+    ctx.supabase.from("budgets").select("id,name,warn_at,rollover,starts_on,carry_overspend").eq("space_id", ctx.space.id).is("archived_at", null).order("created_at"),
     ctx.supabase.from("budget_allocations").select("budget_id,category_id,amount").eq("space_id", ctx.space.id),
     listCategories(ctx),
   ]);
+  // One query covers the previous and current month so rollover can be applied.
+  const prevYear = month.month === 1 ? month.year - 1 : month.year;
+  const prevMonth = month.month === 1 ? 12 : month.month - 1;
+  const prev = monthRange(prevYear, prevMonth, ctx.profile.timezone);
   const { data: entries } = await ctx.supabase
     .from("ledger_entries")
     .select("category_id, amount, transactions!inner(occurred_at,status)")
     .eq("space_id", ctx.space.id)
     .not("category_id", "is", null)
     .eq("transactions.status", "posted")
-    .gte("transactions.occurred_at", month.from.toISOString())
+    .gte("transactions.occurred_at", prev.from.toISOString())
     .lt("transactions.occurred_at", month.to.toISOString());
   const spent = new Map<string, number>();
-  for (const e of entries ?? []) spent.set(e.category_id as string, (spent.get(e.category_id as string) ?? 0) + Number(e.amount));
+  const prevSpent = new Map<string, number>();
+  for (const e of (entries ?? []) as unknown as { category_id: string; amount: number; transactions: { occurred_at: string } | { occurred_at: string }[] }[]) {
+    const t = Array.isArray(e.transactions) ? e.transactions[0] : e.transactions;
+    const into = new Date(t.occurred_at) >= month.from ? spent : prevSpent;
+    into.set(e.category_id, (into.get(e.category_id) ?? 0) + Number(e.amount));
+  }
   const name = new Map(cats.map((c) => [c.id, c.name]));
+  const thisMonthStart = `${month.year}-${String(month.month).padStart(2, "0")}-01`;
+  const carriedFrom = new Intl.DateTimeFormat("en-IN", { timeZone: ctx.profile.timezone, month: "long" }).format(prev.from);
 
   return (budgets ?? []).map((b) => {
     const mine = (allocs ?? []).filter((a) => a.budget_id === b.id);
+    const startedBefore = String(b.starts_on) < thisMonthStart;
     const lines = mine.map((a) => {
-      const status = budgetStatus({ allocated: Number(a.amount), actual: spent.get(a.category_id as string) ?? 0 });
-      return { categoryId: a.category_id as string, categoryName: name.get(a.category_id as string) ?? "Category", status, level: alertLevel(status, Number(b.warn_at)) };
+      const limit = Number(a.amount);
+      const carried = carriedIn({
+        rolloverEnabled: Boolean(b.rollover),
+        startedBeforePeriod: startedBefore,
+        allocated: limit,
+        prevActual: prevSpent.get(a.category_id as string) ?? 0,
+        carryOverspend: Boolean(b.carry_overspend),
+      });
+      const status = budgetStatus({ allocated: limit + carried, actual: spent.get(a.category_id as string) ?? 0 });
+      return { categoryId: a.category_id as string, categoryName: name.get(a.category_id as string) ?? "Category", status, level: alertLevel(status, Number(b.warn_at)), carried };
     });
     const total = budgetStatus({
       allocated: lines.reduce((s, l) => s + l.status.allocated, 0),
       actual: lines.reduce((s, l) => s + l.status.actual, 0),
     });
-    return { id: b.id as string, name: b.name as string, warnAt: Number(b.warn_at), rollover: Boolean(b.rollover), lines, total };
+    return { id: b.id as string, name: b.name as string, warnAt: Number(b.warn_at), rollover: Boolean(b.rollover), lines, total, carriedFrom };
   });
 }

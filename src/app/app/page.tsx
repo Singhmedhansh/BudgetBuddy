@@ -37,7 +37,7 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <PageHeader title="Dashboard" description={`${monthLabel}. Figures come from the transactions you have recorded.`} action={{ href: "/app/transactions/new", label: "Add transaction" }} />
+      <PageHeader title="Dashboard" description={`${monthLabel}. Figures come from the transactions you have recorded.`} action={{ href: "/app/transactions/new", label: "Add transaction" }} help={{ slug: "how-totals-work", label: "how these figures are worked out" }} />
 
       <dl className="grid gap-px overflow-hidden rounded-md border border-line-strong bg-line-strong sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Net worth" help="Money you hold minus what you owe">

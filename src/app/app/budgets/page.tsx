@@ -17,6 +17,7 @@ export default async function BudgetsPage() {
         title="Budgets"
         description={`${label}. Spent is posted expenses minus refunds. Pending items are not counted yet. Remaining is the limit minus spent.`}
         action={{ href: "/app/budgets/new", label: "Create budget" }}
+        help={{ slug: "how-budgets-work", label: "how budget figures are calculated" }}
       />
       {budgets.length === 0 ? (
         <EmptyState title="No budgets yet" body="Choose the categories you want to limit and set a monthly amount for each." action={{ href: "/app/budgets/new", label: "Create a budget" }} />
@@ -48,6 +49,7 @@ export default async function BudgetsPage() {
                       </div>
                       <p className="num mt-1.5 text-xs text-muted">
                         <Money minor={l.status.actual} currency={c} /> of <Money minor={l.status.allocated} currency={c} /> · {used}% used{l.level === "warning" ? " · near your limit" : ""}
+                        {l.carried !== 0 ? <> · includes <Money minor={l.carried} currency={c} /> carried from {b.carriedFrom}</> : null}
                       </p>
                     </li>
                   );

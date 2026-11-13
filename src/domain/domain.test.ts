@@ -17,7 +17,7 @@ import {
   transferPosting,
 } from "./ledger";
 import { monthRange, localDate } from "./period";
-import { alertLevel, budgetStatus, rolloverAmount } from "./budget";
+import { alertLevel, budgetStatus, carriedIn, rolloverAmount } from "./budget";
 
 const accounts: LedgerAccount[] = [
   { id: "bank", kind: "asset", currency: "INR" },
@@ -193,5 +193,26 @@ describe("budgets (spec 5.5)", () => {
     expect(rolloverAmount({ allocated: 10_000, actual: 12_000 }, { enabled: true })).toBe(0);
     expect(rolloverAmount({ allocated: 10_000, actual: 12_000 }, { enabled: true, carryOverspend: true })).toBe(-2_000);
     expect(rolloverAmount({ allocated: 10_000, actual: 1_000 }, { enabled: false })).toBe(0);
+  });
+});
+
+describe("carriedIn (rollover applied to the current period)", () => {
+  const base = { rolloverEnabled: true, startedBeforePeriod: true, allocated: 10_000, prevActual: 7_000 };
+  it("carries last period's unspent amount", () => {
+    expect(carriedIn(base)).toBe(3_000);
+  });
+  it("carries nothing when rollover is off or the budget did not exist last period", () => {
+    expect(carriedIn({ ...base, rolloverEnabled: false })).toBe(0);
+    expect(carriedIn({ ...base, startedBeforePeriod: false })).toBe(0);
+  });
+  it("does not turn overspending into a negative carry by default", () => {
+    expect(carriedIn({ ...base, prevActual: 12_000 })).toBe(0);
+    expect(carriedIn({ ...base, prevActual: 12_000, carryOverspend: true })).toBe(-2_000);
+  });
+  it("a carried amount raises the limit so remaining and alerts use it", () => {
+    const status = budgetStatus({ allocated: 10_000 + carriedIn(base), actual: 11_000 });
+    expect(status.remaining).toBe(2_000);
+    expect(alertLevel(status)).toBe("warning"); // 11,000 of 13,000 = 84.6%, past the 80% line
+    expect(alertLevel(budgetStatus({ allocated: 10_000, actual: 11_000 }))).toBe("over"); // without the carry it is over
   });
 });

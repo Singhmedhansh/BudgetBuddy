@@ -1,12 +1,17 @@
 import Link from "next/link";
 import { formatMoney } from "@/domain/money";
 
-export function PageHeader({ title, description, action }: { title: string; description?: string; action?: { href: string; label: string } }) {
+export function PageHeader({ title, description, action, help }: { title: string; description?: string; action?: { href: string; label: string }; help?: { slug: string; label: string } }) {
   return (
     <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         {description ? <p className="mt-1.5 max-w-[60ch] text-sm leading-relaxed text-muted">{description}</p> : null}
+        {help ? (
+          <Link href={`/help/${help.slug}`} className="mt-2 inline-block text-sm text-primary underline-offset-2 hover:underline">
+            Help: {help.label}
+          </Link>
+        ) : null}
       </div>
       {action ? (
         <Link href={action.href} className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-fg hover:bg-primary-hover">

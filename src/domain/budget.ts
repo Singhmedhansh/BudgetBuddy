@@ -66,3 +66,20 @@ export function rolloverAmount(
   const leftover = prev.allocated - prev.actual;
   return opts.carryOverspend ? leftover : Math.max(0, leftover);
 }
+
+/**
+ * Amount carried into the current period for one category. Carries only from the
+ * immediately previous period (it does not compound across several months), and
+ * only if the budget already existed in that period. Uses the current limit as
+ * the previous period's limit.
+ */
+export function carriedIn(args: {
+  rolloverEnabled: boolean;
+  startedBeforePeriod: boolean;
+  allocated: number;
+  prevActual: number;
+  carryOverspend?: boolean;
+}): number {
+  if (!args.rolloverEnabled || !args.startedBeforePeriod) return 0;
+  return rolloverAmount({ allocated: args.allocated, actual: args.prevActual }, { enabled: true, carryOverspend: args.carryOverspend });
+}

@@ -18,6 +18,7 @@ export default async function AccountsPage() {
         title="Accounts"
         description="Balances are calculated from the transactions you record, starting from the balance you entered. They are not live bank balances."
         action={{ href: "/app/accounts/new", label: "Add account" }}
+        help={{ slug: "balances-explained", label: "what an account balance means" }}
       />
       {accounts.length === 0 ? (
         <EmptyState title="No accounts yet" body="Add the places your money is kept: bank accounts, cash, wallets and cards." action={{ href: "/app/accounts/new", label: "Add an account" }} />
