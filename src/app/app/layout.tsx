@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { signOut } from "@/app/(auth)/actions";
 import { Logo } from "@/components/brand/Logo";
 import { BottomNav, SidebarNav } from "@/components/app/AppNav";
+import { SpaceSwitcher } from "@/components/app/SpaceSwitcher";
 import { BackToTop } from "@/components/motion/BackToTop";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { getContext } from "@/server/context";
@@ -17,7 +18,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 }
 
 async function Shell({ children }: { children: React.ReactNode }) {
-  const { user, profile, space } = await getContext();
+  const { user, profile, space, spaces, role } = await getContext();
   const name = profile.display_name || user.email || "Account";
   const initial = (name.trim()[0] ?? "?").toUpperCase();
   return (
@@ -27,9 +28,8 @@ async function Shell({ children }: { children: React.ReactNode }) {
         <Link href="/app" aria-label="Budget Buddy dashboard" className="rounded-md px-2 py-2 [&_span]:!text-white">
           <Logo />
         </Link>
-        <div className="mt-4 rounded-lg bg-white/5 px-3 py-2.5 ring-1 ring-white/10">
-          <p className="text-[11px] text-white/50">Finances</p>
-          <p className="truncate text-sm font-medium">{space?.name ?? "Set up your finances"}</p>
+        <div className="mt-4 text-white">
+          <SpaceSwitcher spaces={spaces} activeId={space?.id ?? null} role={role} dark />
         </div>
         <div className="-mx-1 mt-5 flex-1 overflow-y-auto px-1">
           <SidebarNav />
@@ -48,7 +48,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
           <Link href="/app" className="md:hidden" aria-label="Budget Buddy dashboard">
             <Logo size={24} />
           </Link>
-          <p className="hidden truncate text-sm text-muted md:block">{space?.name ?? "Set up your finances"}</p>
+          <p className="hidden truncate text-sm text-muted md:block">{space?.name ?? "Set up your finances"}{role === "viewer" ? " · view only" : ""}</p>
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <ThemeToggle />
             <details className="group relative">
@@ -60,6 +60,9 @@ async function Shell({ children }: { children: React.ReactNode }) {
               </summary>
               <div className="anim-pop glass absolute right-0 z-40 mt-2 w-60 rounded-xl p-2 shadow-float">
                 <p className="truncate px-2 py-1.5 text-xs text-muted">{user.email}</p>
+                <div className="md:hidden">
+                  <SpaceSwitcher spaces={spaces} activeId={space?.id ?? null} role={role} />
+                </div>
                 <Link href="/help" className="block rounded-lg px-2 py-2 text-sm hover:bg-sage md:hidden">
                   Help Centre
                 </Link>

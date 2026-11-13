@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { refundPosting } from "@/domain/ledger";
 import { MoneyError, parseAmount } from "@/domain/money";
-import { localDate, startOfLocalDay } from "@/domain/period";
+import { localDate, occurredAtForDate, startOfLocalDay } from "@/domain/period";
 import { atLeast, requireSpace } from "@/server/context";
 import { fieldErrors } from "@/server/form-errors";
 import { friendlyDbError, persistPosting } from "@/server/ledger-write";
@@ -49,7 +49,7 @@ export async function refundTransactionAction(_: TxnActionState | undefined, for
   const tz = ctx.profile.timezone;
   const today = localDate(new Date(), tz);
   if (startOfLocalDay(y, m, d, tz) > startOfLocalDay(today.year, today.month, today.day, tz)) return fail({ fieldErrors: { date: "Pick today or an earlier date." } }, form);
-  const occurredAt = new Date(startOfLocalDay(y, m, d, tz).getTime() + 12 * 3600 * 1000);
+  const occurredAt = occurredAtForDate(y, m, d, tz);
 
   let posting;
   try {

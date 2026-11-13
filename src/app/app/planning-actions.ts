@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { MoneyError, parseAmount } from "@/domain/money";
-import { startOfLocalDay } from "@/domain/period";
+import { occurredAtForDate } from "@/domain/period";
 import { parseDate } from "@/domain/recurrence";
 import { requireSpace } from "@/server/context";
 import { friendlyDbError } from "@/server/ledger-write";
@@ -167,7 +167,7 @@ export async function settleItemAction(form: FormData) {
   if (!p.success) redirect("/app/bills");
   const [y, m, d] = todayFor({ profile }).split("-").map(Number);
   const paidOn = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-  const occurredAt = new Date(startOfLocalDay(y, m, d, profile.timezone).getTime() + 12 * 3600 * 1000);
+  const occurredAt = occurredAtForDate(y, m, d, profile.timezone);
   const { error } = await supabase.rpc("settle_recurring_item", { p_item: p.data.id, p_due: p.data.due, p_paid_on: paidOn, p_occurred_at: occurredAt.toISOString() });
   revalidatePath("/app", "layout");
   const base = KIND_PATH[p.data.kind];

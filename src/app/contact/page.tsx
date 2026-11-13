@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import { ContactForm } from "@/components/help/ContactForm";
 import { PublicPage } from "@/components/landing/PublicPage";
@@ -34,6 +35,7 @@ export default function ContactPage({ searchParams }: { searchParams: SP }) {
 
 async function FormLoader({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
+  await connection(); // the session read below must happen at request time, never during prerender
   const supabase = await createClient();
   const { data } = (await supabase?.auth.getUser()) ?? { data: { user: null } };
   return (

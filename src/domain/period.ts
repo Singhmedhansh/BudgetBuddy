@@ -55,3 +55,14 @@ export function localDate(instant: Date, timeZone: string): { year: number; mont
   const get = (t: string) => Number(parts.find((p) => p.type === t)!.value);
   return { year: get("year"), month: get("month"), day: get("day") };
 }
+
+/**
+ * The instant to store for a transaction the user dated by calendar day. Today uses the real instant, so
+ * entries made the same day list in the order they were entered (a refund after its expense, and so on).
+ * Any earlier day uses midday in the user's timezone, so it stays on that calendar day whatever the UTC date.
+ */
+export function occurredAtForDate(year: number, month: number, day: number, timeZone: string, now: Date = new Date()): Date {
+  const t = localDate(now, timeZone);
+  if (t.year === year && t.month === month && t.day === day) return now;
+  return new Date(startOfLocalDay(year, month, day, timeZone).getTime() + 12 * 3600 * 1000);
+}

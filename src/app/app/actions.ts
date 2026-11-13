@@ -6,8 +6,9 @@ import { z } from "zod";
 import { COMMON_TIMEZONES, starterCategories, type Persona } from "@/config/categories";
 import { adjustmentPosting, expensePosting, incomePosting, transferPosting } from "@/domain/ledger";
 import { MoneyError, isSupportedCurrency, parseAmount } from "@/domain/money";
-import { localDate, startOfLocalDay } from "@/domain/period";
+import { localDate, startOfLocalDay, occurredAtForDate } from "@/domain/period";
 import { atLeast, getContext, requireSpace } from "@/server/context";
+import { parseBudgetForm } from "@/server/budget-form";
 import { fieldErrors } from "@/server/form-errors";
 import { friendlyDbError, persistPosting } from "@/server/ledger-write";
 import { isLiability, type AccountType } from "@/server/types";
@@ -199,8 +200,8 @@ async function createTransactionActionImpl(_: ActionState | undefined, form: For
   const [y, m, d] = v.date.split("-").map(Number);
   // Midday in the user's timezone: the transaction stays on the chosen calendar
   // day for them, whatever UTC date that is.
-  const occurredAt = new Date(startOfLocalDay(y, m, d, profile.timezone).getTime() + 12 * 3600 * 1000);
   const today = localDate(new Date(), profile.timezone);
+  const occurredAt = occurredAtForDate(y, m, d, profile.timezone);
   if (startOfLocalDay(y, m, d, profile.timezone) > startOfLocalDay(today.year, today.month, today.day, profile.timezone)) {
     return { fieldErrors: { date: "Pick today or an earlier date. Future payments belong in Bills." } };
   }
@@ -255,29 +256,12 @@ export async function createBudgetAction(prev: ActionState | undefined, form: Fo
 }
 
 async function createBudgetActionImpl(_: ActionState | undefined, form: FormData): Promise<ActionState> {
-  const { supabase, space, user, profile } = await requireSpace();
-  const parsed = z
-    .object({
-      name: z.string().trim().min(1, "Name the budget.").max(80),
-      warnAt: z.coerce.number().int().min(1, "Use 1 to 100.").max(100, "Use 1 to 100."),
-    })
-    .safeParse({ name: form.get("name"), warnAt: form.get("warnAt") });
-  if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
-
-  const allocations: { category_id: string; amount: number }[] = [];
-  const errors: Record<string, string> = {};
-  for (const [key, raw] of form.entries()) {
-    if (!key.startsWith("alloc_") || typeof raw !== "string" || raw.trim() === "") continue;
-    try {
-      const minor = parseAmount(raw, space.currency);
-      if (minor < 0) throw new MoneyError("Use zero or more.");
-      if (minor > 0) allocations.push({ category_id: key.slice(6), amount: minor });
-    } catch (e) {
-      errors[key] = e instanceof MoneyError ? e.message : "Enter an amount like 5000.";
-    }
-  }
-  if (Object.keys(errors).length) return { fieldErrors: errors };
-  if (allocations.length === 0) return { error: "Set a limit for at least one category." };
+  const { supabase, space, user, profile, role } = await requireSpace();
+  if (!atLeast(role, "editor")) return { error: "You have view-only access to this space." };
+  const input = parseBudgetForm(form, space.currency);
+  if (!input.ok) return { error: input.error, fieldErrors: input.fieldErrors };
+  const parsed = { data: { name: input.value.name, warnAt: input.value.warnAt } };
+  const allocations = input.value.allocations;
 
   const now = localDate(new Date(), profile.timezone);
   const startsOn = `${now.year}-${String(now.month).padStart(2, "0")}-01`;

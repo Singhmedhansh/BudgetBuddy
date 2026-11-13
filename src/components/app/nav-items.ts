@@ -9,7 +9,9 @@ import {
   ArrowUpDown,
   ChartColumn,
   LineChart,
+  Settings,
   Target,
+  Users,
   TrendingUp,
   Wallet,
 } from "lucide-react";
@@ -49,6 +51,13 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/app/analytics", label: "Analytics", Icon: ChartColumn },
       { href: "/app/forecast", label: "Forecast", Icon: LineChart },
+    ],
+  },
+  {
+    title: "Share and manage",
+    items: [
+      { href: "/app/members", label: "Members", Icon: Users },
+      { href: "/app/settings", label: "Settings", Icon: Settings },
     ],
   },
 ];

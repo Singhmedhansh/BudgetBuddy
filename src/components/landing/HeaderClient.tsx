@@ -50,6 +50,7 @@ export function HeaderClient({ menus }: { menus: Menu[] }) {
   }, []);
 
   const close = useCallback(() => {
+    clearTimeout(timer.current); // a pending hover-open must not reopen a menu that was just dismissed
     setOpen(null);
     setMobile(false);
   }, []);

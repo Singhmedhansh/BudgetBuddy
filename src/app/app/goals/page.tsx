@@ -24,7 +24,7 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
       <PageHeader
         title="Savings goals"
         description="Track what you are putting aside. Amounts you add are tracked here only: they do not move money or change any account balance."
-        action={{ href: "/app/goals/new", label: "Create goal" }}
+        action={ctx.role === "viewer" ? undefined : { href: "/app/goals/new", label: "Create goal" }}
         help={{ slug: "savings-goals", label: "how savings goals work" }}
       />
       {sp.added ? <Notice kind="success">Goal created.</Notice> : null}

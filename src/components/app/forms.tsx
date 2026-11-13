@@ -10,6 +10,7 @@ import {
   saveProfileStep,
   type ActionState,
 } from "@/app/app/actions";
+import { renameAccountAction, updateBudgetAction } from "@/app/app/manage-actions";
 import { Field, FormMessage, SubmitButton } from "@/components/auth/fields";
 import { CURRENCIES, COMMON_TIMEZONES } from "@/config/categories";
 import { ACCOUNT_TYPE_LABEL, type AccountType } from "@/server/types";
@@ -171,25 +172,35 @@ export function TransactionForm({
   );
 }
 
-export function BudgetForm({ categories, currency }: { categories: { id: string; name: string }[]; currency: string }) {
-  const [s, action] = useAct(createBudgetAction);
+export interface BudgetInitial {
+  id: string;
+  name: string;
+  warnAt: string;
+  rollover: boolean;
+  allocations: Record<string, string>;
+}
+
+export function BudgetForm({ categories, currency, initial }: { categories: { id: string; name: string }[]; currency: string; initial?: BudgetInitial }) {
+  const [s, action] = useActionState<ActionState | undefined, FormData>(initial ? (updateBudgetAction as unknown as Act) : createBudgetAction, undefined);
   const fe = s?.fieldErrors ?? {};
+  const val = (k: string, fallback?: string) => s?.values?.[k] ?? fallback;
   return (
     <form action={action} className="space-y-6" noValidate>
+      {initial ? <input type="hidden" name="id" value={initial.id} /> : null}
       <FormMessage error={s?.error} />
-      <Field label="Budget name" name="name" error={fe.name} defaultValue={s?.values?.name ?? "Monthly budget"} />
+      <Field label="Budget name" name="name" error={fe.name} defaultValue={val("name", initial?.name ?? "Monthly budget")} />
       <fieldset>
         <legend className="text-sm font-medium">Monthly limit per category ({currency})</legend>
         <p className="mb-3 mt-1 text-xs text-muted">Leave a category blank to not budget it.</p>
         <div className="grid gap-3 sm:grid-cols-2">
           {categories.map((c) => (
-            <Field key={c.id} label={c.name} name={`alloc_${c.id}`} defaultValue={s?.values?.[`alloc_${c.id}`]} error={fe[`alloc_${c.id}`]} autoComplete="off" />
+            <Field key={c.id} label={c.name} name={`alloc_${c.id}`} defaultValue={val(`alloc_${c.id}`, initial?.allocations[c.id])} error={fe[`alloc_${c.id}`]} autoComplete="off" />
           ))}
         </div>
       </fieldset>
-      <Field label="Warn me when spending reaches (% of a limit)" name="warnAt" defaultValue={s?.values?.warnAt ?? "80"} error={fe.warnAt} />
+      <Field label="Warn me when spending reaches (% of a limit)" name="warnAt" defaultValue={val("warnAt", initial?.warnAt ?? "80")} error={fe.warnAt} />
       <label className="flex items-start gap-3 text-sm">
-        <input type="checkbox" name="rollover" defaultChecked={s?.values?.rollover === "on"} className="mt-1 accent-[var(--primary)]" />
+        <input type="checkbox" name="rollover" defaultChecked={s ? s.values?.rollover === "on" : (initial?.rollover ?? false)} className="mt-1 accent-[var(--primary)]" />
         <span>
           Carry unspent amounts into next month
           <span className="block text-xs text-muted">Only what you did not spend carries over. Overspending does not reduce next month.</span>
@@ -197,9 +208,29 @@ export function BudgetForm({ categories, currency }: { categories: { id: string;
       </label>
       <div className="flex items-center gap-3">
         <div className="flex-1">
-          <SubmitButton pendingLabel="Saving">Create budget</SubmitButton>
+          <SubmitButton pendingLabel="Saving">{initial ? "Save changes" : "Create budget"}</SubmitButton>
         </div>
         <Link href="/app/budgets" className="text-sm text-muted hover:text-fg">
+          Cancel
+        </Link>
+      </div>
+    </form>
+  );
+}
+
+export function RenameAccountForm({ id, name }: { id: string; name: string }) {
+  const [s, action] = useActionState<ActionState | undefined, FormData>(renameAccountAction as unknown as Act, undefined);
+  const fe = s?.fieldErrors ?? {};
+  return (
+    <form action={action} className="space-y-5" noValidate>
+      <input type="hidden" name="id" value={id} />
+      <FormMessage error={s?.error} />
+      <Field label="Account name" name="name" defaultValue={s?.values?.name ?? name} error={fe.name} />
+      <div className="flex items-center gap-3">
+        <div className="flex-1">
+          <SubmitButton pendingLabel="Saving">Save name</SubmitButton>
+        </div>
+        <Link href="/app/accounts" className="text-sm text-muted hover:text-fg">
           Cancel
         </Link>
       </div>

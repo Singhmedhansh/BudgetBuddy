@@ -79,7 +79,8 @@ export async function pageTransactions(ctx: Ctx, opts: TxnQuery = {}): Promise<{
     q = q.or(`merchant.ilike.%${t}%,description.ilike.%${t}%`);
   }
   const sort = opts.sort ?? "date_desc";
-  q = sort.startsWith("amount") ? q.order("amount", { ascending: sort === "amount_asc" }).order("occurred_at", { ascending: false }) : q.order("occurred_at", { ascending: sort === "date_asc" });
+  q = sort.startsWith("amount") ? q.order("amount", { ascending: sort === "amount_asc" }).order("occurred_at", { ascending: false }).order("recorded_at", { ascending: false }) : q.order("occurred_at", { ascending: sort === "date_asc" }).order("recorded_at", { ascending: sort === "date_asc" });
+  // Last tie-break keeps pages stable: rows recorded in the same instant never swap between pages.
   q = q.order("id", { ascending: true }).range((page - 1) * pageSize, page * pageSize - 1);
   const { data, count } = await q;
   // A page past the end makes PostgREST error without a count; ask page 1 for the total so callers can redirect.

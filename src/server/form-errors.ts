@@ -10,7 +10,7 @@ export function fieldErrors(err: z.ZodError): Record<string, string> {
   for (const i of err.issues) {
     const key = String(i.path[0] ?? "form");
     if (out[key]) continue;
-    out[key] = i.code === "invalid_type" || /^Invalid input/.test(i.message) ? "Choose or fill in this field." : i.message;
+    out[key] = /^Invalid input/.test(i.message) ? "Choose or fill in this field." : i.message;
   }
   return out;
 }

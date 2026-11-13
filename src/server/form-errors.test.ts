@@ -13,3 +13,11 @@ describe("fieldErrors", () => {
     if (!r.success) expect(fieldErrors(r.error).accountId).toBe("Choose an account.");
   });
 });
+
+describe("fieldErrors keeps deliberate messages", () => {
+  it("keeps a custom message even when zod reports it as a type error (regression: 80.5% threshold)", () => {
+    const r = z.object({ n: z.coerce.number().int("Use a whole number.") }).safeParse({ n: "80.5" });
+    if (!r.success) expect(fieldErrors(r.error).n).toBe("Use a whole number.");
+    else throw new Error("should fail");
+  });
+});
