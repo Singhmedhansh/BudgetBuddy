@@ -21,13 +21,14 @@ export interface Article {
   related?: string[];
 }
 
-export type CategoryId = "getting-started" | "accounts" | "transactions" | "budgets" | "numbers" | "security";
+export type CategoryId = "getting-started" | "accounts" | "transactions" | "budgets" | "planning" | "numbers" | "security";
 
 export const CATEGORIES: { id: CategoryId; title: string; blurb: string }[] = [
   { id: "getting-started", title: "Getting started", blurb: "Set up your first account, transaction and budget." },
   { id: "accounts", title: "Accounts", blurb: "Where your money is kept, and what the balances mean." },
   { id: "transactions", title: "Transactions", blurb: "Record, find, transfer and reverse." },
   { id: "budgets", title: "Budgets", blurb: "Monthly limits, alerts and rollover." },
+  { id: "planning", title: "Goals, bills and debt", blurb: "Savings goals, recurring payments, the calendar and paying down loans." },
   { id: "numbers", title: "Understanding your numbers", blurb: "How each figure on your dashboard is worked out." },
   { id: "security", title: "Account and security", blurb: "Passwords, sessions, themes and contacting support." },
 ];
@@ -101,7 +102,7 @@ export const ARTICLES: Article[] = [
     title: "Transfers and credit card repayments",
     category: "transactions",
     summary: "Moving money between your own accounts is not spending.",
-    keywords: ["transfer", "move money", "credit card payment", "repay", "repayment", "pay card", "between accounts", "double count"],
+    keywords: ["transfer", "move money", "pay my credit card", "pay credit card", "credit card payment", "repay", "repayment", "pay card", "between accounts", "double count"],
     related: ["how-totals-work", "record-a-transaction"],
     body: [
       { t: "p", text: "A transfer moves money from one of your accounts to another. It changes both balances but is not income or spending, so your monthly totals stay correct." },
@@ -171,6 +172,72 @@ export const ARTICLES: Article[] = [
     body: [
       { t: "p", text: "With rollover on, whatever you did not spend in a category last month is added to its limit this month. Overspending does not reduce next month." },
       { t: "list", items: ["Only last month carries forward; amounts do not pile up across several months.", "A budget carries nothing in the month it is created.", "Last month's limit is taken to be the current limit."] },
+    ],
+  },
+  {
+    slug: "savings-goals",
+    title: "Savings goals",
+    category: "planning",
+    summary: "Set a target, track what you put aside, and see what to save each month.",
+    keywords: ["goal", "goals", "saving", "savings", "target", "emergency fund", "deadline", "save for"],
+    destination: { label: "Create a goal", href: "/app/goals/new" },
+    related: ["financial-calendar", "how-totals-work"],
+    body: [
+      { t: "steps", items: ["Open [Savings goals](/app/goals) and choose Create goal.", "Name it, set a target and, if you like, a deadline.", "Use Add to goal whenever you put money aside. Take out if you spend some."] },
+      { t: "list", items: ["Amounts are tracked here only. They do not move money or change any account balance, so they never count as spending.", "With a deadline, the monthly figure is what you need to set aside each month, rounded up, to reach the target in time.", "The estimated finish date uses your contributions from the last 90 days. It is an estimate and changes as your pace changes."] },
+    ],
+  },
+  {
+    slug: "bills-and-subscriptions",
+    title: "Bills and subscriptions",
+    category: "planning",
+    summary: "Track what falls due, mark it paid, and see what your subscriptions cost.",
+    keywords: ["bill", "bills", "rent", "subscription", "subscriptions", "netflix", "renewal", "recurring", "due date", "reminder", "paid", "overdue", "cancel subscription"],
+    destination: { label: "Add a bill", href: "/app/bills/new" },
+    related: ["financial-calendar", "expected-income"],
+    body: [
+      { t: "steps", items: ["Open [Bills](/app/bills/new) or [Subscriptions](/app/subscriptions/new) and add one.", "Choose the amount, how often it repeats, the first due date, the account it is paid from and a category.", "When you pay it, choose Mark paid. Budget Buddy records the expense and ticks off that due date."] },
+      { t: "list", items: ["A due date can be marked paid once, so it cannot be recorded twice.", "A monthly item on the 31st falls on the last day of shorter months.", "Overdue means the due date has passed without being marked paid. Due soon uses your reminder days.", "Budget Buddy cannot cancel a subscription with the provider. Mark it cancelled here once you have cancelled it with them."] },
+    ],
+  },
+  {
+    slug: "expected-income",
+    title: "Expected income",
+    category: "planning",
+    summary: "Plan around income you expect, without counting it before it arrives.",
+    keywords: ["income", "salary", "expected", "received", "paycheck", "freelance", "pay day"],
+    destination: { label: "Add expected income", href: "/app/income/new" },
+    related: ["bills-and-subscriptions", "how-totals-work"],
+    body: [
+      { t: "p", text: "Expected income is a plan. It does not change any balance or your income total until you choose Mark received on [Income](/app/income). Then it is recorded as income in the account you chose." },
+      { t: "p", text: "That keeps your figures honest: the dashboard counts only income that has actually arrived." },
+    ],
+  },
+  {
+    slug: "financial-calendar",
+    title: "Reading the calendar",
+    category: "planning",
+    summary: "Everything with a date, in one list, with what is done and what is only planned.",
+    keywords: ["calendar", "upcoming", "due", "schedule", "when", "deadline", "what is coming"],
+    destination: { label: "Open the calendar", href: "/app/calendar" },
+    related: ["bills-and-subscriptions", "savings-goals", "debt-payoff"],
+    body: [
+      { t: "p", text: "The [calendar](/app/calendar) lists bills, subscriptions, expected income, goal deadlines and debt payment days for the month. Use Previous and Next to move between months." },
+      { t: "list", items: ["Done: you have marked it paid or received, so it is in your records.", "Scheduled: a plan that has not happened yet, or one that is overdue.", "Estimate from your terms: a debt payment day worked out from the due day you entered."] },
+    ],
+  },
+  {
+    slug: "debt-payoff",
+    title: "Loans, cards and the payoff planner",
+    category: "planning",
+    summary: "Enter your interest rates and see two ways to pay debt down.",
+    keywords: ["debt", "loan", "emi", "credit card", "interest", "payoff", "avalanche", "snowball", "pay off", "owe", "minimum payment"],
+    destination: { label: "Open Loans and debt", href: "/app/debt" },
+    related: ["transfers-and-card-repayments", "add-an-account"],
+    body: [
+      { t: "steps", items: ["Add a credit card or loan as an account of type Credit card or Other liability, with the amount you owe.", "Open [Loans and debt](/app/debt) and enter each one's yearly interest rate and minimum payment.", "Enter how much you can pay in total each month to compare the plans."] },
+      { t: "list", items: ["Avalanche puts extra money on the highest interest rate first and usually pays the least interest.", "Snowball puts it on the smallest balance first, which clears accounts sooner.", "Record repayments as transfers from your bank to the card or loan. They reduce what you owe and are not counted as spending."] },
+      { t: "note", text: "The plan is a projection from the numbers you entered. It is not a figure from your lender and ignores fees and changing rates." },
     ],
   },
   {
@@ -251,5 +318,11 @@ export const DESTINATIONS: Destination[] = [
   { label: "Add account", href: "/app/accounts/new", description: "Create an account with its starting balance.", keywords: ["add account", "new account", "opening balance"] },
   { label: "Budgets", href: "/app/budgets", description: "Monthly limits, what is left, and warnings.", keywords: ["budget", "budgets", "limit", "remaining", "over budget"] },
   { label: "Create budget", href: "/app/budgets/new", description: "Set monthly limits per category.", keywords: ["create budget", "new budget", "set limit"] },
+  { label: "Savings goals", href: "/app/goals", description: "Targets, progress and what to set aside each month.", keywords: ["goal", "goals", "saving", "savings", "target"] },
+  { label: "Bills", href: "/app/bills", description: "What falls due, and mark it paid.", keywords: ["bills", "bill", "rent", "due", "overdue"] },
+  { label: "Subscriptions", href: "/app/subscriptions", description: "Recurring services and what they cost.", keywords: ["subscription", "subscriptions", "renewal", "streaming"] },
+  { label: "Income", href: "/app/income", description: "Expected income and marking it received.", keywords: ["income", "salary", "expected income", "paycheck"] },
+  { label: "Calendar", href: "/app/calendar", description: "Everything with a date, in one place.", keywords: ["calendar", "upcoming", "schedule", "deadline"] },
+  { label: "Loans and debt", href: "/app/debt", description: "Interest rates, minimum payments and the payoff planner.", keywords: ["debt", "loan", "loans", "interest", "payoff", "emi"] },
   { label: "Contact support", href: "/contact", description: "Send us a message and get a reference number.", keywords: ["contact", "support", "help me", "report"] },
 ];

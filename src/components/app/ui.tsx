@@ -53,3 +53,9 @@ export function Money({ minor, currency, signed, className = "" }: { minor: numb
 export function formatDate(iso: string, timeZone: string) {
   return new Intl.DateTimeFormat("en-IN", { timeZone, day: "numeric", month: "short", year: "numeric" }).format(new Date(iso));
 }
+
+/** Formats a calendar date ("2026-11-13") without any timezone shift. */
+export function formatDay(date: string) {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-IN", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" }).format(new Date(Date.UTC(y, m - 1, d)));
+}
