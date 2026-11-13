@@ -12,7 +12,7 @@ export default async function Page() {
   const [accounts, categories] = await Promise.all([listAccounts(ctx), listCategories(ctx, "income")]);
   return (
     <div className="max-w-lg">
-      <PageHeader title="Add expected income" />
+      <PageHeader back={{ href: "/app/income" }} title="Add expected income" />
       {accounts.length === 0 ? (
         <EmptyState title="Add an account first" body="Income is received into one of your accounts." action={{ href: "/app/accounts/new", label: "Add an account" }} />
       ) : (

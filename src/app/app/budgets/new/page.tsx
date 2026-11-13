@@ -11,7 +11,7 @@ export default async function NewBudgetPage() {
   const categories = await listCategories(ctx, "expense");
   return (
     <div className="max-w-2xl">
-      <PageHeader title="Create budget" description="A monthly limit for each category you want to watch." />
+      <PageHeader back={{ href: "/app/budgets" }} title="Create budget" description="A monthly limit for each category you want to watch." />
       <BudgetForm categories={categories} currency={ctx.space.currency} />
     </div>
   );

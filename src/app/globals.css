@@ -30,6 +30,15 @@
   --focus: #245c48;
   --radius-sm: 6px;
   --radius-md: 10px;
+  --radius-lg: 16px;
+  --ink: #0f2a20;
+  --ink-2: #153828;
+  --mint: #9be3bf;
+  --glass: rgba(255, 255, 255, 0.84);
+  --glass-line: rgba(32, 41, 35, 0.09);
+  --shadow-sm: 0 1px 2px rgba(20, 40, 30, 0.06);
+  --shadow-md: 0 8px 24px -8px rgba(20, 40, 30, 0.14), 0 2px 6px rgba(20, 40, 30, 0.05);
+  --shadow-lg: 0 30px 60px -24px rgba(15, 42, 32, 0.28), 0 8px 20px -8px rgba(15, 42, 32, 0.12);
 }
 
 :root[data-theme="dark"] {
@@ -54,6 +63,14 @@
   --info: #84a1dc;
   --info-text: #9db5e6;
   --focus: #6cc29b;
+  --ink: #0b2118;
+  --ink-2: #112a1f;
+  --mint: #86d1b0;
+  --glass: rgba(22, 29, 25, 0.82);
+  --glass-line: rgba(230, 235, 229, 0.1);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 10px 28px -8px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 30px 60px -24px rgba(0, 0, 0, 0.7);
 }
 
 @theme inline {
@@ -77,12 +94,22 @@
   --color-info: var(--info);
   --color-info-text: var(--info-text);
   --font-sans: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-mint: var(--mint);
+  --color-glass: var(--glass);
+  --shadow-card: var(--shadow-md);
+  --shadow-float: var(--shadow-lg);
+  --radius-lg: 16px;
   --radius-sm: 6px;
   --radius-md: 10px;
 }
 
 html {
   background: var(--bg);
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
 }
 
 body {
@@ -110,7 +137,72 @@ body {
   color: var(--fg);
 }
 
+/* ---------- Form controls: one consistent hover and focus treatment everywhere ---------- */
+@layer base {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]),
+  select,
+  textarea {
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):hover,
+  select:hover,
+  textarea:hover {
+    border-color: var(--primary);
+  }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent);
+  }
+  button, a { -webkit-tap-highlight-color: transparent; }
+}
+
+/* ---------- Surfaces ---------- */
+.glass {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid var(--glass-line);
+}
+.font-display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 50;
+  letter-spacing: -0.02em;
+}
+/* Quiet ledger rules behind the hero: a texture that belongs to the product's subject. */
+.ledger-grid {
+  background-image: linear-gradient(var(--line) 1px, transparent 1px);
+  background-size: 100% 44px;
+  mask-image: radial-gradient(ellipse 70% 60% at 70% 30%, #000 20%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 70% 30%, #000 20%, transparent 75%);
+}
+
+/* ---------- Motion ---------- */
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes pop { from { opacity: 0; transform: translateY(-8px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes draw { from { stroke-dashoffset: var(--len, 400); } to { stroke-dashoffset: 0; } }
+@keyframes drift { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes slide-in { from { opacity: 0; transform: translateY(-10px); background: var(--sage); } to { opacity: 1; transform: none; } }
+.anim-rise { animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.anim-pop { animation: pop 0.18s ease-out both; }
+.anim-grow { transform-origin: left; animation: grow-x 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.anim-draw { stroke-dasharray: var(--len, 400); animation: draw 1.2s ease-out both; }
+.anim-drift { animation: drift 7s ease-in-out infinite; }
+.anim-slide { animation: slide-in 0.6s ease-out both; }
+.page-enter { animation: rise 0.35s ease-out both; }
+
+/* Scroll reveal: only hidden when scripting is available, so content never depends on JS. */
+@media (scripting: enabled) {
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1); transition-delay: var(--d, 0ms); }
+  .reveal.in { opacity: 1; transform: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1 !important; transform: none !important; }
   *,
   *::before,
   *::after {

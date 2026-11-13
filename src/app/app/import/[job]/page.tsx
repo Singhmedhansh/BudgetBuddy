@@ -29,7 +29,7 @@ export default async function ReviewPage({ params, searchParams }: { params: Pro
     const s = (job.summary ?? {}) as { imported?: number; skipped_already_imported?: number; excluded?: number };
     return (
       <>
-        <PageHeader title="Import finished" description={job.filename as string} />
+        <PageHeader back={{ href: "/app/import" }} title="Import finished" description={job.filename as string} />
         <Notice kind="success">
           Imported {s.imported ?? 0} transaction{s.imported === 1 ? "" : "s"}. {s.skipped_already_imported ? `${s.skipped_already_imported} were already imported and skipped. ` : ""}
           {s.excluded ? `${s.excluded} were left out by you or flagged for review.` : ""}
@@ -54,7 +54,7 @@ export default async function ReviewPage({ params, searchParams }: { params: Pro
 
   return (
     <>
-      <PageHeader title="Review import" description={`${job.filename as string}. Nothing is saved until you confirm. Untick any row to leave it out and change a category if the suggestion is wrong.`} />
+      <PageHeader back={{ href: "/app/import" }} title="Review import" description={`${job.filename as string}. Nothing is saved until you confirm. Untick any row to leave it out and change a category if the suggestion is wrong.`} />
       {sp.error ? <Notice kind="error">{sp.error}</Notice> : null}
       <p className="mb-6 text-sm text-muted">
         {rows.length} readable row{rows.length === 1 ? "" : "s"}: {counts.new} new, {counts.already_imported} already imported (left out), {counts.possible_duplicate} possible duplicate{counts.possible_duplicate === 1 ? "" : "s"} (left out until you tick them).

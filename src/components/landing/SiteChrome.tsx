@@ -1,56 +1,81 @@
 import Link from "next/link";
 import { Logo } from "@/components/brand/Logo";
-import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { HeaderClient, type Menu } from "./HeaderClient";
 
-const NAV = [
-  { href: "/#features", label: "Features" },
-  { href: "/#how-it-works", label: "How it works" },
-  { href: "/#pricing", label: "Pricing" },
-  { href: "/help", label: "Help" },
+/** Header navigation. Kept here as plain data so the link-integrity test covers every href. */
+const MENUS: Menu[] = [
+  {
+    id: "product",
+    label: "Product",
+    intro: "One ledger behind every screen.",
+    items: [
+      { href: "/#showcase", label: "See it working", description: "Interactive previews of the dashboard, budgets and goals." },
+      { href: "/help/how-totals-work", label: "How totals work", description: "Why transfers and repayments are never spending." },
+      { href: "/help/import-a-statement", label: "Imports", description: "Review every row before anything is saved." },
+    ],
+  },
+  {
+    id: "features",
+    label: "Features",
+    intro: "Everything you need to run your money.",
+    items: [
+      { href: "/#features", label: "All features", description: "Ledger, budgets, bills, imports, shared spaces." },
+      { href: "/help/create-a-budget", label: "Budgets", description: "Limits by category with clear alerts." },
+      { href: "/help/savings-goals", label: "Savings goals", description: "Track progress towards a target." },
+      { href: "/help/forecast-explained", label: "Forecasting", description: "Estimates, labelled as estimates." },
+    ],
+  },
+  {
+    id: "solutions",
+    label: "Solutions",
+    intro: "Made for how you live.",
+    items: [
+      { href: "/#use-cases", label: "Students", description: "Stretch an allowance across the term." },
+      { href: "/#use-cases", label: "Professionals", description: "Salary, rent, EMIs and subscriptions." },
+      { href: "/#use-cases", label: "Couples and families", description: "Share household bills and goals." },
+    ],
+  },
+  {
+    id: "resources",
+    label: "Resources",
+    intro: "Help when you want it.",
+    items: [
+      { href: "/help", label: "Help Centre", description: "Guides for every part of the product." },
+      { href: "/security", label: "Security and privacy", description: "How your data is protected." },
+      { href: "/contact", label: "Contact support", description: "Ask a question and get a reference number." },
+    ],
+  },
 ];
 
 export function SiteHeader() {
-  return (
-    <header className="sticky top-0 z-20 border-b border-line bg-bg/95 backdrop-blur-sm">
-      <div className="mx-auto flex h-16 max-w-6xl items-center gap-6 px-5">
-        <Link href="/" aria-label="Budget Buddy home" className="shrink-0">
-          <Logo />
-        </Link>
-        <nav aria-label="Main" className="hidden flex-1 items-center gap-6 md:flex">
-          {NAV.map((n) => (
-            <Link key={n.href} href={n.href} className="text-sm text-muted transition-colors hover:text-fg">
-              {n.label}
-            </Link>
-          ))}
-        </nav>
-        <div className="ml-auto flex items-center gap-3 md:ml-0">
-          <ThemeToggle />
-          <Link href="/login" className="hidden text-sm font-medium sm:block">
-            Log in
-          </Link>
-          <Link href="/signup" className="rounded-md bg-primary px-3.5 py-2 text-sm font-semibold text-primary-fg transition-colors hover:bg-primary-hover">
-            Get started
-          </Link>
-        </div>
-      </div>
-    </header>
-  );
+  return <HeaderClient menus={MENUS} />;
 }
 
 const FOOTER = [
   {
     title: "Product",
     links: [
+      { href: "/#showcase", label: "See it working" },
       { href: "/#features", label: "Features" },
       { href: "/#pricing", label: "Pricing" },
+      { href: "/#faq", label: "Questions" },
+    ],
+  },
+  {
+    title: "Resources",
+    links: [
       { href: "/help", label: "Help Centre" },
+      { href: "/help/getting-started", label: "Getting started" },
+      { href: "/help/how-budgets-work", label: "How budgets work" },
+      { href: "/security", label: "Security and privacy" },
     ],
   },
   {
     title: "Company",
     links: [
       { href: "/contact", label: "Contact us" },
-      { href: "/security", label: "Security and privacy" },
+      { href: "/login", label: "Log in" },
+      { href: "/signup", label: "Create an account" },
     ],
   },
   {
@@ -68,19 +93,23 @@ const FOOTER = [
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-line bg-sunken">
-      <div className="mx-auto grid max-w-6xl gap-10 px-5 py-12 md:grid-cols-[1.4fr_repeat(3,1fr)]">
+    <footer className="relative overflow-hidden bg-ink text-white">
+      <div aria-hidden className="pointer-events-none absolute -top-40 left-1/2 h-80 w-[60rem] -translate-x-1/2 rounded-full bg-primary/25 blur-3xl" />
+      <div className="relative mx-auto grid max-w-6xl gap-12 px-5 pb-10 pt-16 md:grid-cols-[1.5fr_repeat(4,1fr)]">
         <div>
-          <Logo />
-          <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted">Your money. Your control.</p>
+          <Link href="/" aria-label="Budget Buddy home" className="inline-flex items-center gap-2.5 [&_span]:!text-white">
+            <Logo />
+          </Link>
+          <p className="font-display mt-5 max-w-[22ch] text-2xl leading-snug text-white/90">Your money. Your control.</p>
+          <p className="mt-3 max-w-xs text-sm leading-relaxed text-white/60">A personal finance ledger for tracking, planning and understanding what you spend.</p>
         </div>
         {FOOTER.map((col) => (
           <nav key={col.title} aria-label={col.title}>
-            <h2 className="text-sm font-semibold">{col.title}</h2>
-            <ul className="mt-3 space-y-2">
+            <h2 className="text-sm font-semibold text-white">{col.title}</h2>
+            <ul className="mt-4 space-y-2.5">
               {col.links.map((l) => (
-                <li key={l.href}>
-                  <Link href={l.href} className="text-sm text-muted transition-colors hover:text-fg">
+                <li key={l.label}>
+                  <Link href={l.href} className="text-sm text-white/60 transition-colors hover:text-white">
                     {l.label}
                   </Link>
                 </li>
@@ -89,10 +118,11 @@ export function SiteFooter() {
           </nav>
         ))}
       </div>
-      <div className="border-t border-line">
-        <p className="mx-auto max-w-6xl px-5 py-5 text-xs text-muted">
-          Budget Buddy helps you record and understand your finances. It does not give financial advice or move money.
-        </p>
+      <div className="relative border-t border-white/10">
+        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-5 py-6 text-xs text-white/50 sm:flex-row sm:justify-between">
+          <p>© Budget Buddy. All rights reserved.</p>
+          <p className="max-w-xl sm:text-right">Budget Buddy helps you record and understand your finances. It does not give financial advice or move money.</p>
+        </div>
       </div>
     </footer>
   );

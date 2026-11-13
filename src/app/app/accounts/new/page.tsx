@@ -9,7 +9,7 @@ export default async function NewAccountPage() {
   const { space } = await requireSpace();
   return (
     <div className="max-w-lg">
-      <PageHeader title="Add account" description="Enter the balance as it is today. Later changes come from the transactions you record." />
+      <PageHeader back={{ href: "/app/accounts" }} title="Add account" description="Enter the balance as it is today. Later changes come from the transactions you record." />
       <AccountForm mode="page" currency={space.currency} cancelHref="/app/accounts" />
     </div>
   );

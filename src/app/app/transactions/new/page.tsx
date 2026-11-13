@@ -15,7 +15,7 @@ export default async function NewTransactionPage() {
 
   return (
     <div className="max-w-lg">
-      <PageHeader title="Add transaction" />
+      <PageHeader back={{ href: "/app/transactions" }} title="Add transaction" />
       {accounts.length === 0 ? (
         <EmptyState title="Add an account first" body="A transaction needs an account to come from or go into." action={{ href: "/app/accounts/new", label: "Add an account" }} />
       ) : (

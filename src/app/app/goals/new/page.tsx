@@ -11,7 +11,7 @@ export default async function NewGoalPage() {
   const ctx = await requireSpace();
   return (
     <div className="max-w-lg">
-      <PageHeader title="Create goal" />
+      <PageHeader back={{ href: "/app/goals" }} title="Create goal" />
       <GoalForm currency={ctx.space.currency} minDate={addDays(todayFor(ctx), 1)} />
     </div>
   );

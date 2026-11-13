@@ -47,7 +47,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           Showing {sp.from ?? "the start"} to {sp.to ?? "today"}.
         </p>
       ) : null}
-      <form className="mb-6 flex flex-wrap items-end gap-3" role="search">
+      <form className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-line bg-surface p-4" role="search">
         <div>
           <label htmlFor="q" className="mb-1 block text-xs text-muted">Search</label>
           <input id="q" name="q" defaultValue={sp.q} placeholder="Merchant or note" className="w-52 rounded-md border border-line-strong bg-surface px-3 py-2 text-sm" />
@@ -76,7 +76,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         </div>
         {sp.from ? <input type="hidden" name="from" value={sp.from} /> : null}
         {sp.to ? <input type="hidden" name="to" value={sp.to} /> : null}
-        <button type="submit" className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium hover:border-primary">Apply</button>
+        <button type="submit" className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-fg transition-colors hover:bg-primary-hover">Apply</button>
         {filtered ? <Link href="/app/transactions" className="py-2 text-sm text-muted hover:text-fg">Clear</Link> : null}
       </form>
 
@@ -87,11 +87,13 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
           <EmptyState title="No transactions yet" body="Add an expense, income or a transfer between your accounts." action={{ href: "/app/transactions/new", label: "Add transaction" }} />
         )
       ) : (
-        <ul className="divide-y divide-line border-y border-line">
+        <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
           {rows.map((t) => {
             const isReversal = Boolean(t.reversal_of);
             return (
-              <li key={t.id} className="flex items-center justify-between gap-4 py-3.5">
+              <li key={t.id} className="flex items-center justify-between gap-4 px-4 py-3.5 transition-colors hover:bg-sunken/60">
+                <div className="flex min-w-0 items-center gap-3.5">
+                <span aria-hidden className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sage text-xs font-semibold text-primary">{(isReversal ? "R" : (t.merchant || t.description || t.categoryName || (t.type === "transfer" ? "T" : "?"))).trim()[0]?.toUpperCase()}</span>
                 <div className="min-w-0">
                   <p className={`truncate text-sm font-medium ${t.reversed ? "text-muted line-through" : ""}`}>
                     {isReversal ? "Reversal" : t.merchant || t.description || t.categoryName || (t.type === "transfer" ? "Transfer" : "Transaction")}
@@ -102,7 +104,8 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
                     {t.type === "transfer" ? " · Not spending" : ""}
                   </p>
                 </div>
-                <div className="flex items-center gap-4">
+                </div>
+                <div className="flex shrink-0 items-center gap-4">
                   <Money minor={displayAmount({ type: t.type, amount: t.amount, isReversal })} currency={t.currency} signed={t.type !== "transfer" && t.type !== "adjustment"} className={`text-sm font-medium ${displayAmount({ type: t.type, amount: t.amount, isReversal }) > 0 && t.type !== "transfer" && t.type !== "adjustment" ? "text-pos-text" : ""}`} />
                   {!t.reversed && !isReversal && t.status === "posted" ? (
                     <form action={reverseTransactionAction}>
