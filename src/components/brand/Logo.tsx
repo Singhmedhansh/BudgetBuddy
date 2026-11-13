@@ -1,12 +1,11 @@
 /**
- * FinTrack mark: a stem that carries two lines out to connected points, the
- * second sitting higher and lighter than the first. It reads as an "F", as a
- * trace of money moving from one place to another, and as information held in
- * one frame. Original geometry on a rounded square.
- *
- * Colours come from theme tokens, so one component serves light and dark. The
- * static files in /public/brand and the app icons use the same geometry.
+ * FinTrack logo, from the approved artwork (public/brand/fintrack-logo-source.png):
+ * a folded "F" with a three-point trend line on a deep green tile, and a Fraunces
+ * wordmark, "Fin" in brand green and "Track" in the text colour. The tile is the
+ * same in light and dark; the wordmark follows the theme tokens.
  */
+import { MARK } from "./mark-geometry";
+
 export function LogoMark({ size = 28, title }: { size?: number; title?: string }) {
   return (
     <svg
@@ -18,22 +17,26 @@ export function LogoMark({ size = 28, title }: { size?: number; title?: string }
       aria-hidden={title ? undefined : true}
       focusable="false"
     >
-      <rect width="32" height="32" rx="8" fill="var(--primary)" />
-      <path d="M11 24.5V9.5h8.5M11 16.2h5.5" fill="none" stroke="var(--primary-fg)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="23" cy="9.5" r="2.6" fill="var(--sage)" />
-      <circle cx="20" cy="16.2" r="1.9" fill="var(--primary-fg)" />
+      <rect width="32" height="32" rx="8.5" fill={MARK.tile} stroke="rgba(255,255,255,0.16)" strokeWidth="0.5" />
+      <path d={MARK.panelPath} fill={MARK.panel} />
+      <path d={MARK.stemPath} fill={MARK.stem} />
+      <path d={MARK.barPath} fill={MARK.bar} />
+      <path d={MARK.linePath} fill="none" stroke={MARK.bar} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
+      {MARK.nodes.map(([cx, cy, r]) => (
+        <circle key={cx} cx={cx} cy={cy} r={r} fill={MARK.bar} />
+      ))}
     </svg>
   );
 }
 
-/** Wordmark in Fraunces: "Fin" light, "Track" heavier, so the two halves of the name read as one word. */
+/** Wordmark in Fraunces: "Fin" medium in brand green, "Track" extra bold in the text colour. */
 export function Wordmark({ className = "" }: { className?: string }) {
   return (
     <span className={`font-display text-[1.25rem] leading-none tracking-[-0.02em] text-fg ${className}`} aria-label="FinTrack">
-      <span aria-hidden className="font-light">
+      <span aria-hidden className="font-medium text-primary">
         Fin
       </span>
-      <span aria-hidden className="font-semibold">
+      <span aria-hidden className="font-extrabold">
         Track
       </span>
     </span>
