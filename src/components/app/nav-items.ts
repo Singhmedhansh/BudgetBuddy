@@ -6,6 +6,8 @@ import {
   PiggyBank,
   Receipt,
   Repeat,
+  ArrowUpDown,
+  ChartColumn,
   Target,
   TrendingUp,
   Wallet,
@@ -30,6 +32,7 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { href: "/app/bills", label: "Bills", Icon: Receipt },
       { href: "/app/subscriptions", label: "Subscriptions", Icon: Repeat },
       { href: "/app/debt", label: "Loans and debt", Icon: TrendingUp },
+      { href: "/app/import", label: "Import and export", Icon: ArrowUpDown },
     ],
   },
   {
@@ -39,5 +42,9 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { href: "/app/goals", label: "Savings goals", Icon: Target },
       { href: "/app/calendar", label: "Calendar", Icon: CalendarDays },
     ],
+  },
+  {
+    title: "Understand",
+    items: [{ href: "/app/analytics", label: "Analytics", Icon: ChartColumn }],
   },
 ];

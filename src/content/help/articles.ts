@@ -125,6 +125,21 @@ export const ARTICLES: Article[] = [
     ],
   },
   {
+    slug: "import-a-statement",
+    title: "Import a bank statement (CSV)",
+    category: "transactions",
+    summary: "Bring in a CSV statement, review every row, and confirm. Re-importing never duplicates.",
+    keywords: ["import", "csv", "statement", "upload", "bank statement", "excel", "export", "download", "backup", "duplicate", "duplicates"],
+    destination: { label: "Import a statement", href: "/app/import" },
+    related: ["record-a-transaction", "balances-explained"],
+    body: [
+      { t: "steps", items: ["Download a CSV statement from your bank. In Excel or Sheets, use Save as CSV.", "Open [Import and export](/app/import), choose the account, the file and how dates are written.", "Review the rows. Untick anything you do not want and fix categories.", "Choose Confirm and import."] },
+      { t: "list", items: ["The file needs a header row with Date, Description and Amount, or separate Debit and Credit columns.", "Nothing is saved until you confirm. Rows that cannot be read are listed with the reason and can be downloaded as a CSV.", "Importing the same file again skips rows that were already imported. Two genuine identical purchases in one file both import.", "A row that matches a transaction you recorded by hand, same account, date and amount, is flagged as a possible duplicate and left out until you tick it.", "Categories are suggested from how you categorised the same merchant before; otherwise they go to Uncategorised or Other income.", "Dates like 03/04/2026 are read the way you choose: day first or month first. We never guess."] },
+      { t: "note", text: "Only CSV files up to 2 MB are supported today. Excel files (.xlsx) and PDF statements are not supported yet." },
+      { t: "p", text: "You can also export everything at any time from the same page: all transactions as CSV, or all your data as JSON. Exports are free on every plan." },
+    ],
+  },
+  {
     slug: "find-spending",
     title: "Find your spending on a category or merchant",
     category: "transactions",
@@ -241,6 +256,19 @@ export const ARTICLES: Article[] = [
     ],
   },
   {
+    slug: "analytics-explained",
+    title: "How analytics are calculated",
+    category: "numbers",
+    summary: "Income, spending, categories, merchants and the six-month trend.",
+    keywords: ["analytics", "report", "reports", "chart", "trend", "category breakdown", "merchant", "compare", "last month", "year", "custom dates", "percentage"],
+    destination: { label: "Open Analytics", href: "/app/analytics" },
+    related: ["how-totals-work", "find-spending"],
+    body: [
+      { t: "list", items: ["Pick a period at the top, or enter your own dates. Months follow your timezone.", "Income is money recorded as received. Spending is expenses minus refunds, and a reversed purchase counts as nothing.", "Transfers, card repayments and opening balances are never counted.", "The change figure compares with the period of the same length just before it.", "Choose a category to see the transactions behind that number. Percentages are rounded so they add up to 100.", "Merchant totals need a merchant on the transaction. Refunds and reversals reduce the merchant they relate to."] },
+      { t: "p", text: "Every chart has a table equivalent. You can download the period as CSV from the bottom of the page." },
+    ],
+  },
+  {
     slug: "how-totals-work",
     title: "How the dashboard figures are worked out",
     category: "numbers",
@@ -324,5 +352,7 @@ export const DESTINATIONS: Destination[] = [
   { label: "Income", href: "/app/income", description: "Expected income and marking it received.", keywords: ["income", "salary", "expected income", "paycheck"] },
   { label: "Calendar", href: "/app/calendar", description: "Everything with a date, in one place.", keywords: ["calendar", "upcoming", "schedule", "deadline"] },
   { label: "Loans and debt", href: "/app/debt", description: "Interest rates, minimum payments and the payoff planner.", keywords: ["debt", "loan", "loans", "interest", "payoff", "emi"] },
+  { label: "Import and export", href: "/app/import", description: "Import a CSV statement, or download your data.", keywords: ["import", "export", "csv", "statement", "upload", "download", "backup"] },
+  { label: "Analytics", href: "/app/analytics", description: "Income, spending, categories and trends.", keywords: ["analytics", "report", "reports", "chart", "trend", "breakdown", "insights"] },
   { label: "Contact support", href: "/contact", description: "Send us a message and get a reference number.", keywords: ["contact", "support", "help me", "report"] },
 ];

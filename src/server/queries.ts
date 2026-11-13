@@ -41,9 +41,11 @@ export interface TxnListItem extends TransactionRow {
   categoryName: string | null;
   accountNames: string[];
   reversed: boolean;
+  /** Net effect on expense categories (positive = spending). Reversals and refunds are negative. */
+  expenseAmount: number;
 }
 
-export async function listTransactions(ctx: Ctx, opts: { type?: string; accountId?: string; category?: string; q?: string; limit?: number } = {}): Promise<TxnListItem[]> {
+export async function listTransactions(ctx: Ctx, opts: { type?: string; accountId?: string; category?: string; q?: string; limit?: number; from?: Date; to?: Date } = {}): Promise<TxnListItem[]> {
   let q = ctx.supabase
     .from("transactions")
     .select("*, ledger_entries(account_id, category_id, amount)")
@@ -51,17 +53,20 @@ export async function listTransactions(ctx: Ctx, opts: { type?: string; accountI
     .order("occurred_at", { ascending: false })
     .limit(opts.limit ?? 100);
   if (opts.type) q = q.eq("type", opts.type);
+  if (opts.from) q = q.gte("occurred_at", opts.from.toISOString());
+  if (opts.to) q = q.lt("occurred_at", opts.to.toISOString());
   if (opts.q) q = q.or(`merchant.ilike.%${opts.q.replace(/[%,()]/g, " ")}%,description.ilike.%${opts.q.replace(/[%,()]/g, " ")}%`);
   const { data } = await q;
   const rows = (data ?? []) as (TransactionRow & { ledger_entries: { account_id: string | null; category_id: string | null; amount: number }[] })[];
 
   const [accounts, categories, reversals] = await Promise.all([
     listAccounts(ctx, true),
-    ctx.supabase.from("categories").select("id,name").eq("space_id", ctx.space.id),
+    ctx.supabase.from("categories").select("id,name,kind").eq("space_id", ctx.space.id),
     ctx.supabase.from("transactions").select("reversal_of").eq("space_id", ctx.space.id).not("reversal_of", "is", null),
   ]);
   const accountName = new Map(accounts.map((a) => [a.id, a.name]));
   const categoryName = new Map((categories.data ?? []).map((c) => [c.id as string, c.name as string]));
+  const expenseCats = new Set((categories.data ?? []).filter((c) => c.kind === "expense").map((c) => c.id as string));
   const reversedIds = new Set((reversals.data ?? []).map((r) => r.reversal_of as string));
 
   return rows
@@ -71,6 +76,7 @@ export async function listTransactions(ctx: Ctx, opts: { type?: string; accountI
       categoryName: r.ledger_entries.map((e) => (e.category_id ? categoryName.get(e.category_id) : undefined)).find(Boolean) ?? null,
       accountNames: r.ledger_entries.map((e) => (e.account_id ? accountName.get(e.account_id) : undefined)).filter((n): n is string => !!n),
       reversed: reversedIds.has(r.id),
+      expenseAmount: r.ledger_entries.filter((e) => e.category_id && expenseCats.has(e.category_id)).reduce((s, e) => s + Number(e.amount), 0),
     }))
     .filter((r) => !opts.category || (r.categoryName !== null && nameMatches(r.categoryName, opts.category)));
 }

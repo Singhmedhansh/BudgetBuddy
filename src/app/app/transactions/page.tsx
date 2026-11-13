@@ -3,6 +3,8 @@ import Link from "next/link";
 import { reverseTransactionAction } from "@/app/app/actions";
 import { EmptyState, formatDate, Money, Notice, PageHeader } from "@/components/app/ui";
 import { displayAmount } from "@/domain/display";
+import { startOfLocalDay } from "@/domain/period";
+import { parseDate } from "@/domain/recurrence";
 import { requireSpace } from "@/server/context";
 import { listAccounts, listCategories, listTransactions } from "@/server/queries";
 
@@ -15,12 +17,23 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
   const sp = await searchParams;
   const ctx = await requireSpace();
   const type = TYPES.find((t) => t === sp.type);
+  const day = (v: string | undefined, add = 0) => {
+    if (!v) return undefined;
+    try {
+      const { y, m, d } = parseDate(v);
+      return startOfLocalDay(y, m, d + add, ctx.profile.timezone);
+    } catch {
+      return undefined;
+    }
+  };
+  const from = day(sp.from);
+  const to = day(sp.to, 1); // the end date is inclusive
   const [rows, accounts, categories] = await Promise.all([
-    listTransactions(ctx, { type, accountId: sp.account, category: sp.cat?.slice(0, 60), q: sp.q?.slice(0, 80) }),
+    listTransactions(ctx, { type, accountId: sp.account, category: sp.cat?.slice(0, 60), q: sp.q?.slice(0, 80), from, to }),
     listAccounts(ctx, true),
     listCategories(ctx),
   ]);
-  const filtered = Boolean(type || sp.account || sp.cat || sp.q);
+  const filtered = Boolean(type || sp.account || sp.cat || sp.q || from || to);
 
   return (
     <>
@@ -29,6 +42,11 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
       {sp.reversed ? <Notice kind="success">Transaction reversed. The original and its reversal both stay in your history.</Notice> : null}
       {sp.error ? <Notice kind="error">{sp.error === "invalid" ? "That transaction could not be found." : sp.error}</Notice> : null}
 
+      {from || to ? (
+        <p className="mb-3 text-sm text-muted">
+          Showing {sp.from ?? "the start"} to {sp.to ?? "today"}.
+        </p>
+      ) : null}
       <form className="mb-6 flex flex-wrap items-end gap-3" role="search">
         <div>
           <label htmlFor="q" className="mb-1 block text-xs text-muted">Search</label>
@@ -56,6 +74,8 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
             {categories.map((c) => (<option key={c.id} value={c.name}>{c.name}</option>))}
           </select>
         </div>
+        {sp.from ? <input type="hidden" name="from" value={sp.from} /> : null}
+        {sp.to ? <input type="hidden" name="to" value={sp.to} /> : null}
         <button type="submit" className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium hover:border-primary">Apply</button>
         {filtered ? <Link href="/app/transactions" className="py-2 text-sm text-muted hover:text-fg">Clear</Link> : null}
       </form>

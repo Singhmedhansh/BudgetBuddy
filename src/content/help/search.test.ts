@@ -42,7 +42,7 @@ describe("help content integrity", () => {
   it("every internal link in article text and every destination is an existing route", () => {
     const known = new Set([
       "/app", "/app/transactions", "/app/transactions/new", "/app/accounts", "/app/accounts/new", "/app/budgets", "/app/budgets/new",
-      "/app/goals", "/app/goals/new", "/app/bills", "/app/bills/new", "/app/subscriptions", "/app/subscriptions/new", "/app/income", "/app/income/new", "/app/calendar", "/app/debt",
+      "/app/goals", "/app/goals/new", "/app/bills", "/app/bills/new", "/app/subscriptions", "/app/subscriptions/new", "/app/income", "/app/income/new", "/app/calendar", "/app/debt", "/app/import", "/app/analytics",
       "/contact", "/security", "/forgot-password", "/help",
     ]);
     const check = (href: string, where: string) => expect(known.has(href.split("?")[0]), `${where}: ${href}`).toBe(true);
@@ -63,5 +63,12 @@ describe("help search covers the planning modules", () => {
     expect(searchHelp("netflix renewal").articles[0].slug).toBe("bills-and-subscriptions");
     expect(searchHelp("emergency fund").articles[0].slug).toBe("savings-goals");
     expect(searchHelp("salary not received yet").articles.map((a) => a.slug)).toContain("expected-income");
+  });
+});
+
+describe("import help", () => {
+  it("finds the import article", () => {
+    expect(searchHelp("upload my bank statement").articles[0].slug).toBe("import-a-statement");
+    expect(searchHelp("import csv duplicates").articles[0].slug).toBe("import-a-statement");
   });
 });

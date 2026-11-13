@@ -49,6 +49,7 @@ export interface TransactionRow {
   merchant: string | null;
   description: string | null;
   reversal_of: string | null;
+  refund_of?: string | null;
   source: "manual" | "import" | "integration";
 }
 
