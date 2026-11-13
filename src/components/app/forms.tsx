@@ -122,10 +122,13 @@ export function TransactionForm({
 }) {
   const [s, action] = useAct(createTransactionAction);
   const [type, setType] = useState<"expense" | "income" | "transfer">("expense");
+  // One key per opened form: submitting twice (double click, retry) saves the transaction once.
+  const [clientKey] = useState(() => crypto.randomUUID());
   const fe = s?.fieldErrors ?? {};
   const cats = type === "income" ? incomeCategories : expenseCategories;
   return (
     <form action={action} className="space-y-5" noValidate>
+      <input type="hidden" name="clientKey" value={clientKey} suppressHydrationWarning readOnly />
       <FormMessage error={s?.error} />
       <fieldset>
         <legend className="mb-2 text-sm font-medium">Type</legend>

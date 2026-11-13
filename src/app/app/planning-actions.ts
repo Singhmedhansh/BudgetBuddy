@@ -1,5 +1,6 @@
 "use server";
 
+import { fieldErrors } from "@/server/form-errors";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -22,12 +23,6 @@ function echo(form: FormData): Record<string, string> {
   return out;
 }
 const withEcho = (res: PlanState, form: FormData): PlanState => (res.error || res.fieldErrors ? { ...res, values: echo(form) } : res);
-
-function fieldErrors(err: z.ZodError): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const i of err.issues) out[String(i.path[0] ?? "form")] ??= i.message;
-  return out;
-}
 
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a date.").refine((s) => {
   try {

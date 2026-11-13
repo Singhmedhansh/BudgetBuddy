@@ -7,7 +7,8 @@ import { COMMON_TIMEZONES, starterCategories, type Persona } from "@/config/cate
 import { adjustmentPosting, expensePosting, incomePosting, transferPosting } from "@/domain/ledger";
 import { MoneyError, isSupportedCurrency, parseAmount } from "@/domain/money";
 import { localDate, startOfLocalDay } from "@/domain/period";
-import { getContext, requireSpace } from "@/server/context";
+import { atLeast, getContext, requireSpace } from "@/server/context";
+import { fieldErrors } from "@/server/form-errors";
 import { friendlyDbError, persistPosting } from "@/server/ledger-write";
 import { isLiability, type AccountType } from "@/server/types";
 
@@ -29,15 +30,6 @@ function withEcho(res: ActionState, form: FormData): ActionState {
 }
 
 const ACCOUNT_TYPES = ["savings", "current", "cash", "credit_card", "wallet", "investment", "other_asset", "other_liability"] as const;
-
-function fieldErrors(err: z.ZodError): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const i of err.issues) {
-    const k = String(i.path[0] ?? "form");
-    if (!out[k]) out[k] = i.message;
-  }
-  return out;
-}
 
 function validTimezone(tz: string): boolean {
   try {
@@ -180,6 +172,7 @@ const transactionSchema = z.object({
   categoryId: z.string().optional(),
   merchant: z.string().trim().max(120).optional(),
   description: z.string().trim().max(300).optional(),
+  clientKey: z.string().uuid().optional(),
 });
 
 export async function createTransactionAction(prev: ActionState | undefined, form: FormData): Promise<ActionState> {
@@ -187,18 +180,21 @@ export async function createTransactionAction(prev: ActionState | undefined, for
 }
 
 async function createTransactionActionImpl(_: ActionState | undefined, form: FormData): Promise<ActionState> {
-  const { supabase, space, profile } = await requireSpace();
+  const { supabase, space, profile, role } = await requireSpace();
+  if (!atLeast(role, "editor")) return { error: "You have view-only access to this space." };
   const parsed = transactionSchema.safeParse(Object.fromEntries(form));
-  if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error) };
-  const v = parsed.data;
-
-  let amount: number;
+  // Check the amount in the same pass, so the person sees every problem at once.
+  let amount = 0;
+  let amountError: string | undefined;
   try {
-    amount = parseAmount(v.amount, space.currency);
+    amount = parseAmount(String(form.get("amount") ?? ""), space.currency);
+    if (amount <= 0) amountError = "Enter an amount greater than zero.";
   } catch (e) {
-    return { fieldErrors: { amount: e instanceof MoneyError ? e.message : "Enter an amount like 250.00." } };
+    amountError = e instanceof MoneyError ? e.message : "Enter an amount like 250.00.";
   }
-  if (amount <= 0) return { fieldErrors: { amount: "Enter an amount greater than zero." } };
+  if (!parsed.success) return { fieldErrors: { ...(amountError ? { amount: amountError } : {}), ...fieldErrors(parsed.error), ...(amountError ? { amount: amountError } : {}) } };
+  if (amountError) return { fieldErrors: { amount: amountError } };
+  const v = parsed.data;
 
   const [y, m, d] = v.date.split("-").map(Number);
   // Midday in the user's timezone: the transaction stays on the chosen calendar
@@ -235,8 +231,10 @@ async function createTransactionActionImpl(_: ActionState | undefined, form: For
     accountIds,
     merchant: v.merchant || null,
     description: v.description || null,
+    clientKey: v.clientKey,
   });
   if (res.error) return { error: res.error };
+  // res.duplicate means this exact submission was already saved: treat the repeat as success.
   revalidatePath("/app", "layout");
   redirect("/app/transactions?added=1");
 }

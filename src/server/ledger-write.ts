@@ -21,8 +21,10 @@ export async function persistPosting(
     description?: string | null;
     notes?: string | null;
     refundOf?: string;
+    /** Idempotency key: the same key can post only once per space, so a double submit cannot double-record. */
+    clientKey?: string;
   },
-): Promise<{ id?: string; error?: string }> {
+): Promise<{ id?: string; error?: string; duplicate?: boolean }> {
   const { posting } = args;
   assertBalanced(posting);
   const amount = Math.max(...posting.entries.map((e) => Math.abs(e.amount)));
@@ -39,9 +41,14 @@ export async function persistPosting(
     p_merchant: args.merchant ?? null,
     p_description: args.description ?? null,
     p_notes: args.notes ?? null,
+    p_external_id: args.clientKey ? `ui:${args.clientKey}` : null,
     p_refund_of: args.refundOf ?? null,
   });
-  if (error) return { error: friendlyDbError(error.message) };
+  if (error) {
+    // The key was already used: the first submission saved this transaction, so this one is a harmless repeat.
+    if (args.clientKey && /duplicate key/i.test(error.message)) return { duplicate: true };
+    return { error: friendlyDbError(error.message) };
+  }
   return { id: data as string };
 }
 
@@ -50,6 +57,8 @@ export function friendlyDbError(message: string): string {
   if (message.includes("does not balance")) return "The entries do not balance. Nothing was saved.";
   if (message.includes("row-level security") || message.includes("permission denied"))
     return "You do not have permission to change this space.";
+  if (message.includes("Reverse the refund")) return "This expense has a refund. Reverse the refund first, then reverse the expense.";
+  if (message.includes("Entries can only be added")) return "That transaction can no longer be changed. Reverse it instead.";
   if (message.includes("already reversed")) return "This transaction was already reversed.";
   if (message.includes("duplicate key")) return "That record already exists.";
   return "Something went wrong and nothing was saved. Try again.";

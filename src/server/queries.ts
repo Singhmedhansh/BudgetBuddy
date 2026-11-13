@@ -45,40 +45,76 @@ export interface TxnListItem extends TransactionRow {
   expenseAmount: number;
 }
 
-export async function listTransactions(ctx: Ctx, opts: { type?: string; accountId?: string; category?: string; q?: string; limit?: number; from?: Date; to?: Date } = {}): Promise<TxnListItem[]> {
-  let q = ctx.supabase
-    .from("transactions")
-    .select("*, ledger_entries(account_id, category_id, amount)")
-    .eq("space_id", ctx.space.id)
-    .order("occurred_at", { ascending: false })
-    .limit(opts.limit ?? 100);
-  if (opts.type) q = q.eq("type", opts.type);
-  if (opts.from) q = q.gte("occurred_at", opts.from.toISOString());
-  if (opts.to) q = q.lt("occurred_at", opts.to.toISOString());
-  if (opts.q) q = q.or(`merchant.ilike.%${opts.q.replace(/[%,()]/g, " ")}%,description.ilike.%${opts.q.replace(/[%,()]/g, " ")}%`);
-  const { data } = await q;
-  const rows = (data ?? []) as (TransactionRow & { ledger_entries: { account_id: string | null; category_id: string | null; amount: number }[] })[];
+export type TxnSort = "date_desc" | "date_asc" | "amount_desc" | "amount_asc";
+export const TXN_PAGE_SIZE = 25;
+interface TxnQuery { type?: string; accountId?: string; category?: string; q?: string; from?: Date; to?: Date; sort?: TxnSort; page?: number; pageSize?: number }
 
+/**
+ * One page of transactions plus the total that match. Account and category
+ * filters are applied in the database (not after a row limit), so a filter never
+ * silently hides matches that fall outside the first page.
+ */
+export async function pageTransactions(ctx: Ctx, opts: TxnQuery = {}): Promise<{ rows: TxnListItem[]; total: number }> {
+  const pageSize = opts.pageSize ?? TXN_PAGE_SIZE;
+  const page = Math.max(1, opts.page ?? 1);
   const [accounts, categories, reversals] = await Promise.all([
     listAccounts(ctx, true),
     ctx.supabase.from("categories").select("id,name,kind").eq("space_id", ctx.space.id),
     ctx.supabase.from("transactions").select("reversal_of").eq("space_id", ctx.space.id).not("reversal_of", "is", null),
   ]);
+  const matchingCats = opts.category ? (categories.data ?? []).filter((c) => nameMatches(c.name as string, opts.category!)).map((c) => c.id as string) : null;
+  if (matchingCats && matchingCats.length === 0) return { rows: [], total: 0 };
+
+  let sel = "*, ledger_entries(account_id, category_id, amount)";
+  if (opts.accountId) sel += ", fa:ledger_entries!inner(account_id)";
+  if (matchingCats) sel += ", fc:ledger_entries!inner(category_id)";
+  let q = ctx.supabase.from("transactions").select(sel, { count: "exact" }).eq("space_id", ctx.space.id);
+  if (opts.accountId) q = q.eq("fa.account_id", opts.accountId);
+  if (matchingCats) q = q.in("fc.category_id", matchingCats);
+  if (opts.type) q = q.eq("type", opts.type);
+  if (opts.from) q = q.gte("occurred_at", opts.from.toISOString());
+  if (opts.to) q = q.lt("occurred_at", opts.to.toISOString());
+  if (opts.q) {
+    const t = opts.q.replace(/[%,()]/g, " ");
+    q = q.or(`merchant.ilike.%${t}%,description.ilike.%${t}%`);
+  }
+  const sort = opts.sort ?? "date_desc";
+  q = sort.startsWith("amount") ? q.order("amount", { ascending: sort === "amount_asc" }).order("occurred_at", { ascending: false }) : q.order("occurred_at", { ascending: sort === "date_asc" });
+  q = q.order("id", { ascending: true }).range((page - 1) * pageSize, page * pageSize - 1);
+  const { data, count } = await q;
+  // A page past the end makes PostgREST error without a count; ask page 1 for the total so callers can redirect.
+  if (!data?.length && page > 1) return { rows: [], total: (await pageTransactions(ctx, { ...opts, page: 1, pageSize: 1 })).total };
+  const rows = (data ?? []) as unknown as (TransactionRow & { ledger_entries: { account_id: string | null; category_id: string | null; amount: number }[] })[];
+
   const accountName = new Map(accounts.map((a) => [a.id, a.name]));
   const categoryName = new Map((categories.data ?? []).map((c) => [c.id as string, c.name as string]));
   const expenseCats = new Set((categories.data ?? []).filter((c) => c.kind === "expense").map((c) => c.id as string));
   const reversedIds = new Set((reversals.data ?? []).map((r) => r.reversal_of as string));
 
-  return rows
-    .filter((r) => !opts.accountId || r.ledger_entries.some((e) => e.account_id === opts.accountId))
-    .map((r) => ({
+  return {
+    total: count ?? rows.length,
+    rows: rows.map((r) => ({
       ...r,
       categoryName: r.ledger_entries.map((e) => (e.category_id ? categoryName.get(e.category_id) : undefined)).find(Boolean) ?? null,
       accountNames: r.ledger_entries.map((e) => (e.account_id ? accountName.get(e.account_id) : undefined)).filter((n): n is string => !!n),
       reversed: reversedIds.has(r.id),
       expenseAmount: r.ledger_entries.filter((e) => e.category_id && expenseCats.has(e.category_id)).reduce((s, e) => s + Number(e.amount), 0),
-    }))
-    .filter((r) => !opts.category || (r.categoryName !== null && nameMatches(r.categoryName, opts.category)));
+    })),
+  };
+}
+
+/** The most recent transactions matching the filters, without paging (used by summaries and exports). */
+export async function listTransactions(ctx: Ctx, opts: { type?: string; accountId?: string; category?: string; q?: string; limit?: number; from?: Date; to?: Date } = {}): Promise<TxnListItem[]> {
+  const { limit, ...rest } = opts;
+  const size = Math.min(limit ?? 100, 1000);
+  const out: TxnListItem[] = [];
+  // PostgREST caps a response at 1000 rows; page until the requested limit is met.
+  for (let page = 1; out.length < (limit ?? 100); page++) {
+    const { rows } = await pageTransactions(ctx, { ...rest, page, pageSize: size });
+    out.push(...rows);
+    if (rows.length < size) break;
+  }
+  return out.slice(0, limit ?? 100);
 }
 
 /** Postings reconstructed from stored entries, for period totals via the domain layer. */
