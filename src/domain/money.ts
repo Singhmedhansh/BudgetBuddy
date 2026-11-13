@@ -97,7 +97,7 @@ export function allocate(total: number, weights: number[]): number[] {
   const w = weights.map(BigInt);
   const weightSum = w.reduce((a, b) => a + b, 0n);
   const shares = w.map((x) => (abs * x) / weightSum);
-  const rems = w.map((x, i) => (abs * x) % weightSum);
+  const rems = w.map((x) => (abs * x) % weightSum);
   let leftover = abs - shares.reduce((a, b) => a + b, 0n);
   const order = rems
     .map((r, i) => ({ i, r }))
