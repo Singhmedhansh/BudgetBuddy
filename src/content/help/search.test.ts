@@ -42,7 +42,7 @@ describe("help content integrity", () => {
   it("every internal link in article text and every destination is an existing route", () => {
     const known = new Set([
       "/app", "/app/transactions", "/app/transactions/new", "/app/accounts", "/app/accounts/new", "/app/budgets", "/app/budgets/new",
-      "/app/goals", "/app/goals/new", "/app/bills", "/app/bills/new", "/app/subscriptions", "/app/subscriptions/new", "/app/income", "/app/income/new", "/app/calendar", "/app/debt", "/app/import", "/app/analytics",
+      "/app/goals", "/app/goals/new", "/app/bills", "/app/bills/new", "/app/subscriptions", "/app/subscriptions/new", "/app/income", "/app/income/new", "/app/calendar", "/app/debt", "/app/import", "/app/analytics", "/app/forecast",
       "/contact", "/security", "/forgot-password", "/help",
     ]);
     const check = (href: string, where: string) => expect(known.has(href.split("?")[0]), `${where}: ${href}`).toBe(true);

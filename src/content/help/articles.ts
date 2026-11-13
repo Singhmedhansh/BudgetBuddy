@@ -269,6 +269,21 @@ export const ARTICLES: Article[] = [
     ],
   },
   {
+    slug: "forecast-explained",
+    title: "How the forecast works",
+    category: "numbers",
+    summary: "An estimate of your cash balance over the next 30 to 90 days, and what it assumes.",
+    keywords: ["forecast", "projection", "predict", "future", "will i run out", "end of month", "cash flow", "what if", "scenario", "estimate", "afford"],
+    destination: { label: "Open the forecast", href: "/app/forecast" },
+    related: ["how-totals-work", "bills-and-subscriptions"],
+    body: [
+      { t: "p", text: "The [forecast](/app/forecast) starts from the cash you have today and moves forward day by day. It is an estimate, not a promise, and it changes when your records change." },
+      { t: "list", items: ["Actual: your cash today, from your savings, current, cash and wallet accounts.", "Scheduled: bills, subscriptions, expected income and debt minimums on their dates. Unpaid items past their date are assumed to happen tomorrow.", "Forecast: everyday spending continues at your recent daily average, with recurring bills taken out so they are not counted twice.", "Confidence is low when there is under two weeks of history and higher with two months or more."] },
+      { t: "p", text: "Use What if to see the effect of spending a percentage less or more, or of a one-off amount on a date. Clear returns to your records as they are." },
+      { t: "note", text: "The forecast does not know about irregular spending, price changes, or income that arrives late or not at all." },
+    ],
+  },
+  {
     slug: "how-totals-work",
     title: "How the dashboard figures are worked out",
     category: "numbers",
@@ -354,5 +369,6 @@ export const DESTINATIONS: Destination[] = [
   { label: "Loans and debt", href: "/app/debt", description: "Interest rates, minimum payments and the payoff planner.", keywords: ["debt", "loan", "loans", "interest", "payoff", "emi"] },
   { label: "Import and export", href: "/app/import", description: "Import a CSV statement, or download your data.", keywords: ["import", "export", "csv", "statement", "upload", "download", "backup"] },
   { label: "Analytics", href: "/app/analytics", description: "Income, spending, categories and trends.", keywords: ["analytics", "report", "reports", "chart", "trend", "breakdown", "insights"] },
+  { label: "Forecast", href: "/app/forecast", description: "Estimated cash balance for the next 30 to 90 days, with what-if scenarios.", keywords: ["forecast", "projection", "future", "predict", "scenario", "what if", "run out"] },
   { label: "Contact support", href: "/contact", description: "Send us a message and get a reference number.", keywords: ["contact", "support", "help me", "report"] },
 ];

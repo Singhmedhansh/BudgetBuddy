@@ -55,7 +55,7 @@ describe("route integrity", () => {
 
   it("every help article slug has a page and contextual help links point at real articles", () => {
     for (const a of ARTICLES) expect(exists(`/help/${a.slug}`)).toBe(true);
-    for (const f of ["src/app/app/page.tsx", "src/app/app/budgets/page.tsx", "src/app/app/accounts/page.tsx", "src/app/app/transactions/page.tsx", "src/app/app/goals/page.tsx", "src/app/app/calendar/page.tsx", "src/app/app/debt/page.tsx", "src/app/app/analytics/page.tsx", "src/app/app/import/page.tsx", "src/components/app/RecurringList.tsx"]) {
+    for (const f of ["src/app/app/page.tsx", "src/app/app/budgets/page.tsx", "src/app/app/accounts/page.tsx", "src/app/app/transactions/page.tsx", "src/app/app/goals/page.tsx", "src/app/app/calendar/page.tsx", "src/app/app/debt/page.tsx", "src/app/app/analytics/page.tsx", "src/app/app/forecast/page.tsx", "src/app/app/import/page.tsx", "src/components/app/RecurringList.tsx"]) {
       const src = readFileSync(join(process.cwd(), f), "utf8");
       for (const m of src.matchAll(/help=\{\{ slug: "([^"]+)"/g)) expect(ARTICLES.some((a) => a.slug === m[1]), `${f} -> ${m[1]}`).toBe(true);
     }

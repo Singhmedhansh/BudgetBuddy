@@ -8,6 +8,7 @@ import {
   Repeat,
   ArrowUpDown,
   ChartColumn,
+  LineChart,
   Target,
   TrendingUp,
   Wallet,
@@ -45,6 +46,9 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   },
   {
     title: "Understand",
-    items: [{ href: "/app/analytics", label: "Analytics", Icon: ChartColumn }],
+    items: [
+      { href: "/app/analytics", label: "Analytics", Icon: ChartColumn },
+      { href: "/app/forecast", label: "Forecast", Icon: LineChart },
+    ],
   },
 ];
