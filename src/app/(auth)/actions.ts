@@ -3,6 +3,7 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { maskPhone, normalizePhone } from "@/lib/auth/phone";
 import { isRecoveryTokenValid, RECOVERY_COOKIE } from "@/lib/auth/recovery-guard";
 import { safeNext } from "@/lib/auth/safe-redirect";
 import { passwordProblems } from "@/lib/password";
@@ -56,7 +57,7 @@ function authMessage(code: string | undefined, status: number | undefined): stri
   return "Something went wrong. Check your connection and try again.";
 }
 
-async function finishSignIn(provider: "email" | "google" | "github") {
+async function finishSignIn(provider: string) {
   const supabase = (await createClient())!;
   await supabase.rpc("ensure_profile");
   // A per-browser hint only: it stores the provider name, never an email.
@@ -189,4 +190,54 @@ export async function signOut() {
   const supabase = await createClient();
   await supabase?.auth.signOut({ scope: "local" });
   redirect("/");
+}
+
+export interface PhoneState {
+  error?: string;
+  notice?: string;
+  step?: "number" | "code";
+  /** The normalised number, echoed so the code step knows which number it is verifying. */
+  phone?: string;
+}
+
+const PHONE_HELP = "Enter a mobile number with its country code, like +91 98765 43210.";
+
+/**
+ * Step one of phone sign-in: text a six-digit code. On the sign-in page a number with no account gets no code, and the
+ * answer is worded the same either way, so the page never reveals which numbers have accounts.
+ */
+export async function requestPhoneCode(_: PhoneState | undefined, form: FormData): Promise<PhoneState> {
+  const supabase = await createClient();
+  if (!supabase) return { error: NOT_CONFIGURED.error, step: "number" };
+  const phone = normalizePhone(String(form.get("phone") ?? ""));
+  if (!phone) return { error: PHONE_HELP, step: "number" };
+  const signup = form.get("mode") === "signup";
+  const { error } = await supabase.auth.signInWithOtp({ phone, options: { shouldCreateUser: signup } });
+  if (error) {
+    if (error.code === "over_sms_send_rate_limit" || error.code === "over_request_rate_limit" || error.status === 429) {
+      return { error: "Too many attempts. Wait a few minutes before asking for another code.", step: "number", phone };
+    }
+    if (error.code === "sms_send_failed" || error.code === "phone_provider_disabled" || error.code === "provider_disabled" || /sms|provider/i.test(error.message)) {
+      return { error: "Phone sign-in is not available right now. Use another way to sign in.", step: "number", phone };
+    }
+    // Anything else (such as "no account for this number") gets the same answer as success.
+  }
+  return { step: "code", phone, notice: `If ${maskPhone(phone)} can sign in, we sent it a 6-digit code. It expires in a few minutes.` };
+}
+
+/** Step two: check the code, then finish exactly like every other sign-in. */
+export async function verifyPhoneCode(_: PhoneState | undefined, form: FormData): Promise<PhoneState> {
+  const supabase = await createClient();
+  if (!supabase) return { error: NOT_CONFIGURED.error, step: "number" };
+  const phone = normalizePhone(String(form.get("phone") ?? ""));
+  if (!phone) return { error: PHONE_HELP, step: "number" };
+  const token = String(form.get("token") ?? "").replace(/\s/g, "");
+  if (!/^\d{6}$/.test(token)) return { error: "Enter the 6-digit code from the text message.", step: "code", phone };
+  const { error } = await supabase.auth.verifyOtp({ phone, token, type: "sms" });
+  if (error) {
+    if (error.status === 429) return { error: "Too many attempts. Wait a few minutes before trying again.", step: "code", phone };
+    return { error: "That code is wrong or has expired. Check it, or ask for a new one.", step: "code", phone };
+  }
+  await finishSignIn("phone");
+  redirect(safeNext(String(form.get("next") ?? ""), form.get("mode") === "signup" ? "/app/onboarding" : "/app"));
 }

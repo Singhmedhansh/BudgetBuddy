@@ -11,6 +11,13 @@ test.beforeAll(async () => {
   const { error } = await sb.from("profiles").select("country,date_format,notification_prefs").limit(1);
   migrated = !error;
 });
+/** Switch a toggle the way a person does, by its label (the checkbox itself is visually hidden), then check the result. */
+async function toggle(page: import("@playwright/test").Page, name: string | RegExp, on: boolean) {
+  const box = page.getByLabel(name);
+  if ((await box.isChecked()) !== on) await page.locator("label").filter({ hasText: name }).first().click();
+  if (on) await expect(box).toBeChecked();
+  else await expect(box).not.toBeChecked();
+}
 const needMigration = () => test.skip(!migrated, "migration 9 is not applied to this project yet");
 
 const SETTINGS_PAGES = ["/app/settings", "/app/settings/preferences", "/app/settings/security", "/app/settings/notifications", "/app/settings/connected", "/app/settings/privacy"];
@@ -228,6 +235,9 @@ test.describe("profile completion and preferences (needs migration 9)", () => {
 
   test("a partial save keeps the profile Pending and the dashboard shows the banner with what is missing", async ({ page }) => {
     needMigration();
+    // Start from a known state: an earlier run may have left this profile complete.
+    const sb = await api();
+    await sb.from("profiles").update({ country: null, persona: null, date_format: null, phone: null, profile_completed_at: null, banner_dismissed_until: null }).not("user_id", "is", null);
     await open(page, "/app/settings");
     await page.getByLabel("Full name").fill("E2E Person");
     await choose(page, "Country", "IN");
@@ -295,13 +305,13 @@ test.describe("profile completion and preferences (needs migration 9)", () => {
   test("dashboard sections can be turned off and on from Preferences", async ({ page }) => {
     needMigration();
     await open(page, "/app/settings/preferences");
-    await page.getByLabel("Recent transactions").uncheck();
+    await toggle(page, "Recent transactions", false);
     await page.getByRole("button", { name: "Save preferences" }).click();
     await expect(page.getByText(/Preferences saved/)).toBeVisible();
     await open(page, "/app");
     await expect(page.getByRole("region", { name: "Recent transactions" })).toHaveCount(0);
     await open(page, "/app/settings/preferences");
-    await page.getByLabel("Recent transactions").check();
+    await toggle(page, "Recent transactions", true);
     await page.getByRole("button", { name: "Save preferences" }).click();
     await expect(page.getByText(/Preferences saved/)).toBeVisible();
   });
@@ -322,12 +332,12 @@ test.describe("profile completion and preferences (needs migration 9)", () => {
   test("notification choices persist", async ({ page }) => {
     needMigration();
     await open(page, "/app/settings/notifications");
-    await page.getByLabel(/Product announcements/).check();
+    await toggle(page, /Product announcements/, true);
     await page.getByRole("button", { name: "Save choices" }).click();
     await expect(page.getByText("Notification choices saved.")).toBeVisible();
     await page.reload();
     await expect(page.getByLabel(/Product announcements/)).toBeChecked();
-    await page.getByLabel(/Product announcements/).uncheck();
+    await toggle(page, /Product announcements/, false);
     await page.getByRole("button", { name: "Save choices" }).click();
   });
 });
@@ -362,6 +372,7 @@ test.describe("profile photo upload (needs migration 9)", () => {
   test("a photo uploads, shows for its owner, a wrong type is refused, and removing it leaves nothing behind", async ({ page }) => {
     needMigration();
     await page.goto("/app/settings");
+    await page.waitForLoadState("networkidle"); // the file input needs its handler attached before a file is set
 
     // wrong type is refused before anything is sent
     await page.getByLabel("Profile photo file").setInputFiles({ name: "x.gif", mimeType: "image/gif", buffer: Buffer.from("GIF89a") });

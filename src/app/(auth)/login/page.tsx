@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { Suspense } from "react";
 import { AuthShell, FormSkeleton } from "@/components/auth/AuthShell";
-import { LoginForm, MagicLinkForm, SocialButtons } from "@/components/auth/forms";
+import { AuthDivider, LoginForm, MagicLinkForm, PhoneSignIn, SocialButtons } from "@/components/auth/forms";
 import { isOAuthReason, oauthMessage } from "@/lib/auth/oauth-errors";
 import { getEnabledProviders } from "@/lib/auth/providers";
 import { safeNext } from "@/lib/auth/safe-redirect";
@@ -35,7 +35,7 @@ async function LoginContent({ searchParams }: { searchParams: Promise<Record<str
   const sp = await searchParams;
   const next = safeNext(sp.next, "");
   const lastProvider = (await cookies()).get("bb-last-provider")?.value;
-  const { social } = await getEnabledProviders();
+  const { social, phone } = await getEnabledProviders();
   const failure = isOAuthReason(sp.error) ? oauthMessage(sp.error, sp.provider) : sp.error === "oauth" ? oauthMessage("failed", "google") : "";
   const notice =
     sp.reset === "1"
@@ -52,10 +52,13 @@ async function LoginContent({ searchParams }: { searchParams: Promise<Record<str
           {failure}
         </p>
       ) : null}
-      {social.length > 0 ? (
+      {social.length > 0 || phone ? (
         <>
-          <SocialButtons providers={social} next={next || undefined} lastUsed={lastProvider} />
-          <p className="text-center text-xs text-muted">or use your email</p>
+          <div className="space-y-3">
+            <SocialButtons providers={social} next={next || undefined} lastUsed={lastProvider} />
+            {phone ? <PhoneSignIn mode="login" next={next || undefined} /> : null}
+          </div>
+          <AuthDivider>or use your email</AuthDivider>
         </>
       ) : null}
       <LoginForm next={next || undefined} notice={notice} />

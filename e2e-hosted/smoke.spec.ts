@@ -132,6 +132,7 @@ test.describe.serial("hosted preview", () => {
   test("a profile photo uploads, shows, and is removed again", async ({ page }) => {
     await login(page);
     await page.goto("/app/settings");
+    await page.waitForLoadState("networkidle");
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
     await page.getByLabel("Profile photo file").setInputFiles({ name: "p.png", mimeType: "image/png", buffer: png });
     await expect(page.getByRole("status").filter({ hasText: "Photo updated." })).toBeVisible();
