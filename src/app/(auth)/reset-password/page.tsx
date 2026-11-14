@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { privatePageMetadata } from "@/config/seo";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -7,7 +8,7 @@ import { ResetPasswordForm } from "@/components/auth/forms";
 import { isRecoveryTokenValidNow, RECOVERY_COOKIE } from "@/lib/auth/recovery-guard";
 import { createClient } from "@/lib/supabase/server";
 
-export const metadata: Metadata = { title: "Choose a new password" };
+export const metadata: Metadata = privatePageMetadata("Choose a new password");
 
 export default function ResetPasswordPage() {
   return (

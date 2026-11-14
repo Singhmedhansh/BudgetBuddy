@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { privatePageMetadata } from "@/config/seo";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -8,7 +9,7 @@ import { isOAuthReason, oauthMessage } from "@/lib/auth/oauth-errors";
 import { getEnabledProviders } from "@/lib/auth/providers";
 import { safeNext } from "@/lib/auth/safe-redirect";
 
-export const metadata: Metadata = { title: "Log in" };
+export const metadata: Metadata = privatePageMetadata("Log in");
 
 export default function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   return (

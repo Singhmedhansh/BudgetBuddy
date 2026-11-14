@@ -42,5 +42,11 @@ renaming them needs migrations or signs people out, and nothing a customer sees 
 
 ## Domain
 
-No domain is chosen. Nothing in the code or in Supabase assumes one. When it is decided: set `NEXT_PUBLIC_SITE_URL`, add
-the domain to the Supabase redirect allow-list, and register it in the Google and GitHub OAuth apps.
+The official domain is `https://getfintrack.online`. Vercel project `fintrack` has the apex and `www` domains attached
+to the `feat/budget-buddy-v1` Preview branch. Production remains unconfigured and is not assigned either domain.
+
+The site metadata uses the official origin for Production and for that branch's Preview deployment. Authentication
+email callbacks use the explicit `NEXT_PUBLIC_SITE_URL` when configured and otherwise use the request's host. Before
+enabling authentication on the custom domain, add `https://getfintrack.online/**` to the Supabase Auth redirect
+allow-list; this project setting has not been changed. The `www` host redirects to the apex in the app once the branch
+is redeployed with the current source changes.

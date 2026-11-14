@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Plus } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -14,6 +15,10 @@ import { setFormatPrefs } from "@/lib/format-prefs";
 import { avatarUrl } from "@/server/account";
 import { isSampleSpace } from "@/server/sample-data";
 import { getContext } from "@/server/context";
+import { privatePageMetadata } from "@/config/seo";
+
+/** The whole signed-in app is private: never indexed, whatever a page inside sets for its title. */
+export const metadata: Metadata = { robots: privatePageMetadata("").robots };
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (

@@ -1,7 +1,10 @@
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { canonicalHostRedirect } from "@/config/canonical-host";
 import { updateSession } from "@/lib/supabase/session";
 
 export function proxy(request: NextRequest) {
+  const canonical = canonicalHostRedirect(request.nextUrl);
+  if (canonical) return NextResponse.redirect(canonical, 308);
   return updateSession(request);
 }
 

@@ -80,7 +80,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
   {
     slug: "terms",
     title: "Terms and Conditions",
-    summary: "The rules for using FinTrack.",
+    summary: "The terms that apply when you create a FinTrack account and use its tracking, budgeting and planning tools.",
     sections: [
       {
         heading: "Using FinTrack",
@@ -171,7 +171,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
   {
     slug: "billing",
     title: "Pricing and Billing",
-    summary: "Plans and how billing will work.",
+    summary: "The FinTrack Free and FinTrack One plans, their prices, and how billing will work once paid plans are available.",
     sections: [
       {
         heading: "Plans",
@@ -200,7 +200,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
   {
     slug: "disclaimer",
     title: "Financial Disclaimer",
-    summary: "What FinTrack is, and what it is not.",
+    summary: "What FinTrack is and is not: a tool for tracking and planning, not financial, tax or investment advice.",
     sections: [
       {
         heading: "Not financial advice",

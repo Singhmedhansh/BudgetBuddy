@@ -32,7 +32,7 @@ test.describe.serial("hosted preview", () => {
   test("landing page: branding, pricing, no old name, clean console", async ({ page }) => {
     const problems = watch(page);
     await page.goto("/");
-    await expect(page).toHaveTitle(/FinTrack: Your finances\. In focus\./);
+    await expect(page).toHaveTitle(/FinTrack — Your Finances\. In Focus\./);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your finances. In focus.");
     const pricing = page.locator("#pricing");
     await expect(pricing).toContainText("FinTrack Free");

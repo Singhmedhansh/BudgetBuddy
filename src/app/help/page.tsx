@@ -1,15 +1,12 @@
 import type { Metadata } from "next";
+import { staticPageMetadata } from "@/config/seo";
 import Link from "next/link";
 import { Suspense } from "react";
 import { PublicPage } from "@/components/landing/PublicPage";
 import { ARTICLES, CATEGORIES } from "@/content/help/articles";
 import { searchHelp } from "@/content/help/search";
 
-export const metadata: Metadata = {
-  title: "Help Centre",
-  description: "Guides for accounts, transactions, budgets and your account, with search.",
-  alternates: { canonical: "/help" },
-};
+export const metadata: Metadata = staticPageMetadata("help");
 
 export default function HelpPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   return (

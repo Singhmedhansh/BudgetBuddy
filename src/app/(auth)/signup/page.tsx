@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import { privatePageMetadata } from "@/config/seo";
 import Link from "next/link";
 import { Suspense } from "react";
 import { AuthShell, FormSkeleton } from "@/components/auth/AuthShell";
 import { SignupForm, SocialButtons } from "@/components/auth/forms";
 import { getEnabledProviders } from "@/lib/auth/providers";
 
-export const metadata: Metadata = { title: "Create your account" };
+export const metadata: Metadata = privatePageMetadata("Create your account");
 
 export default function SignupPage() {
   return (

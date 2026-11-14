@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { ArrowRight, CalendarClock, FileUp, LineChart, LockKeyhole, PiggyBank, ReceiptText, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import { HeroVisual } from "@/components/demo/HeroVisual";
@@ -6,7 +7,10 @@ import { LedgerPreview } from "@/components/landing/LedgerPreview";
 import { SiteFooter, SiteHeader } from "@/components/landing/SiteChrome";
 import { BackToTop } from "@/components/motion/BackToTop";
 import { Reveal } from "@/components/motion/Reveal";
+import { JsonLd } from "@/components/seo/JsonLd";
 import { BRAND } from "@/config/brand";
+import { staticPageMetadata } from "@/config/seo";
+import { homeStructuredData } from "@/config/structured-data";
 import { PLANS, priceFor, type Plan } from "@/config/plans";
 import { formatMoney } from "@/domain/money";
 
@@ -50,9 +54,12 @@ const SECURITY = [
 const rupees = (minor: number) => formatMoney(minor, "INR", "en-IN").replace(/\.00$/, "");
 const h2 = "font-display text-3xl leading-[1.1] sm:text-4xl";
 
+export const metadata: Metadata = staticPageMetadata("home");
+
 export default function Home() {
   return (
     <>
+      <JsonLd data={homeStructuredData()} />
       <SiteHeader />
       <main id="main" className="flex-1">
         {/* Hero */}

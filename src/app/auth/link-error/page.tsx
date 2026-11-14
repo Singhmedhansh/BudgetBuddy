@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { privatePageMetadata } from "@/config/seo";
 import Link from "next/link";
 import { Suspense } from "react";
 import { AuthShell } from "@/components/auth/AuthShell";
 
-export const metadata: Metadata = { title: "Link expired" };
+export const metadata: Metadata = privatePageMetadata("Link expired");
 
 export default function LinkErrorPage({ searchParams }: { searchParams: Promise<{ kind?: string }> }) {
   return (

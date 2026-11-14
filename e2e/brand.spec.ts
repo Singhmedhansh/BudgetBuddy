@@ -7,7 +7,7 @@ const PUBLIC = ["/", "/login", "/signup", "/forgot-password", "/help", "/contact
 test.describe("FinTrack brand", () => {
   test("home page carries the name, tagline and plan pricing", async ({ page }) => {
     await page.goto("/");
-    await expect(page).toHaveTitle(/FinTrack: Your finances\. In focus\./);
+    await expect(page).toHaveTitle(/FinTrack — Your Finances\. In Focus\./);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your finances. In focus.");
     const pricing = page.locator("#pricing");
     await expect(pricing.getByRole("heading", { name: "FinTrack Free" })).toBeVisible();

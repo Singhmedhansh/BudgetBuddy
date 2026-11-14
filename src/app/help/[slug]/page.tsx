@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageMetadata } from "@/config/seo";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArticleBody } from "@/components/help/RichText";
@@ -13,7 +14,7 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const a = bySlug((await params).slug);
   if (!a) return {};
-  return { title: a.title, description: a.summary, alternates: { canonical: `/help/${a.slug}` } };
+  return pageMetadata({ title: a.title, description: a.summary, path: `/help/${a.slug}`, type: "article" });
 }
 
 export default async function ArticlePage({ params }: { params: Promise<{ slug: string }> }) {

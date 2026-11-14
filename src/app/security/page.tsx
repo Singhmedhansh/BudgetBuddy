@@ -1,14 +1,11 @@
 import type { Metadata } from "next";
+import { staticPageMetadata } from "@/config/seo";
 import Link from "next/link";
 import { ArticleBody } from "@/components/help/RichText";
 import { PublicPage } from "@/components/landing/PublicPage";
 import type { Block } from "@/content/help/articles";
 
-export const metadata: Metadata = {
-  title: "Security and privacy",
-  description: "How FinTrack protects your data and what it cannot do.",
-  alternates: { canonical: "/security" },
-};
+export const metadata: Metadata = staticPageMetadata("security");
 
 const SECTIONS: { heading: string; blocks: Block[] }[] = [
   {

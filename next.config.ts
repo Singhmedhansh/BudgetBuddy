@@ -15,6 +15,8 @@ const nextConfig: NextConfig = {
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
         ],
       },
+      // Private areas and non-page endpoints are never indexed, whatever a page inside sets.
+      ...["/app/:path*", "/api/:path*", "/auth/:path*"].map((source) => ({ source, headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] })),
     ];
   },
   partialPrefetching: true,

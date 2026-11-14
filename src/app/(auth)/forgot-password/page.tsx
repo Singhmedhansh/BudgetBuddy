@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { privatePageMetadata } from "@/config/seo";
 import Link from "next/link";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { ForgotPasswordForm } from "@/components/auth/forms";
 
-export const metadata: Metadata = { title: "Reset your password" };
+export const metadata: Metadata = privatePageMetadata("Reset your password");
 
 export default function ForgotPasswordPage() {
   return (

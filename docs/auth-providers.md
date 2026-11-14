@@ -15,13 +15,15 @@ at the end before switching anything on.
 | What | Value |
 | --- | --- |
 | Supabase OAuth callback (give this to Google and GitHub) | `https://glgpgmptugomfxoteyys.supabase.co/auth/v1/callback` |
-| App callback (already built, used after Supabase finishes) | `http://localhost:3100/auth/callback` |
+| Local app callback | `http://localhost:3100/auth/callback` |
+| Official app callback | `https://getfintrack.online/auth/callback` |
 | Redirect allow-list entry for local development | `http://localhost:3100/**` |
-| Redirect allow-list entry for production | add your real domain, for example `https://yourdomain.com/**`, only once it exists |
+| Redirect allow-list entry for the official domain | `https://getfintrack.online/**` (not yet added) |
 
 Set the allow-list in **Supabase Dashboard → Authentication → URL Configuration → Redirect URLs**. Without the local
 entry, Supabase refuses to send the browser back to the app after sign-in, and magic links and email-change links
-fail. Do not add a production URL until the domain is real.
+fail. The official domain now exists, but its redirect entry has not been added because Supabase settings were not
+authorized to change as part of domain setup.
 
 `NEXT_PUBLIC_SITE_URL` (in `.env.local`) should match the origin the app is served from. It is used for the links in
 emails.
@@ -39,7 +41,7 @@ emails.
 ## 3. GitHub
 
 1. GitHub → **Settings → Developer settings → OAuth Apps → New OAuth App**.
-2. Homepage URL: `http://localhost:3100` for now. Authorization callback URL:
+2. Homepage URL: `https://getfintrack.online`. Authorization callback URL:
    `https://glgpgmptugomfxoteyys.supabase.co/auth/v1/callback`.
 3. Create it, then **Generate a new client secret**. Copy the Client ID and the secret.
 4. In Supabase: **Authentication → Sign In / Providers → GitHub**. Turn it on and paste the two values. Save.

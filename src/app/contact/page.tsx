@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { staticPageMetadata } from "@/config/seo";
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
@@ -6,11 +7,7 @@ import { ContactForm } from "@/components/help/ContactForm";
 import { PublicPage } from "@/components/landing/PublicPage";
 import { createClient } from "@/lib/supabase/server";
 
-export const metadata: Metadata = {
-  title: "Contact us",
-  description: "Send FinTrack support a message and get a reference number.",
-  alternates: { canonical: "/contact" },
-};
+export const metadata: Metadata = staticPageMetadata("contact");
 
 type SP = Promise<{ topic?: string; subject?: string }>;
 
