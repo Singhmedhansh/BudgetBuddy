@@ -104,7 +104,8 @@ export function AvatarUploader({ userId, name, url }: { userId: string; name: st
     const { error } = await supabase.storage.from("budgetbuddy-avatars").upload(path, file, { contentType: file.type, upsert: false });
     if (error) {
       setBusy(false);
-      return setMsg({ error: "The upload failed. Check your connection and try again." });
+      const missing = /bucket not found|not found/i.test(error.message);
+      return setMsg({ error: missing ? "Photo storage has not been set up on this server yet, so the photo could not be saved. The database update that adds it still needs to be applied." : "The upload failed. Check your connection and try again." });
     }
     const res = await saveAvatarAction(path);
     setBusy(false);

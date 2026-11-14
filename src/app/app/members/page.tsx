@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Select } from "@/components/ui/Select";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { removeMemberAction, revokeInviteAction, setMemberRoleAction, transferOwnershipAction } from "@/app/app/space-actions";
@@ -73,11 +74,7 @@ export default async function MembersPage({ searchParams }: { searchParams: Prom
                           <label htmlFor={`role-${m.user_id}`} className="sr-only">
                             Role for {name}
                           </label>
-                          <select id={`role-${m.user_id}`} name="role" defaultValue={m.role} className="rounded-md border border-line-strong bg-surface px-2 py-1.5 text-xs">
-                            <option value="viewer">Viewer</option>
-                            <option value="editor">Editor</option>
-                            {isOwner ? <option value="admin">Admin</option> : null}
-                          </select>
+                          <Select id={`role-${m.user_id}`} name="role" label={`Role for ${name}`} size="sm" className="min-w-28" defaultValue={m.role} options={[{ value: "viewer", label: "Viewer" }, { value: "editor", label: "Editor" }, ...(isOwner ? [{ value: "admin", label: "Admin" }] : [])]} />
                           <button type="submit" className="rounded-md border border-line-strong px-3 py-1.5 hover:border-primary" aria-label={`Save role for ${name}`}>
                             Save
                           </button>

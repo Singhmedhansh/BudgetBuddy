@@ -1,5 +1,7 @@
 "use client";
 
+import { DateField } from "@/components/ui/DateField";
+import { Select } from "@/components/ui/Select";
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import {
@@ -61,32 +63,19 @@ export function AccountForm({ mode, currency, cancelHref }: { mode: "onboarding"
         <label className="mb-1.5 block text-sm font-medium" htmlFor="acct-type">
           Account type
         </label>
-        <select
+        <Select
           id="acct-type"
           name="type"
+          label="Account type"
           value={type}
-          onChange={(e) => setType(e.target.value)}
-          aria-invalid={fe.type ? true : undefined}
-          className="w-full rounded-md border border-line-strong bg-surface px-3 py-2.5 text-sm aria-[invalid=true]:border-neg"
-        >
-          <option value="" disabled>
-            Choose a type
-          </option>
-          <optgroup label="Money you hold">
-            {ASSET_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {ACCOUNT_TYPE_LABEL[t]}
-              </option>
-            ))}
-          </optgroup>
-          <optgroup label="Money you owe">
-            {LIABILITY_TYPES_UI.map((t) => (
-              <option key={t} value={t}>
-                {ACCOUNT_TYPE_LABEL[t]}
-              </option>
-            ))}
-          </optgroup>
-        </select>
+          onChange={setType}
+          invalid={Boolean(fe.type)}
+          placeholder="Choose a type"
+          options={[
+            ...ASSET_TYPES.map((t) => ({ value: t, label: ACCOUNT_TYPE_LABEL[t], group: "Money you hold" })),
+            ...LIABILITY_TYPES_UI.map((t) => ({ value: t, label: ACCOUNT_TYPE_LABEL[t], group: "Money you owe" })),
+          ]}
+        />
         {fe.type ? <p className="mt-1.5 text-sm text-neg-text">{fe.type}</p> : null}
       </div>
       <Field
@@ -155,7 +144,7 @@ export function TransactionForm({
         <label htmlFor="txn-date" className="mb-1.5 block text-sm font-medium">
           Date
         </label>
-        <input id="txn-date" name="date" type="date" defaultValue={s?.values?.date ?? today} max={today} aria-invalid={fe.date ? true : undefined} className="w-full rounded-md border border-line-strong bg-surface px-3 py-2.5 text-sm aria-[invalid=true]:border-neg" />
+        <DateField id="txn-date" name="date" label="Date" defaultValue={s?.values?.date ?? today} max={today} invalid={Boolean(fe.date)} />
         {fe.date ? <p className="mt-1.5 text-sm text-neg-text">{fe.date}</p> : null}
       </div>
       <Field label="Note (optional)" name="description" defaultValue={s?.values?.description} error={fe.description} />

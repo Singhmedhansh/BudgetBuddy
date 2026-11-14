@@ -40,7 +40,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
         <div className="mt-4 text-white">
           <SpaceSwitcher spaces={spaces} activeId={space?.id ?? null} role={role} dark />
         </div>
-        <div className="-mx-1 mt-5 flex-1 overflow-y-auto px-1">
+        <div className="scroll-on-ink -mx-1 mt-5 flex-1 overflow-y-auto px-1">
           <SidebarNav />
         </div>
         <Link href="/help" className="mb-2 rounded-md px-3 py-2 text-sm text-white/60 transition-colors hover:bg-white/5 hover:text-white">

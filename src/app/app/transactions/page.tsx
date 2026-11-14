@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Select } from "@/components/ui/Select";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { reverseTransactionAction } from "@/app/app/actions";
@@ -77,33 +78,21 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
         </div>
         <div>
           <label htmlFor="type" className="mb-1 block text-xs text-muted">Type</label>
-          <select id="type" name="type" defaultValue={type ?? ""} className="rounded-md border border-line-strong bg-surface px-3 py-2 text-sm">
-            <option value="">All types</option>
-            {TYPES.map((t) => (<option key={t} value={t}>{t[0].toUpperCase() + t.slice(1)}</option>))}
-          </select>
+          <Select id="type" name="type" label="Type" size="sm" className="min-w-36" defaultValue={type ?? ""} options={[{ value: "", label: "All types" }, ...TYPES.map((t) => ({ value: t, label: t[0].toUpperCase() + t.slice(1) }))]} />
         </div>
         <div>
           <label htmlFor="account" className="mb-1 block text-xs text-muted">Account</label>
-          <select id="account" name="account" defaultValue={sp.account ?? ""} className="rounded-md border border-line-strong bg-surface px-3 py-2 text-sm">
-            <option value="">All accounts</option>
-            {accounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
-          </select>
+          <Select id="account" name="account" label="Account" size="sm" className="min-w-40" defaultValue={sp.account ?? ""} options={[{ value: "", label: "All accounts" }, ...accounts.map((a) => ({ value: a.id, label: a.name }))]} />
         </div>
         <div>
           <label htmlFor="cat" className="mb-1 block text-xs text-muted">Category</label>
-          <select id="cat" name="cat" defaultValue={sp.cat ?? ""} className="rounded-md border border-line-strong bg-surface px-3 py-2 text-sm">
-            <option value="">All categories</option>
-            {sp.cat && !categories.some((c) => c.name.toLowerCase() === sp.cat!.toLowerCase()) ? <option value={sp.cat}>{sp.cat}</option> : null}
-            {categories.map((c) => (<option key={c.id} value={c.name}>{c.name}</option>))}
-          </select>
+          <Select id="cat" name="cat" label="Category" size="sm" className="min-w-40" defaultValue={sp.cat ?? ""} options={[{ value: "", label: "All categories" }, ...(sp.cat && !categories.some((c) => c.name.toLowerCase() === sp.cat!.toLowerCase()) ? [{ value: sp.cat, label: sp.cat }] : []), ...categories.map((c) => ({ value: c.name, label: c.name }))]} />
         </div>
         {sp.from ? <input type="hidden" name="from" value={sp.from} /> : null}
         {sp.to ? <input type="hidden" name="to" value={sp.to} /> : null}
         <div>
           <label htmlFor="sort" className="mb-1 block text-xs text-muted">Sort</label>
-          <select id="sort" name="sort" defaultValue={sort} className="rounded-md border border-line-strong bg-surface px-3 py-2 text-sm">
-            {SORTS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
-          </select>
+          <Select id="sort" name="sort" label="Sort by" size="sm" className="min-w-40" defaultValue={sort} options={SORTS.map((o) => ({ value: o.value, label: o.label }))} />
         </div>
         <button type="submit" className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-fg transition-colors hover:bg-primary-hover">Apply</button>
         {filtered ? <Link href="/app/transactions" className="py-2 text-sm text-muted hover:text-fg">Clear</Link> : null}

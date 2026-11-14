@@ -1,5 +1,6 @@
 "use client";
 
+import { DateField } from "@/components/ui/DateField";
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import { refundTransactionAction, updateTransactionDetailsAction, type TxnActionState } from "@/app/app/transaction-actions";
@@ -24,7 +25,7 @@ export function RefundForm({ id, remainingText, remainingPlain, today, accounts,
         <label htmlFor="refund-date" className="mb-1.5 block text-sm font-medium">
           Date
         </label>
-        <input id="refund-date" name="date" type="date" defaultValue={s?.values?.date ?? today} max={today} aria-invalid={fe.date ? true : undefined} className="w-full rounded-md border border-line-strong bg-surface px-3 py-2.5 text-sm aria-[invalid=true]:border-neg" />
+        <DateField id="refund-date" name="date" label="Date" defaultValue={s?.values?.date ?? today} max={today} invalid={Boolean(fe.date)} />
         {fe.date ? <p className="mt-1.5 text-sm text-neg-text">{fe.date}</p> : null}
       </div>
       <div className="flex items-center gap-3">

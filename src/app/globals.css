@@ -212,3 +212,12 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* Scrollbars follow the theme: slim, quiet, and never a bright bar against dark surfaces. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+.scroll-on-ink {
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}

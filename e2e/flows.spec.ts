@@ -1,11 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
-import { api, minor, unique } from "./helpers";
+import { api, minor, unique, choose } from "./helpers";
 import { ledgerBalances, spaceId } from "./ledger";
 
 async function addAccount(page: Page, name: string, type: string, opening: string) {
   await page.goto("/app/accounts/new");
   await page.getByLabel("Account name").fill(name);
-  await page.getByLabel("Account type").selectOption(type);
+  await choose(page, "Account type", type);
   await page.getByLabel(/balance|owe now/i).fill(opening);
   await page.getByRole("button", { name: "Add account" }).click();
   await expect(page).toHaveURL(/\/app\/accounts$/);
@@ -15,9 +15,9 @@ async function addTxn(page: Page, o: { type: "expense" | "income" | "transfer"; 
   await page.goto("/app/transactions/new");
   await page.getByText(o.type, { exact: true }).click();
   await page.getByLabel("Amount").fill(o.amount);
-  await page.getByLabel(o.type === "transfer" ? "From account" : "Account", { exact: true }).selectOption({ label: o.account });
-  if (o.to) await page.getByLabel("To account").selectOption({ label: o.to });
-  if (o.category) await page.getByLabel(o.type === "income" ? "Income source" : "Category").selectOption({ label: o.category });
+  await choose(page, o.type === "transfer" ? "From account" : /^Account$/, { label: o.account });
+  if (o.to) await choose(page, "To account", { label: o.to });
+  if (o.category) await choose(page, o.type === "income" ? "Income source" : "Category", { label: o.category });
   if (o.merchant) await page.getByLabel(/Merchant or payer/).fill(o.merchant);
   await page.getByRole("button", { name: "Save transaction" }).click();
 }
@@ -72,8 +72,8 @@ test.describe("Journey B/C: spending and transfers reconcile with the ledger", (
     await expect(page.getByText("Choose an account.").or(page.getByText("Choose or fill in this field.")).first()).toBeVisible();
     await expect(page.getByText(/decimal|digits|places/i).first()).toBeVisible();
     await expect(page.locator("body")).not.toContainText("Invalid input");
-    await page.getByLabel("Account", { exact: true }).selectOption({ label: checking });
-    await page.getByLabel("Category").selectOption({ index: 1 });
+    await choose(page, /^Account$/, { label: checking });
+    await choose(page, "Category", { index: 1 });
     await page.getByLabel("Amount").fill("0");
     await page.getByRole("button", { name: "Save transaction" }).click();
     await expect(page.getByText(/greater than zero/i)).toBeVisible();
@@ -173,8 +173,8 @@ test.describe("Transaction list: duplicate submits, filters, sorting and paginat
     await addAccount(page, acct, "current", "1000");
     await page.goto("/app/transactions/new");
     await page.getByLabel("Amount").fill("12.50");
-    await page.getByLabel("Account", { exact: true }).selectOption({ label: acct });
-    await page.getByLabel("Category").selectOption({ label: "Groceries" });
+    await choose(page, /^Account$/, { label: acct });
+    await choose(page, "Category", { label: "Groceries" });
     await page.getByLabel(/Merchant or payer/).fill(`${tag} dup`);
     await page.evaluate(() => {
       const f = document.querySelector("form:has(input[name=clientKey])") as HTMLFormElement;

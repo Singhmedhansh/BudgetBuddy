@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { DateField } from "@/components/ui/DateField";
+import { Select } from "@/components/ui/Select";
 import Link from "next/link";
 import { EmptyState, formatDay, Money, PageHeader } from "@/components/app/ui";
 import { BalanceChart } from "@/components/app/BalanceChart";
@@ -88,11 +90,11 @@ export default async function ForecastPage({ searchParams }: { searchParams: Pro
               </div>
               <div>
                 <label htmlFor="oneoffKind" className="mb-1 block text-xs text-muted">It is</label>
-                <select id="oneoffKind" name="oneoffKind" defaultValue={sp.oneoffKind ?? "out"} className="rounded-md border border-line-strong bg-surface px-3 py-2 text-sm"><option value="out">Money out</option><option value="in">Money in</option></select>
+                <Select id="oneoffKind" name="oneoffKind" label="It is" size="sm" className="min-w-36" defaultValue={sp.oneoffKind ?? "out"} options={[{ value: "out", label: "Money out" }, { value: "in", label: "Money in" }]} />
               </div>
               <div>
                 <label htmlFor="oneoffDate" className="mb-1 block text-xs text-muted">On</label>
-                <input id="oneoffDate" name="oneoffDate" type="date" min={basis.today} defaultValue={sp.oneoffDate} className="rounded-md border border-line-strong bg-surface px-3 py-2 text-sm" />
+                <DateField id="oneoffDate" name="oneoffDate" label="On" size="sm" className="min-w-40" min={basis.today} defaultValue={sp.oneoffDate} clearable />
               </div>
               <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-fg hover:bg-primary-hover">Update forecast</button>
               {whatIf ? <Link href={`/app/forecast?days=${days}`} className="py-2 text-sm text-muted hover:text-fg">Clear</Link> : null}

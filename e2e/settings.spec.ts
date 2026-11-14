@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { api, USER } from "./helpers";
+import { api, USER, choose } from "./helpers";
 
 /**
  * Settings, account menu, sign-in options, assistant and sample data, on the disposable test user only.
@@ -230,7 +230,7 @@ test.describe("profile completion and preferences (needs migration 9)", () => {
     needMigration();
     await open(page, "/app/settings");
     await page.getByLabel("Full name").fill("E2E Person");
-    await page.getByLabel("Country").selectOption("IN");
+    await choose(page, "Country", "IN");
     await page.getByRole("button", { name: "Save profile" }).click();
     await expect(page.getByText(/Saved\. \d details? left/)).toBeVisible();
     await expect(page.getByText("Pending").first()).toBeVisible();
@@ -255,9 +255,9 @@ test.describe("profile completion and preferences (needs migration 9)", () => {
     needMigration();
     await open(page, "/app/settings");
     await page.getByLabel("Full name").fill("E2E Person");
-    await page.getByLabel("Country").selectOption("IN");
-    await page.getByLabel("How will you use FinTrack?").selectOption("professional");
-    await page.getByLabel("Date format").selectOption("dmy");
+    await choose(page, "Country", "IN");
+    await choose(page, "How will you use FinTrack?", "professional");
+    await choose(page, "Date format", "dmy");
     await page.getByRole("button", { name: "Save profile" }).click();
     await expect(page.getByText("Saved. Your profile is complete.")).toBeVisible();
     await page.reload();
@@ -279,14 +279,14 @@ test.describe("profile completion and preferences (needs migration 9)", () => {
   test("the number format preference changes how money is shown everywhere, and persists", async ({ page }) => {
     needMigration();
     await open(page, "/app/settings/preferences");
-    await page.getByLabel("Number format").selectOption("de-DE");
+    await choose(page, "Number format", "de-DE");
     await page.getByRole("button", { name: "Save preferences" }).click();
     await expect(page.getByText(/Preferences saved/)).toBeVisible();
     await open(page, "/app/accounts");
     expect(await page.locator(".num").first().innerText()).toMatch(/\d\.\d{3},\d{2}|\d,\d{2}/); // 1.234,56 style
     // restore
     await open(page, "/app/settings/preferences");
-    await page.getByLabel("Number format").selectOption("en-IN");
+    await choose(page, "Number format", "en-IN");
     await page.getByRole("button", { name: "Save preferences" }).click();
     await expect(page.getByText(/Preferences saved/)).toBeVisible();
   });

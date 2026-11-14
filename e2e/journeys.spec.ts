@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { api, minor, unique } from "./helpers";
+import { api, minor, unique, choose, pickDate } from "./helpers";
 import { ledgerBalances } from "./ledger";
 
 /**
@@ -34,7 +34,7 @@ async function postExpense(sb: Awaited<ReturnType<typeof api>>, acct: string, ca
 async function addAccount(page: Page, name: string, opening: string, type = "current") {
   await page.goto("/app/accounts/new");
   await page.getByLabel("Account name").fill(name);
-  await page.getByLabel("Account type").selectOption(type);
+  await choose(page, "Account type", type);
   await page.getByLabel(/balance|owe now/i).fill(opening);
   await page.getByRole("button", { name: "Add account" }).click();
   await expect(page).toHaveURL(/\/app\/accounts/);
@@ -60,8 +60,8 @@ test.describe.serial("Journey A: a new space from nothing to a working dashboard
     await page.goto("/app/transactions/new");
     await page.getByText("income", { exact: true }).click();
     await page.getByLabel("Amount").fill("50000");
-    await page.getByLabel("Account", { exact: true }).selectOption({ label: "Main" });
-    await page.getByLabel("Income source").selectOption({ label: "Salary" });
+    await choose(page, /^Account$/, { label: "Main" });
+    await choose(page, "Income source", { label: "Salary" });
     await page.getByLabel(/Merchant or payer/).fill("Acme");
     await page.getByRole("button", { name: "Save transaction" }).click();
     await expect(page).toHaveURL(/added=1/);
@@ -190,9 +190,9 @@ test.describe.serial("Journey F: bills", () => {
     await page.goto("/app/bills/new");
     await page.getByLabel("Bill name").fill("E2E Rent");
     await page.getByLabel(/Amount/).fill("2200");
-    await page.getByLabel(/First due|Due date|Next due/i).fill(today);
-    await page.getByLabel("Pay from").selectOption({ label: "Main" });
-    await page.getByLabel(/Category/).selectOption({ label: "Rent" }).catch(async () => page.getByLabel(/Category/).selectOption({ index: 1 }));
+    await pickDate(page, /^First due date/, today);
+    await choose(page, "Pay from", { label: "Main" });
+    await choose(page, /Category/, { label: "Rent" }).catch(async () => choose(page, /Category/, { index: 1 }));
     await page.getByRole("button", { name: "Add bill" }).click();
     await expect(page).toHaveURL(/\/app\/bills/);
     await expect(page.getByText("E2E Rent").first()).toBeVisible();

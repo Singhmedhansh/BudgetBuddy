@@ -1,9 +1,7 @@
 "use client";
 
 import { useId } from "react";
-
-const base =
-  "w-full rounded-md border border-line-strong bg-surface px-3 py-2.5 text-sm text-fg focus:border-primary aria-[invalid=true]:border-neg";
+import { Select } from "@/components/ui/Select";
 
 export function SelectField({
   label,
@@ -26,25 +24,16 @@ export function SelectField({
       <label htmlFor={id} className="mb-1.5 block text-sm font-medium">
         {label}
       </label>
-      <select
+      <Select
         id={id}
         name={name}
+        options={options}
         defaultValue={defaultValue ?? ""}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${id}-e` : undefined}
-        className={base}
-      >
-        {placeholder ? (
-          <option value="" disabled>
-            {placeholder}
-          </option>
-        ) : null}
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
+        placeholder={placeholder}
+        label={label}
+        invalid={Boolean(error)}
+        describedBy={error ? `${id}-e` : undefined}
+      />
       {error ? (
         <p id={`${id}-e`} className="mt-1.5 text-sm text-neg-text">
           {error}

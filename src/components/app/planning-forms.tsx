@@ -1,5 +1,6 @@
 "use client";
 
+import { DateField } from "@/components/ui/DateField";
 import Link from "next/link";
 import { useActionState } from "react";
 import { createGoalAction, createRecurringAction, type PlanState } from "@/app/app/planning-actions";
@@ -20,7 +21,7 @@ export function GoalForm({ currency, minDate }: { currency: string; minDate: str
       <Field label={`Target amount (${currency})`} name="target" defaultValue={v.target} error={fe.target} autoComplete="off" />
       <div>
         <label htmlFor="goal-deadline" className="mb-1.5 block text-sm font-medium">Deadline (optional)</label>
-        <input id="goal-deadline" name="deadline" type="date" min={minDate} defaultValue={v.deadline} aria-invalid={fe.deadline ? true : undefined} className="w-full rounded-md border border-line-strong bg-surface px-3 py-2.5 text-sm aria-[invalid=true]:border-neg" />
+        <DateField id="goal-deadline" name="deadline" label="Target date" min={minDate} defaultValue={v.deadline} invalid={Boolean(fe.deadline)} clearable />
         {fe.deadline ? <p className="mt-1.5 text-sm text-neg-text">{fe.deadline}</p> : <p className="mt-1.5 text-xs text-muted">With a deadline, we show how much to set aside each month.</p>}
       </div>
       <SelectField label="Priority" name="priority" defaultValue={v.priority ?? "2"} options={[{ value: "1", label: "High" }, { value: "2", label: "Medium" }, { value: "3", label: "Low" }]} />
@@ -65,12 +66,12 @@ export function RecurringForm({
       <SelectField label="How often" name="frequency" defaultValue={v.frequency ?? "monthly"} error={fe.frequency} options={[{ value: "monthly", label: "Every month" }, { value: "weekly", label: "Every week" }, { value: "quarterly", label: "Every 3 months" }, { value: "yearly", label: "Every year" }, { value: "once", label: "Once" }]} />
       <div>
         <label htmlFor="rec-first" className="mb-1.5 block text-sm font-medium">{kind === "income" ? "First expected date" : "First due date"}</label>
-        <input id="rec-first" name="firstDue" type="date" defaultValue={v.firstDue ?? today} aria-invalid={fe.firstDue ? true : undefined} className="w-full rounded-md border border-line-strong bg-surface px-3 py-2.5 text-sm aria-[invalid=true]:border-neg" />
+        <DateField id="rec-first" name="firstDue" label="First due date" defaultValue={v.firstDue ?? today} invalid={Boolean(fe.firstDue)} />
         {fe.firstDue ? <p className="mt-1.5 text-sm text-neg-text">{fe.firstDue}</p> : <p className="mt-1.5 text-xs text-muted">Later dates repeat from this one. A monthly item on the 31st falls on the last day of shorter months.</p>}
       </div>
       <div>
         <label htmlFor="rec-end" className="mb-1.5 block text-sm font-medium">Last date (optional)</label>
-        <input id="rec-end" name="endsOn" type="date" defaultValue={v.endsOn} aria-invalid={fe.endsOn ? true : undefined} className="w-full rounded-md border border-line-strong bg-surface px-3 py-2.5 text-sm aria-[invalid=true]:border-neg" />
+        <DateField id="rec-end" name="endsOn" label="Ends on" defaultValue={v.endsOn} invalid={Boolean(fe.endsOn)} clearable />
         {fe.endsOn ? <p className="mt-1.5 text-sm text-neg-text">{fe.endsOn}</p> : null}
       </div>
       <SelectField label={w.account} name="accountId" defaultValue={v.accountId} placeholder="Choose an account" options={accounts.map((a) => ({ value: a.id, label: a.name }))} error={fe.accountId} />

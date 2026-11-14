@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Select } from "@/components/ui/Select";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { commitImportAction, type JobRow } from "@/app/app/import/actions";
@@ -93,9 +94,7 @@ export default async function ReviewPage({ params, searchParams }: { params: Pro
                     </td>
                     <td className="py-3 pr-3 text-right"><Money minor={r.amount} currency={c} signed className={r.amount > 0 ? "text-pos-text" : ""} /></td>
                     <td className="py-3">
-                      <select name={`cat_${i}`} defaultValue={r.category_id} aria-label={`Category for row ${r.line}`} className="max-w-[12rem] rounded-md border border-line-strong bg-surface px-2 py-1.5 text-sm">
-                        {cats.map((cat) => (<option key={cat.id} value={cat.id}>{cat.name}</option>))}
-                      </select>
+                      <Select name={`cat_${i}`} defaultValue={r.category_id} label={`Category for row ${r.line}`} size="sm" className="min-w-40 max-w-[14rem]" options={cats.map((cat) => ({ value: cat.id, label: cat.name }))} />
                       {r.suggested ? <span className="block text-xs text-muted">Suggested from earlier transactions</span> : null}
                     </td>
                   </tr>

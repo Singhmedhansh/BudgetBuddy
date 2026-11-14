@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { DateField } from "@/components/ui/DateField";
 import Link from "next/link";
 import { EmptyState, Money, PageHeader } from "@/components/app/ui";
 import { TrendChart } from "@/components/app/TrendChart";
@@ -123,8 +124,8 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
         ))}
       </nav>
       <form className="mb-10 flex flex-wrap items-end gap-3" aria-label="Custom date range">
-        <div><label htmlFor="a-from" className="mb-1 block text-xs text-muted">From</label><input id="a-from" name="from" type="date" defaultValue={custom ? sp.from : rangeFrom} className="rounded-md border border-line-strong bg-surface px-3 py-2 text-sm" /></div>
-        <div><label htmlFor="a-to" className="mb-1 block text-xs text-muted">To</label><input id="a-to" name="to" type="date" defaultValue={custom ? sp.to : rangeTo} className="rounded-md border border-line-strong bg-surface px-3 py-2 text-sm" /></div>
+        <div><label htmlFor="a-from" className="mb-1 block text-xs text-muted">From</label><DateField id="a-from" name="from" label="From" size="sm" className="min-w-40" defaultValue={custom ? sp.from : rangeFrom} /></div>
+        <div><label htmlFor="a-to" className="mb-1 block text-xs text-muted">To</label><DateField id="a-to" name="to" label="To" size="sm" className="min-w-40" defaultValue={custom ? sp.to : rangeTo} /></div>
         <input type="hidden" name="range" value="custom" />
         <button type="submit" className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium hover:border-primary">Apply dates</button>
       </form>
