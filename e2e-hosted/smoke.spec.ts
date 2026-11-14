@@ -75,6 +75,9 @@ test.describe.serial("hosted preview", () => {
     const problems = watch(page);
     await login(page);
     await expect(page.getByRole("link", { name: "FinTrack dashboard" })).toBeVisible();
+    // the dashboard panels that read bills, subscriptions and goals
+    await expect(page.getByRole("region", { name: "Coming up" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Savings goals" })).toBeVisible();
     for (const [name, url] of [["Transactions", /transactions/], ["Accounts", /accounts/], ["Budgets", /budgets/], ["Analytics", /analytics/]] as const) {
       await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name, exact: true }).click();
       await expect(page).toHaveURL(url);

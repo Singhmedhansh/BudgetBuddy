@@ -20,7 +20,8 @@ export function SpaceSwitcher({ spaces, activeId, role, dark }: { spaces: Space[
         <ChevronsUpDown size={15} aria-hidden className={dark ? "text-white/50" : "text-muted"} />
       </summary>
       <div className={`anim-pop absolute left-0 right-0 top-full z-40 mt-2 rounded-xl p-1.5 shadow-float ${panel}`}>
-        <ul>
+        {/* Only the list scrolls, so a long list never pushes the links below it out of reach. */}
+        <ul className="max-h-[min(50vh,18rem)] overflow-y-auto overscroll-contain" tabIndex={-1}>
           {spaces.map((s) => (
             <li key={s.id}>
               <form action={switchSpaceAction}>

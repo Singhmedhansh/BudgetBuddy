@@ -349,3 +349,55 @@ test.describe("Contact form validation", () => {
     await expect(page.getByText(/reference/i).filter({ hasText: /FT-|BB-/ })).toHaveCount(0);
   });
 });
+
+test.describe.serial("Analytics follows the ledger", () => {
+  const a = unique("E2E AnA");
+  const b = unique("E2E AnB");
+
+  async function totals(page: Page, query = "") {
+    await page.goto(`/app/analytics${query}`);
+    // With nothing recorded in the period the page shows an empty state instead of totals.
+    if (await page.getByText("Nothing recorded in this period").count()) return { income: 0, spending: 0 };
+    const read = async (label: string) => minor(await page.locator("dt", { hasText: new RegExp(`^${label}$`) }).locator("xpath=following-sibling::dd").first().innerText());
+    return { income: await read("Income"), spending: await read("Spending") };
+  }
+
+  async function add(page: Page, type: "income" | "expense" | "transfer", amount: string, from: string, to?: string) {
+    await page.goto("/app/transactions/new");
+    await page.getByText(type, { exact: true }).click();
+    await page.getByLabel("Amount").fill(amount);
+    await choose(page, type === "transfer" ? "From account" : /^Account$/, { label: from });
+    if (to) await choose(page, "To account", { label: to });
+    if (type !== "transfer") await chooseFirst(page, type === "income" ? "Income source" : "Category");
+    await page.getByRole("button", { name: "Save transaction" }).click();
+    await expect(page).toHaveURL(/added=1/);
+  }
+
+  test("income, spending and a transfer move the totals by exactly the right amounts", async ({ page }) => {
+    await addAccount(page, a, "current", "5000");
+    await addAccount(page, b, "savings", "0");
+    const before = await totals(page);
+    const lastBefore = await totals(page, "?range=last");
+
+    await add(page, "income", "1000", a);
+    await add(page, "expense", "123.45", a);
+    await add(page, "transfer", "50", a, b); // moves money, is neither income nor spending
+
+    const after = await totals(page);
+    expect(after.income - before.income).toBe(100_000);
+    expect(after.spending - before.spending).toBe(12_345);
+    expect(await totals(page, "?range=last")).toEqual(lastBefore); // today's entries never leak into last month
+
+    expect(await raw(a)).toBe(500_000 + 100_000 - 12_345 - 5_000);
+    expect(await raw(b)).toBe(5_000);
+  });
+
+  test("a custom range with nothing in it says so, and a malformed one falls back", async ({ page }) => {
+    await page.goto("/app/analytics?from=2001-01-01&to=2001-01-31");
+    await expect(page.getByText("Nothing recorded in this period")).toBeVisible();
+    await page.goto("/app/analytics?from=garbage&to=2001-01-31");
+    await expect(page.getByRole("heading", { level: 1, name: "Analytics" })).toBeVisible();
+    await page.goto("/app/analytics?from=2026-12-31&to=2026-01-01"); // reversed
+    await expect(page.getByRole("heading", { level: 1, name: "Analytics" })).toBeVisible();
+  });
+});
