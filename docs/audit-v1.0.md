@@ -93,6 +93,10 @@ Status key: COMPLETE implemented and tested end to end; PARTIAL; BROKEN; MISSING
 | AI assistant | BLOCKED | 36 unit tests; disabled, sends nothing | No Gemini or Groq credentials |
 | Payments | BLOCKED | 18 unit tests; live payments off in code | Razorpay webhook verification and idempotency exist; PayPal webhook, refund events, billing history and invoices do **not**; no checkout |
 
+### Bug found by this audit: space switcher unusable with many spaces
+The space menu had no height limit and the sidebar clipped it, so with enough spaces the ones below the fold could not be
+selected. Fixed: the list scrolls and the Members and New shared space links stay visible.
+
 ### Bug found by this audit: goal over-withdrawal
 "Take out 99,999" from a goal holding 2,000 was **recorded**, leaving the goal at minus 97,999 while the page showed 0
 percent. The test meant to prove it was refused passed by accident: it matched Next.js's empty route-announcer alert and read
@@ -136,7 +140,34 @@ disposable test spaces, none in real data.
 
 ## 5. Test results
 
-{{TESTS}}
+| Check | Result |
+|---|---|
+| Unit and in-process database tests (Vitest) | **507 passed, 0 failed**, 43 files. Database 124, domain 119, server 89, app 92, lib 49, config 26, content 8 |
+| End-to-end, local production build (Playwright, 4 viewports: 1440, 1280, 768, 390) | **308 passed, 0 failed, 12 skipped** |
+| Hosted checks against the Preview deployment | **29 passed, 0 failed**: SEO 18, smoke 7, phone layout 2 (run in both a desktop and a phone project) |
+| ESLint | Clean, no warnings |
+| TypeScript | 0 errors |
+| Production build | Succeeds; all routes compile, including the new `/app/goals/[id]/edit`, `/twitter-image` |
+
+**The 12 skipped tests, and why.** None was skipped to make a number look better; each needs something that is not live.
+- 11 need **migration 9** (profile completion, preferences, sample data, avatar, and the two account-deletion tests). The settings
+  suite probes for the new columns and runs them automatically once they exist.
+- 1 needs **migration 8** (reversing an expense that still has a refund must be refused). It runs when `E2E_MIGRATION8=1`.
+
+**What was added.** SEO: 14 unit tests and 18 hosted checks. Financial: 9 migration-10 tests. Journeys: 16 new E2E tests
+(accounts, subscriptions, expected income, debt, CSV import and export, transaction edit, calendar, analytics, contact
+validation) plus extended goal and bill journeys. All money assertions compare against an independent sum of the raw ledger.
+
+**Two problems the test work uncovered in the tests themselves.**
+- The goals "over-withdraw refused" assertion was vacuous (above). It now checks the message and the stored data.
+- The first full run showed Journey A and the budget-threshold test failing, and a re-run of the same specs alone passed.
+  Reproduced it: the disposable test user had accumulated dozens of spaces and the **space switcher menu had no height
+  limit**, so spaces below the fold could not be clicked. That is a genuine product defect for anyone with many spaces; the
+  list now scrolls on its own and the journeys pass in the full run.
+
+**Not tested, stated plainly.** Real registration and email delivery, the emailed reset and magic links, social sign-in,
+anything needing migration 8 or 9 on the live project, two simultaneous live sessions for cross-user isolation, true
+concurrent requests, and any payment or AI provider call.
 
 ## 6. Blocked dependencies
 
