@@ -2,14 +2,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { LoadSampleButton } from "@/components/app/sample-data-forms";
 import { ProfileBanner } from "@/components/app/ProfileBanner";
-import { EmptyState, formatDate, Money, PageHeader } from "@/components/app/ui";
+import { EmptyState, formatDate, formatDay, Money, PageHeader } from "@/components/app/ui";
 import { TrendChart } from "@/components/app/TrendChart";
 import { monthsBack, shares } from "@/domain/analytics";
 import { displayAmount } from "@/domain/display";
 import { normalizeDashboardPrefs } from "@/domain/profile";
 import { periodTotals, spendingByCategory, type LedgerAccount } from "@/domain/ledger";
 import { localDate, monthRange } from "@/domain/period";
+import { addDays } from "@/domain/recurrence";
 import { requireSpace } from "@/server/context";
+import { listGoals, listRecurring, todayFor } from "@/server/planning";
 import { currentMonth, listAccounts, listBudgets, listCategories, listTransactions, postingsInRange } from "@/server/queries";
 import { isLiability } from "@/server/types";
 
@@ -26,6 +28,19 @@ export default async function DashboardPage() {
   const trendMonths = monthsBack(now.year, now.month, 6);
   const trendStart = monthRange(trendMonths[0].year, trendMonths[0].month, tz).from;
   const [accounts, budgets, recent, month, cats] = await Promise.all([listAccounts(ctx), listBudgets(ctx), listTransactions(ctx, { limit: 6 }), currentMonth(ctx), listCategories(ctx)]);
+
+  // Bills, subscriptions and goals are read only when their panel is switched on.
+  const [bills, subs, goals] = await Promise.all([
+    prefs.upcoming ? listRecurring(ctx, "bill") : [],
+    prefs.upcoming ? listRecurring(ctx, "subscription") : [],
+    prefs.goals ? listGoals(ctx) : [],
+  ]);
+  const today = todayFor(ctx);
+  const upcoming = [...bills, ...subs]
+    .filter((i) => i.due && i.due.date <= addDays(today, 30))
+    .sort((a, b) => a.due!.date.localeCompare(b.due!.date))
+    .slice(0, 5);
+  const activeGoals = goals.filter((g) => g.status === "active").slice(0, 3);
 
   if (accounts.length === 0) {
     return (
@@ -197,6 +212,67 @@ export default async function DashboardPage() {
               You owe <Money minor={owed} currency={space.currency} className="font-medium text-fg" /> on cards and loans. Repayments are transfers and are not counted as spending.
             </p>
           ) : null}
+        </Panel>
+        ) : null}
+      </div> : null}
+
+      {prefs.upcoming || prefs.goals ? <div className={`mt-6 grid gap-6 ${prefs.upcoming && prefs.goals ? "lg:grid-cols-2" : ""}`}>
+        {prefs.upcoming ? (
+        <Panel title="Coming up" action={{ href: "/app/calendar", label: "Calendar" }}>
+          {upcoming.length === 0 ? (
+            <p className="text-sm text-muted">
+              Nothing due in the next 30 days.{" "}
+              <Link href="/app/bills/new" className="text-primary hover:underline">
+                Add a bill
+              </Link>{" "}
+              to be reminded before it is due.
+            </p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {upcoming.map((i) => (
+                <li key={i.id} className="flex items-center justify-between gap-3 py-2.5 text-sm first:pt-0 last:pb-0">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{i.name}</p>
+                    <p className={`text-xs ${i.due!.state === "overdue" ? "text-neg-text" : i.due!.state === "due_soon" ? "text-warn-text" : "text-muted"}`}>
+                      {i.due!.state === "overdue" ? "Overdue since " : "Due "}
+                      {formatDay(i.due!.date)}
+                    </p>
+                  </div>
+                  <Money minor={i.amount} currency={space.currency} className="shrink-0 font-medium" />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+        ) : null}
+
+        {prefs.goals ? (
+        <Panel title="Savings goals" action={{ href: "/app/goals", label: "Goals" }}>
+          {activeGoals.length === 0 ? (
+            <p className="text-sm text-muted">
+              No active goals.{" "}
+              <Link href="/app/goals/new" className="text-primary hover:underline">
+                Create one
+              </Link>{" "}
+              and put money towards it.
+            </p>
+          ) : (
+            <ul className="space-y-4">
+              {activeGoals.map((g) => (
+                <li key={g.id} className="text-sm">
+                  <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                    <span className="truncate font-medium">{g.name}</span>
+                    <span className="shrink-0 text-xs text-muted">
+                      <Money minor={g.saved} currency={space.currency} /> of <Money minor={g.target} currency={space.currency} />
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-sunken" role="img" aria-label={`${Math.round(g.ratio * 100)} percent saved`}>
+                    <div className="anim-grow h-full rounded-full bg-primary" style={{ width: `${Math.min(100, Math.round(g.ratio * 100))}%` }} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </Panel>
         ) : null}
       </div> : null}

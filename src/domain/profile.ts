@@ -82,6 +82,8 @@ export const DASHBOARD_SECTIONS = [
   { key: "trend", label: "Income and spending trend" },
   { key: "categories", label: "Where the money went" },
   { key: "budgets", label: "Budgets needing attention" },
+  { key: "upcoming", label: "Upcoming bills and subscriptions" },
+  { key: "goals", label: "Savings goals" },
   { key: "recent", label: "Recent transactions" },
 ] as const;
 export type DashboardSection = (typeof DASHBOARD_SECTIONS)[number]["key"];

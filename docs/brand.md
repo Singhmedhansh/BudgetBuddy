@@ -45,8 +45,20 @@ renaming them needs migrations or signs people out, and nothing a customer sees 
 The official domain is `https://getfintrack.online`. Vercel project `fintrack` has the apex and `www` domains attached
 to the `feat/budget-buddy-v1` Preview branch. Production remains unconfigured and is not assigned either domain.
 
-The site metadata uses the official origin for Production and for that branch's Preview deployment. Authentication
-email callbacks use the explicit `NEXT_PUBLIC_SITE_URL` when configured and otherwise use the request's host. Before
-enabling authentication on the custom domain, add `https://getfintrack.online/**` to the Supabase Auth redirect
-allow-list; this project setting has not been changed. The `www` host redirects to the apex in the app once the branch
-is redeployed with the current source changes.
+The origin written into canonical tags, Open Graph URLs, `robots.txt` and the sitemap comes from `src/config/site-origin.ts`,
+in this order: `SEO_CANONICAL_ORIGIN`, then `NEXT_PUBLIC_SITE_URL`, then the official domain in Production, then the
+deployment's own address, then localhost for local development only. The Vercel Preview environment sets
+`SEO_CANONICAL_ORIGIN=https://getfintrack.online`, so Preview pages advertise the official domain.
+
+Authentication email callbacks use `NEXT_PUBLIC_SITE_URL` when configured and otherwise the request's host, which is why
+the two settings are separate. Before enabling authentication on the custom domain, add `https://getfintrack.online/**`
+to the Supabase Auth redirect allow-list; this project setting has not been changed.
+
+The `www` host is redirected to the apex with a 308 by `src/proxy.ts` (`src/config/canonical-host.ts`). It reads the host
+from the URL and from the forwarded-host and host headers. This was verified against a production build; it has not yet
+been verified on the live domain, because the domain's nameservers do not point at Vercel yet.
+
+Indexing: public pages (home, Help Centre and its articles, Security, Contact, the legal documents) are indexable and
+listed in the sitemap. Sign-in, sign-up, password pages and the whole signed-in app are `noindex`, the app and API also
+send `X-Robots-Tag: noindex`. Sign-in and sign-up are left crawlable in `robots.txt` on purpose, so a crawler can read
+their `noindex` tag. Every public page gets its metadata from `src/config/seo.ts`.

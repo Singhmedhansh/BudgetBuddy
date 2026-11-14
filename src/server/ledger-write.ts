@@ -60,6 +60,8 @@ export function friendlyDbError(message: string): string {
   if (message.includes("Reverse the refund")) return "This expense has a refund. Reverse the refund first, then reverse the expense.";
   if (message.includes("Entries can only be added")) return "That transaction can no longer be changed. Reverse it instead.";
   if (message.includes("already reversed")) return "This transaction was already reversed.";
+  if (message.includes("withdrawal cannot be more")) return "You can only take out what is saved for this goal.";
+  if (message.includes("transactions_one_reversal")) return "This transaction was already reversed.";
   if (message.includes("duplicate key")) return "That record already exists.";
   return "Something went wrong and nothing was saved. Try again.";
 }

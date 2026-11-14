@@ -4,7 +4,7 @@ import { fieldErrors } from "@/server/form-errors";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { MoneyError, parseAmount } from "@/domain/money";
+import { MoneyError, formatMoney, parseAmount } from "@/domain/money";
 import { occurredAtForDate } from "@/domain/period";
 import { parseDate } from "@/domain/recurrence";
 import { requireSpace } from "@/server/context";
@@ -39,7 +39,7 @@ function money(raw: string, currency: string, field: string, allowZero = false):
     if (v < 0 || (!allowZero && v === 0)) return { errors: { [field]: allowZero ? "Use zero or more." : "Enter an amount greater than zero." } };
     return { value: v };
   } catch (e) {
-    return { errors: { [field]: e instanceof MoneyError ? e.message : "Enter an amount like 2500.00." } };
+    return { errors: { [field]: e instanceof MoneyError && !e.message.startsWith("Invalid amount") ? e.message : "Enter an amount like 2500.00." } };
   }
 }
 
@@ -78,6 +78,42 @@ export async function createGoalAction(_: PlanState | undefined, form: FormData)
   redirect("/app/goals?added=1");
 }
 
+async function updateGoalImpl(form: FormData): Promise<PlanState> {
+  const { supabase, space, profile } = await requireSpace();
+  const p = z
+    .object({
+      id: z.string().uuid(),
+      name: z.string().trim().min(1, "Name the goal.").max(80),
+      target: z.string().trim().min(1, "Enter a target amount."),
+      deadline: z.union([dateStr, z.literal("")]).optional(),
+      priority: z.enum(["1", "2", "3"]).default("2"),
+    })
+    .safeParse(Object.fromEntries(form));
+  if (!p.success) return { fieldErrors: fieldErrors(p.error) };
+  const target = money(p.data.target, space.currency, "target");
+  if (!target.value) return { fieldErrors: target.errors };
+  const { data: current } = await supabase.from("savings_goals").select("deadline").eq("id", p.data.id).eq("space_id", space.id).maybeSingle();
+  if (!current) return { error: "That goal was not found." };
+  // A deadline that has already passed can be kept as it is, but a new one has to be in the future.
+  const unchanged = (current.deadline ?? "") === (p.data.deadline ?? "");
+  if (p.data.deadline && !unchanged && p.data.deadline <= todayFor({ profile })) return { fieldErrors: { deadline: "Choose a deadline after today, or leave it blank." } };
+  const { data: updated, error } = await supabase
+    .from("savings_goals")
+    .update({ name: p.data.name, target_amount: target.value, deadline: p.data.deadline || null, priority: Number(p.data.priority) })
+    .eq("id", p.data.id)
+    .eq("space_id", space.id)
+    .select("id");
+  if (error) return { error: friendlyDbError(error.message) };
+  if (!updated || updated.length === 0) return { error: "You do not have permission to change this goal." };
+  return {};
+}
+export async function updateGoalAction(_: PlanState | undefined, form: FormData): Promise<PlanState> {
+  const r = await updateGoalImpl(form);
+  if (r.error || r.fieldErrors) return withEcho(r, form);
+  revalidatePath("/app", "layout");
+  redirect("/app/goals?saved=1");
+}
+
 export async function addContributionAction(form: FormData) {
   const { supabase, space, user, profile } = await requireSpace();
   const p = z
@@ -86,6 +122,14 @@ export async function addContributionAction(form: FormData) {
   if (!p.success) redirect("/app/goals?error=" + encodeURIComponent("Enter an amount to add."));
   const amt = money(p.data.amount, space.currency, "amount");
   if (!amt.value) redirect("/app/goals?error=" + encodeURIComponent(Object.values(amt.errors!)[0]));
+  if (p.data.direction === "withdraw") {
+    // Only what has been saved can be taken out. The database enforces the same rule, so two quick requests cannot get past it.
+    const { data: rows } = await supabase.from("goal_contributions").select("amount").eq("goal_id", p.data.goalId).eq("space_id", space.id);
+    const savedSoFar = (rows ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
+    if (amt.value > savedSoFar) {
+      redirect("/app/goals?error=" + encodeURIComponent(`You can take out at most ${formatMoney(Math.max(0, savedSoFar), space.currency)}, which is what is saved for this goal.`));
+    }
+  }
   const signed = p.data.direction === "withdraw" ? -amt.value : amt.value;
   const { error } = await supabase.from("goal_contributions").insert({
     goal_id: p.data.goalId,

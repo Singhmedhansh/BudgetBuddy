@@ -176,9 +176,37 @@ test.describe.serial("Journey E: savings goals", () => {
     await expect(goal.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "20");
     await goal.getByLabel(/Amount/).fill("99999");
     await goal.getByRole("button", { name: "Take out" }).click();
-    await expect(page.getByRole("alert")).toBeVisible();
+    // The refusal is a plain sentence naming what can be taken out. (role=alert alone would also match Next's empty route announcer.)
+    await expect(page).toHaveURL(/error=/);
+    await expect(page.getByText("You can take out at most ₹2,000.00")).toBeVisible();
     await expect(goal.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "20"); // nothing changed
+    const { data: rows } = await sb.from("goal_contributions").select("amount").eq("space_id", spaceId);
+    expect((rows ?? []).reduce((t, r) => t + Number(r.amount), 0)).toBe(200_000); // 2,500 added, 500 taken out, the over-withdrawal never stored
     expect((await ledgerBalances(sb, spaceId)).get("Main")!.raw).toBe(before); // contributions are tracked, not ledger postings
+
+    // the dashboard shows the same progress, derived from the same contributions
+    await page.goto("/app");
+    const panel = page.getByRole("region", { name: "Savings goals" });
+    await expect(panel).toContainText("E2E Trip");
+    await expect(panel.getByRole("img", { name: "20 percent saved" })).toBeVisible();
+
+    // editing the goal changes its target and keeps what was saved: 2,000 of 20,000 is 10 percent
+    await page.goto("/app/goals");
+    await page.getByRole("link", { name: "Edit E2E Trip" }).click();
+    await expect(page.getByLabel("Goal name")).toHaveValue("E2E Trip");
+    await expect(page.getByLabel(/Target amount/)).toHaveValue("10000.00");
+    await page.getByLabel(/Target amount/).fill("20000");
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(page).toHaveURL(/\/app\/goals\?saved=1/);
+    const edited = page.getByRole("listitem").filter({ has: page.getByRole("heading", { name: "E2E Trip" }) });
+    await expect(edited.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "10");
+    expect((await ledgerBalances(sb, spaceId)).get("Main")!.raw).toBe(before); // still no ledger effect
+
+    // a bad target is refused in plain words and nothing changes
+    await page.getByRole("link", { name: "Edit E2E Trip" }).click();
+    await page.getByLabel(/Target amount/).fill("abc");
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByText("Enter an amount like 2500.00.")).toBeVisible();
   });
 });
 
@@ -196,6 +224,10 @@ test.describe.serial("Journey F: bills", () => {
     await page.getByRole("button", { name: "Add bill" }).click();
     await expect(page).toHaveURL(/\/app\/bills/);
     await expect(page.getByText("E2E Rent").first()).toBeVisible();
+
+    // the dashboard lists it under "Coming up", due today
+    await page.goto("/app");
+    await expect(page.getByRole("region", { name: "Coming up" })).toContainText("E2E Rent");
 
     await page.goto("/app/calendar");
     await expect(page.getByText("E2E Rent").first()).toBeVisible();

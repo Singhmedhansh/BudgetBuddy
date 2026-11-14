@@ -85,6 +85,11 @@ describe("notification preferences", () => {
 });
 
 describe("dashboard preferences", () => {
+  it("includes the bills and goals panels, switched on for people who saved choices before they existed", () => {
+    const old = normalizeDashboardPrefs({ trend: false, categories: true, budgets: true, recent: true });
+    expect(old).toMatchObject({ upcoming: true, goals: true, trend: false });
+    expect(Object.keys(normalizeDashboardPrefs({})).sort()).toEqual(["budgets", "categories", "goals", "recent", "trend", "upcoming"]);
+  });
   it("shows every section by default and honours opt-outs", () => {
     expect(Object.values(normalizeDashboardPrefs({})).every(Boolean)).toBe(true);
     expect(normalizeDashboardPrefs({ trend: false })).toMatchObject({ trend: false, recent: true });

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { addContributionAction, setGoalStatusAction } from "@/app/app/planning-actions";
 import { EmptyState, formatDay, Money, Notice, PageHeader } from "@/components/app/ui";
 import { requireSpace } from "@/server/context";
@@ -91,6 +92,7 @@ export default async function GoalsPage({ searchParams }: { searchParams: Promis
                   {g.status === "active" ? <button type="submit" name="status" value="paused" className="text-muted underline hover:text-fg">Pause</button> : <button type="submit" name="status" value="active" className="text-muted underline hover:text-fg">Resume</button>}
                   {g.status !== "completed" ? <button type="submit" name="status" value="completed" className="text-muted underline hover:text-fg">Mark completed</button> : null}
                   <button type="submit" name="status" value="archived" className="text-muted underline hover:text-fg">Archive</button>
+                  {ctx.role !== "viewer" ? <Link href={`/app/goals/${g.id}/edit`} aria-label={`Edit ${g.name}`} className="text-muted underline hover:text-fg">Edit</Link> : null}
                 </form>
               </li>
             );

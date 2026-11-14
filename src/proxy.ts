@@ -3,7 +3,7 @@ import { canonicalHostRedirect } from "@/config/canonical-host";
 import { updateSession } from "@/lib/supabase/session";
 
 export function proxy(request: NextRequest) {
-  const canonical = canonicalHostRedirect(request.nextUrl);
+  const canonical = canonicalHostRedirect(request.nextUrl, request.headers);
   if (canonical) return NextResponse.redirect(canonical, 308);
   return updateSession(request);
 }

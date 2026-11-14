@@ -3,19 +3,20 @@
 import { DateField } from "@/components/ui/DateField";
 import Link from "next/link";
 import { useActionState } from "react";
-import { createGoalAction, createRecurringAction, type PlanState } from "@/app/app/planning-actions";
+import { createGoalAction, createRecurringAction, updateGoalAction, type PlanState } from "@/app/app/planning-actions";
 import { Field, FormMessage, SubmitButton } from "@/components/auth/fields";
 import { SelectField } from "./controls";
 
 type Act = (prev: PlanState | undefined, form: FormData) => Promise<PlanState>;
 const useAct = (a: Act) => useActionState<PlanState | undefined, FormData>(a, undefined);
 
-export function GoalForm({ currency, minDate }: { currency: string; minDate: string }) {
-  const [s, action] = useAct(createGoalAction);
+export function GoalForm({ currency, minDate, initial }: { currency: string; minDate: string; initial?: { id: string; name: string; target: string; deadline: string; priority: string } }) {
+  const [s, action] = useAct(initial ? updateGoalAction : createGoalAction);
   const fe = s?.fieldErrors ?? {};
-  const v = s?.values ?? {};
+  const v = s?.values ?? initial ?? {};
   return (
     <form action={action} className="space-y-5" noValidate>
+      {initial ? <input type="hidden" name="id" value={initial.id} /> : null}
       <FormMessage error={s?.error} />
       <Field label="Goal name" name="name" defaultValue={v.name} error={fe.name} hint="For example, Emergency fund or Trip to Goa." />
       <Field label={`Target amount (${currency})`} name="target" defaultValue={v.target} error={fe.target} autoComplete="off" />
@@ -27,7 +28,7 @@ export function GoalForm({ currency, minDate }: { currency: string; minDate: str
       <SelectField label="Priority" name="priority" defaultValue={v.priority ?? "2"} options={[{ value: "1", label: "High" }, { value: "2", label: "Medium" }, { value: "3", label: "Low" }]} />
       <p className="text-xs text-muted">Amounts you add to a goal are tracked here. They do not move money or change any account balance.</p>
       <div className="flex items-center gap-3">
-        <div className="flex-1"><SubmitButton pendingLabel="Saving">Create goal</SubmitButton></div>
+        <div className="flex-1"><SubmitButton pendingLabel="Saving">{initial ? "Save changes" : "Create goal"}</SubmitButton></div>
         <Link href="/app/goals" className="text-sm text-muted hover:text-fg">Cancel</Link>
       </div>
     </form>

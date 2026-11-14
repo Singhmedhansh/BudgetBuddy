@@ -198,7 +198,7 @@ export const ARTICLES: Article[] = [
     destination: { label: "Create a goal", href: "/app/goals/new" },
     related: ["financial-calendar", "how-totals-work"],
     body: [
-      { t: "steps", items: ["Open [Savings goals](/app/goals) and choose Create goal.", "Name it, set a target and, if you like, a deadline.", "Use Add to goal whenever you put money aside. Take out if you spend some."] },
+      { t: "steps", items: ["Open [Savings goals](/app/goals) and choose Create goal.", "Name it, set a target and, if you like, a deadline.", "Use Add to goal whenever you put money aside. Take out if you spend some.", "To change the name, target, deadline or priority, choose Edit under the goal. What you have saved so far is kept."] },
       { t: "list", items: ["Amounts are tracked here only. They do not move money or change any account balance, so they never count as spending.", "With a deadline, the monthly figure is what you need to set aside each month, rounded up, to reach the target in time.", "The estimated finish date uses your contributions from the last 90 days. It is an estimate and changes as your pace changes."] },
     ],
   },
@@ -212,7 +212,7 @@ export const ARTICLES: Article[] = [
     related: ["financial-calendar", "expected-income"],
     body: [
       { t: "steps", items: ["Open [Bills](/app/bills/new) or [Subscriptions](/app/subscriptions/new) and add one.", "Choose the amount, how often it repeats, the first due date, the account it is paid from and a category.", "When you pay it, choose Mark paid. FinTrack records the expense and ticks off that due date."] },
-      { t: "list", items: ["A due date can be marked paid once, so it cannot be recorded twice.", "A monthly item on the 31st falls on the last day of shorter months.", "Overdue means the due date has passed without being marked paid. Due soon uses your reminder days.", "FinTrack cannot cancel a subscription with the provider. Mark it cancelled here once you have cancelled it with them."] },
+      { t: "list", items: ["A due date can be marked paid once, so it cannot be recorded twice.", "A monthly item on the 31st falls on the last day of shorter months.", "Overdue means the due date has passed without being marked paid. Due soon uses your reminder days.", "Anything due in the next 30 days, and anything overdue, also appears under Coming up on your dashboard.", "FinTrack cannot cancel a subscription with the provider. Mark it cancelled here once you have cancelled it with them."] },
     ],
   },
   {
