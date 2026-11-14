@@ -1,5 +1,10 @@
 # Migrations 8, 9 and 10: review before applying
 
+> **Update, 14 November 2026:** the owner approved 8 then 9, and both were applied to the live project (recorded as
+> `budgetbuddy_shared_spaces_and_hardening` and `budgetbuddy_profile_settings_ai_entitlements`). Verified afterwards: the
+> avatar bucket and its 4 policies exist, the old `members_manage` policy is gone, 0 unbalanced transactions, and the
+> previously skipped settings and shared-space tests pass. **Migration 10 is still not applied.**
+
 Status of the live Supabase project `glgpgmptugomfxoteyys`, checked by read-only queries on 14 November 2026.
 
 | Migration | File | Live? |

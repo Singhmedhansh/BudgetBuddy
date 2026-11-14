@@ -262,7 +262,8 @@ test.describe("profile completion and preferences (needs migration 9)", () => {
     await expect(page.getByText("Saved. Your profile is complete.")).toBeVisible();
     await page.reload();
     await expect(page.getByText("Complete", { exact: true })).toBeVisible();
-    await expect(page.getByLabel("Country")).toHaveValue("IN");
+    // Country is a styled select: the visible button shows the name and the hidden field carries the code that is stored.
+    expect(await page.locator("select[name=country]").inputValue()).toBe("IN");
     await open(page, "/app");
     await expect(page.getByRole("region", { name: "Complete your profile" })).toHaveCount(0);
   });
@@ -352,5 +353,36 @@ test.describe("sample data (preview account)", () => {
     await page.getByRole("button", { name: "Remove sample data" }).click();
     await expect(page).toHaveURL(/\/app$/);
     await expect(page.getByText("Sample data · fictional")).toHaveCount(0);
+  });
+});
+
+test.describe("profile photo upload (needs migration 9)", () => {
+  const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+
+  test("a photo uploads, shows for its owner, a wrong type is refused, and removing it leaves nothing behind", async ({ page }) => {
+    needMigration();
+    await page.goto("/app/settings");
+
+    // wrong type is refused before anything is sent
+    await page.getByLabel("Profile photo file").setInputFiles({ name: "x.gif", mimeType: "image/gif", buffer: Buffer.from("GIF89a") });
+    await expect(page.getByText("Choose a JPG, PNG or WebP image.")).toBeVisible();
+
+    await page.getByLabel("Profile photo file").setInputFiles({ name: "me.png", mimeType: "image/png", buffer: PNG });
+    await expect(page.getByRole("status").filter({ hasText: "Photo updated." })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Change photo" })).toBeVisible();
+    await expect(page.locator("main img").first()).toBeVisible();
+
+    // it persists across a reload and is stored in the person's own folder
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Change photo" })).toBeVisible();
+    const sb = await api();
+    const { data } = await sb.from("profiles").select("avatar_path,user_id").single();
+    expect(data!.avatar_path).toMatch(new RegExp(`^${data!.user_id}/avatar-`));
+
+    await page.getByRole("button", { name: "Remove" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Photo removed." })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Upload photo" })).toBeVisible();
+    const after = await sb.from("profiles").select("avatar_path").single();
+    expect(after.data!.avatar_path).toBeNull();
   });
 });

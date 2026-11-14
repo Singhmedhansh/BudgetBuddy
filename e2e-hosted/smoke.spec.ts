@@ -129,11 +129,13 @@ test.describe.serial("hosted preview", () => {
     expect(problems).toEqual([]);
   });
 
-  test("photo upload shows the migration-related message, not a connection error", async ({ page }) => {
+  test("a profile photo uploads, shows, and is removed again", async ({ page }) => {
     await login(page);
     await page.goto("/app/settings");
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
-    await page.locator('input[type=file]').setInputFiles({ name: "p.png", mimeType: "image/png", buffer: png });
-    await expect(page.getByText(/Photo storage has not been set up|database update/i)).toBeVisible();
+    await page.getByLabel("Profile photo file").setInputFiles({ name: "p.png", mimeType: "image/png", buffer: png });
+    await expect(page.getByRole("status").filter({ hasText: "Photo updated." })).toBeVisible();
+    await page.getByRole("button", { name: "Remove" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Photo removed." })).toBeVisible();
   });
 });
