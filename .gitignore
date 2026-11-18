@@ -49,3 +49,6 @@ playwright-report
 
 .vercel
 .env*
+scripts/perf/server.log
+scripts/perf/*.png
+scripts/perf/*.log

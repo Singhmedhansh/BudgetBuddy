@@ -1,11 +1,18 @@
 import { ProviderError, type CompletionRequest, type CompletionResult, type ProviderClient, type ProviderErrorKind } from "./types";
 
-/** Maps an HTTP status to a failure kind without ever including the response body or the key in the error. */
-export function kindFromStatus(status: number): ProviderErrorKind {
+/**
+ * Maps a failed response to a failure kind. The body is read only to tell apart cases the status cannot (Gemini
+ * answers a bad API key with 400; a retired model is a 404 or a 400 "decommissioned"). It is matched against fixed
+ * phrases and never copied into an error, a log or a response.
+ */
+export function kindFromStatus(status: number, body = ""): ProviderErrorKind {
+  const b = body.slice(0, 4000).toLowerCase();
   if (status === 429) return "rate_limit";
   if (status === 401 || status === 403) return "auth";
-  if (status === 408) return "timeout";
+  if (status === 408 || status === 504) return "timeout";
   if (status >= 500) return "server";
+  if (/api[_ ]key (not valid|invalid)|api_key_invalid|invalid api key/.test(b)) return "auth";
+  if (status === 404 || /model_not_found|decommissioned|no longer supported|is not found for api version|model .{0,60}does not exist/.test(b)) return "model_unavailable";
   return "bad_request";
 }
 
@@ -17,8 +24,8 @@ export function retryAfterMs(header: string | null, now = Date.now()): number | 
   return Number.isFinite(ms) && ms > 0 ? Math.min(ms, 5 * 60_000) : undefined;
 }
 
-async function send(url: string, init: RequestInit, req: CompletionRequest, timeoutMs: number): Promise<unknown> {
-  const timeout = AbortSignal.timeout(timeoutMs);
+async function send(url: string, init: RequestInit, req: CompletionRequest, defaultTimeoutMs: number): Promise<unknown> {
+  const timeout = AbortSignal.timeout(req.timeoutMs ?? defaultTimeoutMs);
   const signal = req.signal ? AbortSignal.any([req.signal, timeout]) : timeout;
   let res: Response;
   try {
@@ -26,7 +33,10 @@ async function send(url: string, init: RequestInit, req: CompletionRequest, time
   } catch (e) {
     throw new ProviderError((e as Error)?.name === "TimeoutError" || (e as Error)?.name === "AbortError" ? "timeout" : "network");
   }
-  if (!res.ok) throw new ProviderError(kindFromStatus(res.status), retryAfterMs(res.headers.get("retry-after")));
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new ProviderError(kindFromStatus(res.status, body), retryAfterMs(res.headers.get("retry-after")));
+  }
   try {
     return await res.json();
   } catch {

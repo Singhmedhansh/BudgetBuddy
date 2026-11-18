@@ -20,7 +20,7 @@ async function toggle(page: import("@playwright/test").Page, name: string | RegE
 }
 const needMigration = () => test.skip(!migrated, "migration 9 is not applied to this project yet");
 
-const SETTINGS_PAGES = ["/app/settings", "/app/settings/preferences", "/app/settings/security", "/app/settings/notifications", "/app/settings/connected", "/app/settings/privacy"];
+const SETTINGS_PAGES = ["/app/settings", "/app/settings/preferences", "/app/settings/security", "/app/settings/notifications", "/app/settings/billing", "/app/settings/connected", "/app/settings/privacy"];
 
 async function open(page: Page, path: string) {
   await page.goto(path);
@@ -34,14 +34,14 @@ test.describe("settings area", () => {
       expect(res?.status()).toBeLessThan(400);
       await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
       const nav = page.getByRole("navigation", { name: "Settings" });
-      await expect(nav.getByRole("link")).toHaveCount(6);
+      await expect(nav.getByRole("link")).toHaveCount(7);
       await expect(nav.locator("[aria-current='page']")).toHaveCount(1);
     });
   }
 
   test("every settings section can be reached from the navigation", async ({ page }) => {
     await open(page, "/app/settings");
-    for (const label of ["Preferences", "Security", "Notifications", "Connected accounts", "Data and privacy", "Profile"]) {
+    for (const label of ["Preferences", "Security", "Notifications", "Plan and billing", "Connected accounts", "Data and privacy", "Profile"]) {
       await page.getByRole("navigation", { name: "Settings" }).getByRole("link", { name: label }).click();
       await expect(page.getByRole("navigation", { name: "Settings" }).getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
     }

@@ -27,7 +27,8 @@ export async function forecastBasis(ctx: Ctx, horizonDays: number): Promise<Fore
   const end = addDays(today, horizonDays);
   const windowStart = addDays(today, -WINDOW_DAYS);
 
-  const accounts = (await listAccounts(ctx)).filter((a) => (SPENDABLE as readonly string[]).includes(a.type));
+  const allAccounts = await listAccounts(ctx);
+  const accounts = allAccounts.filter((a) => (SPENDABLE as readonly string[]).includes(a.type));
   const startBalance = accounts.reduce((s, a) => s + a.balance, 0);
 
   const [{ data: items }, { data: pays }, { data: terms }, { data: first }] = await Promise.all([
@@ -47,7 +48,7 @@ export async function forecastBasis(ctx: Ctx, horizonDays: number): Promise<Fore
     }
   }
   // Debt minimum payments on their due day each month: an estimate from the user's own terms.
-  const debtAccounts = new Map((await listAccounts(ctx)).map((a) => [a.id, a]));
+  const debtAccounts = new Map(allAccounts.map((a) => [a.id, a]));
   for (const t of terms ?? []) {
     const acct = debtAccounts.get(t.account_id as string);
     if (!acct || acct.balance <= 0 || !t.due_day || !Number(t.min_payment)) continue;

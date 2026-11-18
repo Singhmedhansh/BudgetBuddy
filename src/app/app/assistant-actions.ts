@@ -4,6 +4,7 @@ import { z } from "zod";
 import { requireSpace } from "@/server/context";
 import { ask, MESSAGES, type UsageStore } from "@/server/ai/assistant";
 import { loadFacts } from "@/server/ai/facts";
+import { coalesce, flightKey } from "@/server/ai/inflight";
 
 export interface Turn {
   role: "user" | "assistant";
@@ -39,11 +40,25 @@ export async function askAssistantAction(prev: AssistantState | undefined, form:
       return r.allowed && r.id !== undefined ? { allowed: true, id: r.id } : { allowed: false, reason: r.reason ?? "hourly" };
     },
     async settle(id, r) {
-      await ctx.supabase.rpc("ai_settle", { p_id: id, p_status: r.status, p_provider: r.provider, p_model: r.model, p_prompt: r.promptTokens, p_completion: r.completionTokens, p_latency: r.latencyMs });
+      await ctx.supabase.rpc("ai_settle", {
+        p_id: id,
+        p_status: r.status,
+        p_provider: r.provider,
+        p_model: r.model,
+        p_prompt: r.promptTokens,
+        p_completion: r.completionTokens,
+        p_latency: r.latencyMs,
+        p_error_kind: r.errorKind ?? null,
+        p_attempts: r.attempts ?? 0,
+        p_fallbacks: r.fallbacks ?? 0,
+        p_rate_limited: r.rateLimited ?? 0,
+      });
     },
   };
 
-  const out = await ask(question, { usage, loadFacts: () => loadFacts(ctx) }, turns.map(({ role, content }) => ({ role, content })));
+  // Identical concurrent submissions from this person share one reservation and one provider call.
+  const history2 = turns.map(({ role, content }) => ({ role, content }));
+  const out = await coalesce(flightKey(ctx.user.id, ctx.space.id, question.trim(), JSON.stringify(history2.slice(-4))), () => ask(question, { usage, loadFacts: () => loadFacts(ctx) }, history2));
   if (!out.ok) return { turns, error: out.message ?? MESSAGES.unavailable, question };
   const next: Turn[] = [...turns, { role: "user", content: question.trim() }, { role: "assistant", content: out.answer, source: out.source }];
   return { turns: next.slice(-12) };

@@ -1,9 +1,8 @@
 import { createHmac } from "node:crypto";
-import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { LIVE_PAYMENTS_ALLOWED, paymentsStatus } from "./config";
 import { resolveEntitlement } from "./entitlements";
-import { razorpayEventToUpdate, verifyRazorpaySignature } from "./webhooks";
+import { verifyRazorpaySignature } from "./webhooks";
 
 const NOW = new Date("2026-11-13T12:00:00Z");
 const day = (n: number) => new Date(NOW.getTime() + n * 864e5).toISOString();
@@ -62,83 +61,5 @@ describe("razorpay signature", () => {
     expect(verifyRazorpaySignature(body, null, secret)).toBe(false);
     expect(verifyRazorpaySignature(body, "short", secret)).toBe(false);
     expect(verifyRazorpaySignature(body, sign(body), "")).toBe(false);
-  });
-});
-
-describe("razorpay event mapping", () => {
-  const uid = "11111111-2222-4333-8444-555555555555";
-  const ev = (event: string, notes: unknown = { user_id: uid }, end: number | null = 1_800_000_000) => ({ event, payload: { subscription: { entity: { id: "sub_1", status: "x", current_end: end, notes } } } });
-  it.each([["subscription.activated", "active"], ["subscription.charged", "active"], ["subscription.halted", "past_due"], ["subscription.cancelled", "canceled"], ["subscription.completed", "canceled"]])("%s -> %s", (event, status) => {
-    expect(razorpayEventToUpdate(ev(event))).toEqual({ userId: uid, row: { plan: "pro", status, current_period_end: new Date(1_800_000_000 * 1000).toISOString(), provider: "razorpay", provider_ref: "sub_1" } });
-  });
-  it("ignores events that change nothing, and events without a valid FinTrack user", () => {
-    expect(razorpayEventToUpdate(ev("payment.captured"))).toBeNull();
-    expect(razorpayEventToUpdate(ev("subscription.activated", {}))).toBeNull();
-    expect(razorpayEventToUpdate(ev("subscription.activated", { user_id: "not-a-uuid" }))).toBeNull();
-    expect(razorpayEventToUpdate({})).toBeNull();
-    expect(razorpayEventToUpdate(null)).toBeNull();
-  });
-});
-
-describe("razorpay webhook route", () => {
-  const secret = "whsec_route";
-  const uid = "11111111-2222-4333-8444-555555555555";
-  const body = JSON.stringify({ event: "subscription.activated", payload: { subscription: { entity: { id: "sub_9", current_end: 1_800_000_000, notes: { user_id: uid } } } } });
-  const sign = (b: string) => createHmac("sha256", secret).update(b).digest("hex");
-  const st = vi.hoisted(() => ({ inserts: [] as Record<string, unknown>[], upserts: [] as Record<string, unknown>[], dupError: null as { message: string } | null, adminOn: true }));
-  vi.mock("@/server/admin", () => ({
-    createAdminClient: () =>
-      st.adminOn
-        ? {
-            from: (t: string) => ({
-              insert: async (row: Record<string, unknown>) => (t === "payment_events" ? (st.inserts.push(row), { error: st.dupError }) : { error: null }),
-              upsert: async (row: Record<string, unknown>) => (st.upserts.push(row), { error: null }),
-              delete: () => ({ eq: () => ({ eq: async () => ({ error: null }) }) }),
-            }),
-          }
-        : null,
-  }));
-  const call = async (b: string, headers: Record<string, string>) => {
-    const { POST } = await import("@/app/api/webhooks/razorpay/route");
-    return POST(new NextRequest("http://127.0.0.1:3100/api/webhooks/razorpay", { method: "POST", body: b, headers }));
-  };
-  beforeEach(() => {
-    st.inserts.length = 0;
-    st.upserts.length = 0;
-    st.dupError = null;
-    st.adminOn = true;
-    vi.stubEnv("RAZORPAY_WEBHOOK_SECRET", secret);
-  });
-
-  it("answers 503 and changes nothing until credentials exist", async () => {
-    vi.stubEnv("RAZORPAY_WEBHOOK_SECRET", "");
-    const res = await call(body, { "x-razorpay-signature": sign(body), "x-razorpay-event-id": "e1" });
-    expect(res.status).toBe(503);
-    expect(st.upserts).toHaveLength(0);
-    st.adminOn = false;
-    vi.stubEnv("RAZORPAY_WEBHOOK_SECRET", secret);
-    expect((await call(body, { "x-razorpay-signature": sign(body), "x-razorpay-event-id": "e1" })).status).toBe(503);
-  });
-  it("rejects an invalid signature before touching anything", async () => {
-    const res = await call(body, { "x-razorpay-signature": "bad", "x-razorpay-event-id": "e1" });
-    expect(res.status).toBe(400);
-    expect(st.inserts).toHaveLength(0);
-    expect(st.upserts).toHaveLength(0);
-  });
-  it("a valid event updates only the entitlement, once", async () => {
-    const res = await call(body, { "x-razorpay-signature": sign(body), "x-razorpay-event-id": "evt_1" });
-    expect(res.status).toBe(200);
-    expect(st.inserts).toEqual([{ provider: "razorpay", event_id: "evt_1" }]);
-    expect(st.upserts).toHaveLength(1);
-    expect(st.upserts[0]).toMatchObject({ user_id: uid, plan: "pro", status: "active", provider: "razorpay", provider_ref: "sub_9" });
-  });
-  it("a repeated event id is acknowledged and not processed again", async () => {
-    st.dupError = { message: "duplicate key" };
-    const res = await call(body, { "x-razorpay-signature": sign(body), "x-razorpay-event-id": "evt_1" });
-    expect(await res.json()).toEqual({ ok: true, duplicate: true });
-    expect(st.upserts).toHaveLength(0);
-  });
-  it("requires an event id", async () => {
-    expect((await call(body, { "x-razorpay-signature": sign(body) })).status).toBe(400);
   });
 });

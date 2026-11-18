@@ -1,0 +1,152 @@
+{
+ "base": "http://127.0.0.1:3100",
+ "loginMs": 3931,
+ "hard": [
+  {
+   "route": "/app",
+   "total": 1236,
+   "ttfb": 19,
+   "dcl": 943,
+   "fcp": 440,
+   "js": 153
+  },
+  {
+   "route": "/app/transactions",
+   "total": 1243,
+   "ttfb": 11,
+   "dcl": 1198,
+   "fcp": 836,
+   "js": 154
+  },
+  {
+   "route": "/app/accounts",
+   "total": 756,
+   "ttfb": 18,
+   "dcl": 689,
+   "fcp": 408,
+   "js": 152
+  },
+  {
+   "route": "/app/budgets",
+   "total": 743,
+   "ttfb": 20,
+   "dcl": 479,
+   "fcp": 448,
+   "js": 152
+  },
+  {
+   "route": "/app/analytics",
+   "total": 1082,
+   "ttfb": 9,
+   "dcl": 1038,
+   "fcp": 400,
+   "js": 155
+  },
+  {
+   "route": "/app/forecast",
+   "total": 879,
+   "ttfb": 8,
+   "dcl": 825,
+   "fcp": 448,
+   "js": 156
+  },
+  {
+   "route": "/app/goals",
+   "total": 410,
+   "ttfb": 7,
+   "dcl": 250,
+   "fcp": null,
+   "js": 145
+  },
+  {
+   "route": "/app/assistant",
+   "total": 542,
+   "ttfb": 26,
+   "dcl": 453,
+   "fcp": null,
+   "js": 146
+  },
+  {
+   "route": "/app/settings",
+   "total": 547,
+   "ttfb": 87,
+   "dcl": 309,
+   "fcp": 508,
+   "js": 222
+  },
+  {
+   "route": "/app/income",
+   "total": 786,
+   "ttfb": 21,
+   "dcl": 533,
+   "fcp": 432,
+   "js": 152
+  },
+  {
+   "route": "/app/bills",
+   "total": 665,
+   "ttfb": 11,
+   "dcl": 397,
+   "fcp": 396,
+   "js": 152
+  },
+  {
+   "route": "/app/subscriptions",
+   "total": 664,
+   "ttfb": 6,
+   "dcl": 410,
+   "fcp": 392,
+   "js": 152
+  },
+  {
+   "route": "/app/debt",
+   "total": 744,
+   "ttfb": 8,
+   "dcl": 380,
+   "fcp": 408,
+   "js": 152
+  },
+  {
+   "route": "/app/calendar",
+   "total": 757,
+   "ttfb": 17,
+   "dcl": 369,
+   "fcp": 412,
+   "js": 152
+  }
+ ],
+ "soft": [
+  {
+   "route": "/app/transactions",
+   "total": 930
+  },
+  {
+   "route": "/app/accounts",
+   "total": 894
+  },
+  {
+   "route": "/app/budgets",
+   "total": 886
+  },
+  {
+   "route": "/app/analytics",
+   "total": 883
+  },
+  {
+   "route": "/app/forecast",
+   "total": 868
+  },
+  {
+   "route": "/app/goals",
+   "total": 362
+  },
+  {
+   "route": "/app/assistant",
+   "total": 898
+  },
+  {
+   "route": "/app/settings",
+   "total": 1435
+  }
+ ]
+}

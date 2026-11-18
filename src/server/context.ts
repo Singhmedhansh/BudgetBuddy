@@ -19,24 +19,30 @@ export const getContext = cache(async () => {
   // Everything here is per-user, per-request. Opting out of prerendering up front
   // also stops Next's prefetch prerender tripping on clock reads (Date.now) below.
   await connection();
+  const t0 = Date.now();
   const supabase = await createClient();
   if (!supabase) redirect("/login");
   const { data } = await supabase.auth.getUser();
   if (!data.user) redirect("/login");
+  const tAuth = Date.now() - t0;
 
-  const { data: profileData } = await supabase.rpc("ensure_profile");
+  // Three independent reads: run them together instead of one after another (each is a network round trip).
+  // Membership rows are fetched for every space the person belongs to and the active one is picked locally,
+  // which removes a fourth, dependent round trip. RLS still scopes every row to this user.
+  const [profileRes, spacesRes, membersRes] = await Promise.all([
+    supabase.rpc("ensure_profile"),
+    supabase.from("financial_spaces").select("*").order("created_at"),
+    supabase.from("financial_space_members").select("space_id,role").eq("user_id", data.user.id),
+  ]);
+  const profileData = profileRes.data;
   const profile = (Array.isArray(profileData) ? profileData[0] : profileData) as Profile;
-
-  const { data: spaces } = await supabase.from("financial_spaces").select("*").order("created_at");
-  const list = (spaces ?? []) as Space[];
+  const list = (spacesRes.data ?? []) as Space[];
   // The active space is the one the person chose, if they still belong to it; otherwise the first.
   const wanted = (await cookies()).get(ACTIVE_SPACE_COOKIE)?.value;
   const space = list.find((s) => s.id === wanted) ?? list[0] ?? null;
-  let role: SpaceRole | null = null;
-  if (space) {
-    const { data: m } = await supabase.from("financial_space_members").select("role").eq("space_id", space.id).eq("user_id", data.user.id).maybeSingle();
-    role = (m?.role as SpaceRole | undefined) ?? null;
-  }
+  const role = space ? ((membersRes.data ?? []).find((m) => m.space_id === space.id)?.role as SpaceRole | undefined) ?? null : null;
+  // Opt-in timing (PERF_LOG=1): durations only, never identifiers or data. Shows up in the host's function logs.
+  if (process.env.PERF_LOG === "1") console.log(`[perf] getContext auth=${tAuth}ms total=${Date.now() - t0}ms`);
   return { supabase, user: data.user, profile, spaces: list, space, role };
 });
 
