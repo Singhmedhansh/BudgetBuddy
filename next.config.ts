@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
+  // Statement uploads (CSV or PDF, up to 4 MB) arrive as server action bodies; the default cap is 1 MB.
+  experimental: { serverActions: { bodySizeLimit: "5mb" } },
   async headers() {
     return [
       {

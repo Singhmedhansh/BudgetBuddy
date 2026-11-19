@@ -33,7 +33,7 @@ export default defineConfig({
   projects: [
     { name: "setup", testMatch: /auth\.setup\.ts/ },
     // Real viewport sizes, not iframes.
-    { name: "desktop-1440", testMatch: /(flows|journeys|auth|security|responsive|settings|brand|controls|modules|concurrency)\.spec\.ts/, use: { ...devices["Desktop Chrome"], ...base, viewport: { width: 1440, height: 900 }, storageState: "e2e/.auth/user.json" }, dependencies: ["setup"] },
+    { name: "desktop-1440", testMatch: /(flows|journeys|auth|security|responsive|settings|brand|controls|modules|concurrency|statements)\.spec\.ts/, use: { ...devices["Desktop Chrome"], ...base, viewport: { width: 1440, height: 900 }, storageState: "e2e/.auth/user.json" }, dependencies: ["setup"] },
     { name: "laptop-1280", testMatch: /responsive\.spec\.ts/, use: { ...devices["Desktop Chrome"], ...base, viewport: { width: 1280, height: 800 }, storageState: "e2e/.auth/user.json" }, dependencies: ["setup"] },
     { name: "tablet-768", testMatch: /responsive\.spec\.ts/, use: { ...devices["Desktop Chrome"], ...base, viewport: { width: 768, height: 1024 }, storageState: "e2e/.auth/user.json" }, dependencies: ["setup"] },
     { name: "mobile-390", testMatch: /responsive\.spec\.ts/, use: { ...devices["Pixel 7"], ...base, viewport: { width: 390, height: 844 }, storageState: "e2e/.auth/user.json" }, dependencies: ["setup"] },

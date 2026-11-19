@@ -95,7 +95,7 @@ export default async function ReviewPage({ params, searchParams }: { params: Pro
                     <td className="py-3 pr-3 text-right"><Money minor={r.amount} currency={c} signed className={r.amount > 0 ? "text-pos-text" : ""} /></td>
                     <td className="py-3">
                       <Select name={`cat_${i}`} defaultValue={r.category_id} label={`Category for row ${r.line}`} size="sm" className="min-w-40 max-w-[14rem]" options={cats.map((cat) => ({ value: cat.id, label: cat.name }))} />
-                      {r.suggested ? <span className="block text-xs text-muted">Suggested from earlier transactions</span> : null}
+                      {r.suggested ? <span className="block text-xs text-muted">{r.ai ? "Suggested by AI, please check" : "Suggested from earlier transactions"}</span> : null}
                     </td>
                   </tr>
                 );

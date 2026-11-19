@@ -23,6 +23,7 @@ claimed beyond it.
 | Faster navigation (parallel context, request memo, loading states) | yes | n/a | n/a | n/a | no | no |
 | AI gateway routing, fallback, retry, cooldowns, dedup | yes | yes | n/a | **yes** (2 live tests: real answer, forced failover Gemini to Groq) | no | no |
 | AI model names | n/a | n/a | n/a | **yes** (live catalogue lists them; a real call to each provider answered) | no | no |
+| Statement import: PDF reading, AI categories (CSV categories from history already existed) | yes | yes (11 + 3 tests) | n/a | **yes** (real Gemini/Groq read a sample statement: 3 of 3 rows, amounts exact, 0 dropped, categories correct) | no | no |
 | Razorpay checkout, signature and amount verification, webhooks | yes | yes | **no** | no | no | no |
 | PayPal checkout, verification, webhooks, refunds and renewals via transactions | yes | yes | **no** | no | no | no |
 | Billing rules, ledger, RLS, rollback (migrations 11 and 12) | yes (in-process Postgres) | n/a | n/a | n/a | **not applied anywhere** | no |
@@ -117,6 +118,23 @@ the app). In the Supabase SQL editor:
 ```sql
 insert into budgetbuddy.platform_admins (user_id) values ('<your auth.users id>');
 ```
+
+## Statement import with AI (CSV and PDF)
+
+Upload a CSV or a **text-based** PDF (not a scan, not password protected, up to 30 pages and 4 MB) on Import and export.
+Nothing is written to the ledger until the person reviews the rows and confirms, so the flow is "upload, then one click", not silent auto-posting.
+
+- **Reading a PDF** needs AI on. The PDF text is split into chunks (at most 8) and the model lists the transactions. Every row is then
+  **verified against the PDF text** (its date, its exact amount and the words of its description must all appear there) and parsed by the same strict
+  date and amount parsers as a CSV. A row the model invented or whose figure it changed is dropped and listed. A printed Dr/Cr or minus sign overrides the model's direction.
+- **Categories** for merchants not seen before are suggested by AI from the person's own category list, by number, and only of the matching kind
+  (expense or income). They are marked "Suggested by AI, please check". Only descriptions are sent, never amounts. Merchants already categorised before keep using history.
+- **Privacy:** PDF text goes to an external provider. The form says so and has a checkbox; with it unticked a CSV never leaves our servers. Free-tier provider terms may allow
+  provider-side retention or training: review the Gemini and Groq terms for your keys and use paid/no-training settings before enabling this for real users.
+- **Limits:** shares the per-person AI allowance (20 calls an hour, 60,000 tokens a day by default); a long PDF uses one call per chunk. Uploads use the server-action
+  body limit, raised to 5 MB in `next.config.ts`.
+- **Not supported:** scans and photos (no OCR), Excel files, password-protected PDFs.
+- **Switched off by default:** with `AI_ENABLED` unset a PDF is refused with a plain message and a CSV works exactly as before.
 
 ## Payments
 

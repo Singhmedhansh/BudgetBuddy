@@ -5,7 +5,11 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { parseCsv, CsvError } from "@/domain/csv";
 import { startOfLocalDay } from "@/domain/period";
-import { detectMapping, fingerprints, parseStatementRows, type DateOrder } from "@/domain/statement";
+import { detectMapping, fingerprints, parseStatementRows, type DateOrder, type ParsedRow, type RowProblem } from "@/domain/statement";
+import { pdfText } from "@/server/pdf-text";
+import { AI_STATEMENT_MESSAGES, categoriseWithAi, readStatementWithAi, type CategoryChoice } from "@/server/ai/statement";
+import { usageStoreFor } from "@/server/ai/usage-store";
+import { aiStatus } from "@/server/ai/config";
 import { requireSpace } from "@/server/context";
 import { friendlyDbError } from "@/server/ledger-write";
 import { sniffType } from "@/lib/upload";
@@ -26,9 +30,11 @@ export interface JobRow {
   include: boolean;
   flag: "new" | "already_imported" | "possible_duplicate";
   suggested: boolean;
+  /** True when the AI, not the person's history, suggested the category. Shown on the review screen. */
+  ai?: boolean;
 }
 
-const MAX_BYTES = 2 * 1024 * 1024;
+const MAX_BYTES = 4 * 1024 * 1024;
 const MAX_ROWS = 5000;
 
 async function ensureCategory(ctx: Awaited<ReturnType<typeof requireSpace>>, name: string, kind: "expense" | "income"): Promise<string> {
@@ -47,28 +53,48 @@ export async function uploadStatementAction(_: ImportState | undefined, form: Fo
   if (!parsed.success) return { fieldErrors: { accountId: parsed.error.issues[0].message } };
 
   const file = form.get("file");
-  if (!(file instanceof File) || file.size === 0) return { fieldErrors: { file: "Choose a CSV file." } };
-  if (file.size > MAX_BYTES) return { fieldErrors: { file: "The file is larger than 2 MB. Split it by date and import in parts." } };
-  if (!/\.csv$/i.test(file.name)) return { fieldErrors: { file: "Only .csv files are supported. In Excel, use Save as, CSV." } };
+  if (!(file instanceof File) || file.size === 0) return { fieldErrors: { file: "Choose a CSV or PDF statement." } };
+  if (file.size > MAX_BYTES) return { fieldErrors: { file: "The file is larger than 4 MB. Split it by date and import in parts." } };
+  const isPdf = /\.pdf$/i.test(file.name);
+  if (!isPdf && !/\.csv$/i.test(file.name)) return { fieldErrors: { file: "Only .csv and .pdf statements are supported. In Excel, use Save as, CSV." } };
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (sniffType(bytes) !== "text/plain") return { fieldErrors: { file: "That does not look like a text CSV file." } };
+  const kind = sniffType(bytes);
+  const useAi = form.get("useAi") === "on";
+  const aiDeps = { usage: usageStoreFor(ctx.supabase) };
 
-  let text: string;
-  try {
-    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    return { fieldErrors: { file: "The file is not UTF-8 text. Re-save it as CSV UTF-8." } };
+  let rows: ParsedRow[];
+  let problems: RowProblem[];
+  if (isPdf) {
+    if (kind !== "application/pdf") return { fieldErrors: { file: "That does not look like a PDF file." } };
+    if (!aiStatus().available) return { fieldErrors: { file: AI_STATEMENT_MESSAGES.disabled } };
+    if (!useAi) return { fieldErrors: { useAi: "Tick the box to let the AI reader process this PDF." } };
+    const pdf = await pdfText(bytes);
+    if (!pdf.ok) {
+      const msg = pdf.reason === "encrypted" ? "That PDF is password protected. Remove the password and upload it again." : pdf.reason === "no_text" ? AI_STATEMENT_MESSAGES.unreadable : "That PDF could not be read, or it has more than 30 pages. Split it by month.";
+      return { fieldErrors: { file: msg } };
+    }
+    const read = await readStatementWithAi(pdf.text, aiDeps, { currency: ctx.space.currency, dateOrder: parsed.data.dateOrder as DateOrder });
+    if (!read.ok) return { fieldErrors: { file: AI_STATEMENT_MESSAGES[read.reason] } };
+    rows = read.rows;
+    problems = read.problems;
+  } else {
+    if (kind !== "text/plain") return { fieldErrors: { file: "That does not look like a text CSV file." } };
+    let text: string;
+    try {
+      text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      return { fieldErrors: { file: "The file is not UTF-8 text. Re-save it as CSV UTF-8." } };
+    }
+    let table: string[][];
+    try {
+      table = parseCsv(text);
+    } catch (e) {
+      return { fieldErrors: { file: e instanceof CsvError ? e.message : "The file could not be read." } };
+    }
+    const detected = detectMapping(table);
+    if (!detected) return { fieldErrors: { file: "We could not find the columns. The file needs a header row with Date, Description and Amount (or Debit and Credit)." } };
+    ({ rows, problems } = parseStatementRows(table, detected.headerRow, { ...detected.mapping, positiveIs: parsed.data.positiveIs }, { currency: ctx.space.currency, dateOrder: parsed.data.dateOrder as DateOrder }));
   }
-
-  let table: string[][];
-  try {
-    table = parseCsv(text);
-  } catch (e) {
-    return { fieldErrors: { file: e instanceof CsvError ? e.message : "The file could not be read." } };
-  }
-  const detected = detectMapping(table);
-  if (!detected) return { fieldErrors: { file: "We could not find the columns. The file needs a header row with Date, Description and Amount (or Debit and Credit)." } };
-  const { rows, problems } = parseStatementRows(table, detected.headerRow, { ...detected.mapping, positiveIs: parsed.data.positiveIs }, { currency: ctx.space.currency, dateOrder: parsed.data.dateOrder as DateOrder });
   if (rows.length > MAX_ROWS) return { fieldErrors: { file: `The file has more than ${MAX_ROWS} usable rows. Split it and import in parts.` } };
   if (rows.length === 0) return { fieldErrors: { file: problems.length ? "No row could be read. See the date and amount formats in Help." : "The file has no transactions." } };
 
@@ -98,11 +124,25 @@ export async function uploadStatementAction(_: ImportState | undefined, form: Fo
     if (acct) existing.push({ account: acct.account_id!, amount: Number(acct.amount), date: new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date(t.occurred_at as string)) });
   }
 
+  // Descriptions the person's history does not cover are offered to the AI, which can only choose among their own categories.
+  const history_best = (desc: string) => {
+    const counts = byMerchant.get(desc.slice(0, 120).toLowerCase());
+    return counts ? [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0] : null;
+  };
+  let aiPicks = new Map<string, string>();
+  if (useAi && aiStatus().available) {
+    const { data: cats } = await ctx.supabase.from("categories").select("id,name,kind").eq("space_id", ctx.space.id).order("name");
+    const choices = ((cats ?? []) as CategoryChoice[]).filter((c) => c.name !== "Uncategorised" && c.name !== "Other income");
+    const unmatched = rows.filter((r) => !history_best(r.description)).map((r) => ({ description: r.description, direction: (r.amount > 0 ? "in" : "out") as "in" | "out" }));
+    aiPicks = await categoriseWithAi(unmatched, choices, aiDeps);
+  }
+
   const jobRows: JobRow[] = rows.map((r, i) => {
     const [y, m, d] = r.date.split("-").map(Number);
     const occurred = new Date(startOfLocalDay(y, m, d, tz).getTime() + 12 * 3600 * 1000);
-    const counts = byMerchant.get(r.description.slice(0, 120).toLowerCase());
-    const best = counts ? [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0] : null;
+    const fromHistory = history_best(r.description);
+    const fromAi = fromHistory ? undefined : aiPicks.get(`${r.amount > 0 ? "in" : "out"}|${r.description}`);
+    const best = fromHistory ?? fromAi ?? null;
     const fallback = r.amount > 0 ? incomeCat : expenseCat;
     const isDup = !alreadySet.has(fps[i]) && existing.some((e) => e.date === r.date && e.amount === r.amount);
     const flag: JobRow["flag"] = alreadySet.has(fps[i]) ? "already_imported" : isDup ? "possible_duplicate" : "new";
@@ -117,6 +157,7 @@ export async function uploadStatementAction(_: ImportState | undefined, form: Fo
       include: flag === "new",
       flag,
       suggested: Boolean(best),
+      ...(fromAi ? { ai: true } : {}),
     };
   });
 
