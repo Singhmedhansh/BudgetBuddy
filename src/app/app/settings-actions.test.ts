@@ -29,6 +29,9 @@ let profile: Record<string, unknown>;
 const getContext = vi.fn(async () => ({ supabase, user, profile }));
 vi.mock("@/server/context", () => ({ getContext: () => getContext(), ACTIVE_SPACE_COOKIE: "bb-space" }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// Hermetic: siteUrl() prefers NEXT_PUBLIC_SITE_URL when set, which differs between a developer machine and CI. Unset it so the
+// mocked request host below is what the links are built from.
+vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
 vi.mock("next/headers", () => ({ cookies: async () => ({ delete: vi.fn() }), headers: async () => new Headers({ host: "127.0.0.1:3100" }) }));
 vi.mock("next/navigation", () => ({
   redirect: (to: string) => {
