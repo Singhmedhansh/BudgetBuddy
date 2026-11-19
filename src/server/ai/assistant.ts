@@ -18,10 +18,24 @@ export const MESSAGES = {
   not_ready: "The assistant needs a database update that has not been applied yet.",
 } as const;
 
+export interface UsageResult {
+  status: "ok" | "error";
+  provider: string | null;
+  model: string | null;
+  promptTokens: number;
+  completionTokens: number;
+  latencyMs: number;
+  /** Failure category (rate_limit, auth, timeout, ...) for the usage dashboard. Never a message or a key. */
+  errorKind?: string | null;
+  attempts?: number;
+  fallbacks?: number;
+  rateLimited?: number;
+}
+
 export interface UsageStore {
   /** Reserve a call before making it, so parallel requests cannot slip past the limits. */
   reserve(limits: { perHour: number; tokensPerDay: number }): Promise<{ allowed: true; id: number } | { allowed: false; reason: "hourly" | "daily" } | { allowed: false; reason: "not_ready" }>;
-  settle(id: number, r: { status: "ok" | "error"; provider: string | null; model: string | null; promptTokens: number; completionTokens: number; latencyMs: number }): Promise<void>;
+  settle(id: number, r: UsageResult): Promise<void>;
 }
 
 export interface AssistantDeps {
@@ -53,14 +67,27 @@ export async function ask(question: string, deps: AssistantDeps, history: ChatMe
 
   const now = deps.now ?? Date.now;
   const started = now();
-  const settle = (status: "ok" | "error", r?: RouterResult) =>
-    deps.usage.settle(slot.id, { status, provider: r?.provider ?? null, model: r?.model ?? null, promptTokens: r?.promptTokens ?? 0, completionTokens: r?.completionTokens ?? 0, latencyMs: now() - started }).catch(() => undefined);
+  const settle = (status: "ok" | "error", r?: RouterResult, failure?: { kind: string; attempts: number; rateLimited: number }) =>
+    deps.usage
+      .settle(slot.id, {
+        status,
+        provider: r?.provider ?? null,
+        model: r?.model ?? null,
+        promptTokens: r?.promptTokens ?? 0,
+        completionTokens: r?.completionTokens ?? 0,
+        latencyMs: now() - started,
+        errorKind: failure?.kind ?? null,
+        attempts: r?.attempts ?? failure?.attempts ?? 0,
+        fallbacks: r?.fallbacks ?? Math.max(0, (failure?.attempts ?? 0) - 1),
+        rateLimited: r?.rateLimited ?? failure?.rateLimited ?? 0,
+      })
+      .catch(() => undefined);
 
   let facts: Facts;
   try {
     facts = await deps.loadFacts();
   } catch {
-    await settle("error");
+    await settle("error", undefined, { kind: "facts", attempts: 0, rateLimited: 0 });
     return fail("unavailable");
   }
 
@@ -71,8 +98,10 @@ export async function ask(question: string, deps: AssistantDeps, history: ChatMe
   try {
     out = await (deps.generate ?? generate)(config, req);
   } catch (e) {
-    await settle("error");
-    return e instanceof AiUnavailableError ? fail("unavailable") : fail("unavailable");
+    const trail = e instanceof AiUnavailableError ? e.trail : [];
+    const kind = e instanceof AiUnavailableError ? (e.cause_ === "all_failed" ? (trail.at(-1)?.kind ?? "all_failed") : e.cause_) : "internal";
+    await settle("error", undefined, { kind, attempts: trail.length, rateLimited: trail.filter((t) => t.kind === "rate_limit").length });
+    return fail("unavailable");
   }
   await settle("ok", out);
 

@@ -142,14 +142,14 @@ test.describe("signup validation", () => {
   test("every problem is reported in plain words and nothing is created", async ({ page }) => {
     await page.goto("/signup");
     await page.waitForLoadState("networkidle");
-    await page.getByRole("button", { name: /create|sign up/i }).click();
+    await page.getByRole("button", { name: "Create account" }).click();
     await expect(page.getByText("Enter your name.")).toBeVisible();
     await expect(page.getByText(/valid email/i)).toBeVisible();
     await page.getByLabel("Name").fill("E2E Person");
     await page.getByLabel("Email").fill("e2e-person@example.test");
     await page.getByLabel("Password", { exact: true }).fill("short");
     await page.getByLabel("Confirm password").fill("different");
-    await page.getByRole("button", { name: /create|sign up/i }).click();
+    await page.getByRole("button", { name: "Create account" }).click();
     await expect(page.getByText(/at least 10|too short|10 characters/i).first()).toBeVisible();
     await expect(page.locator("body")).not.toContainText("Invalid input");
     // what was typed is kept after the error

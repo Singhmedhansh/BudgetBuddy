@@ -7,6 +7,8 @@ export interface CompletionRequest {
   messages: ChatMessage[];
   maxOutputTokens: number;
   signal?: AbortSignal;
+  /** Per-call timeout; the gateway sets it from configuration. */
+  timeoutMs?: number;
 }
 export interface CompletionResult {
   text: string;
@@ -14,7 +16,7 @@ export interface CompletionResult {
   completionTokens: number;
 }
 
-export type ProviderErrorKind = "rate_limit" | "auth" | "server" | "bad_request" | "network" | "timeout" | "empty";
+export type ProviderErrorKind = "rate_limit" | "auth" | "server" | "bad_request" | "network" | "timeout" | "empty" | "model_unavailable";
 
 /** A provider failure with a safe, key-free message. `kind` decides whether failing over to another key is sensible. */
 export class ProviderError extends Error {

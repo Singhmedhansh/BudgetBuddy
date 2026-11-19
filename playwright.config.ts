@@ -13,6 +13,8 @@ try {
 
 const PORT = Number(process.env.E2E_PORT ?? 3100);
 const prod = process.env.E2E_PROD === "1";
+// Point the suite at an already-deployed URL (e.g. a Vercel preview). No local server is started then.
+const remote = process.env.E2E_BASE_URL;
 
 const base = { channel: "chrome" as const };
 export default defineConfig({
@@ -23,8 +25,8 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: [["list"], ["json", { outputFile: "test-results/e2e.json" }]],
-  use: { baseURL: `http://127.0.0.1:${PORT}`, trace: "retain-on-failure", screenshot: "only-on-failure", ...base },
-  webServer: {
+  use: { baseURL: remote ?? `http://127.0.0.1:${PORT}`, trace: "retain-on-failure", screenshot: "only-on-failure", ...base },
+  webServer: remote ? undefined : {
     command: prod ? `npx next start -p ${PORT} -H 127.0.0.1` : `npx next dev -p ${PORT} -H 127.0.0.1`,
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: true,
@@ -33,7 +35,7 @@ export default defineConfig({
   projects: [
     { name: "setup", testMatch: /auth\.setup\.ts/ },
     // Real viewport sizes, not iframes.
-    { name: "desktop-1440", testMatch: /(flows|journeys|auth|security|responsive|settings|brand|controls|modules|concurrency)\.spec\.ts/, use: { ...devices["Desktop Chrome"], ...base, viewport: { width: 1440, height: 900 }, storageState: "e2e/.auth/user.json" }, dependencies: ["setup"] },
+    { name: "desktop-1440", testMatch: /(flows|journeys|auth|security|responsive|settings|brand|controls|modules|concurrency|statements|ai-live)\.spec\.ts/, use: { ...devices["Desktop Chrome"], ...base, viewport: { width: 1440, height: 900 }, storageState: "e2e/.auth/user.json" }, dependencies: ["setup"] },
     { name: "laptop-1280", testMatch: /responsive\.spec\.ts/, use: { ...devices["Desktop Chrome"], ...base, viewport: { width: 1280, height: 800 }, storageState: "e2e/.auth/user.json" }, dependencies: ["setup"] },
     { name: "tablet-768", testMatch: /responsive\.spec\.ts/, use: { ...devices["Desktop Chrome"], ...base, viewport: { width: 768, height: 1024 }, storageState: "e2e/.auth/user.json" }, dependencies: ["setup"] },
     { name: "mobile-390", testMatch: /responsive\.spec\.ts/, use: { ...devices["Pixel 7"], ...base, viewport: { width: 390, height: 844 }, storageState: "e2e/.auth/user.json" }, dependencies: ["setup"] },

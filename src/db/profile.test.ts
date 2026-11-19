@@ -260,7 +260,7 @@ describe("AI usage limits", () => {
 
 describe("entitlements", () => {
   it("a person can read their own plan but never grant themselves one", async () => {
-    await root(`insert into budgetbuddy.entitlements (user_id, plan, provider) values ('${ALICE}','pro','manual')`);
+    await root(`insert into budgetbuddy.entitlements (user_id, plan, provider, current_period_end) values ('${ALICE}','pro','manual', now() + interval '30 days')`);
     expect((await q<{ plan: string }>(ALICE, `select plan from budgetbuddy.entitlements`))[0].plan).toBe("pro");
     expect(await q(BOB, `select * from budgetbuddy.entitlements`)).toHaveLength(0);
     expect(await denied(q(BOB, `insert into budgetbuddy.entitlements (user_id, plan) values ('${BOB}','pro')`))).toBe(true);

@@ -38,7 +38,27 @@ describe("configuration", () => {
     const c = readAiConfig({ GEMINI_API_KEYS: "g", GROQ_API_KEYS: "q", AI_PROVIDER_ORDER: "gemini,groq", GEMINI_MODEL: "my-model" });
     expect(c.providers.map((p) => p.id)).toEqual(["gemini", "groq"]);
     expect(c.providers[0].model).toBe("my-model");
-    expect(readAiConfig({ GEMINI_API_KEYS: "g", GROQ_API_KEYS: "q" }).providers.map((p) => p.id)).toEqual(["groq", "gemini"]);
+    expect(readAiConfig({ GEMINI_API_KEYS: "g", GROQ_API_KEYS: "q" }).providers.map((p) => p.id)).toEqual(["gemini", "groq"]); // Gemini is the preferred provider
+    expect(readAiConfig({ GEMINI_API_KEYS: "g", GROQ_API_KEYS: "q", AI_PROVIDER_ORDER: "groq,gemini" }).providers.map((p) => p.id)).toEqual(["groq", "gemini"]);
+  });
+  it("reads numbered keys and the comma pool together, without duplicates", () => {
+    const c = readAiConfig({ GEMINI_API_KEY_1: "g1", GEMINI_API_KEY_2: "g2", GEMINI_API_KEY_3: "g3", GEMINI_API_KEYS: "g3,g4", GROQ_API_KEY_1: "q1", GROQ_API_KEY_4: "q4" });
+    expect(c.providers.find((p) => p.id === "gemini")?.keys).toEqual(["g1", "g2", "g3", "g4"]);
+    expect(c.providers.find((p) => p.id === "groq")?.keys).toEqual(["q1", "q4"]);
+  });
+  it("model names are configuration: ordered defaults, a list override, and a per-feature override", () => {
+    const d = readAiConfig({ GEMINI_API_KEYS: "g", GROQ_API_KEYS: "q" });
+    for (const p of d.providers) {
+      expect(p.models!.length).toBeGreaterThan(1);
+      expect(p.models).not.toContain("gemini-2.0-flash"); // retired by Google in 2026
+      expect(p.models).not.toContain("llama-3.3-70b-versatile"); // retired by Groq in 2026
+    }
+    expect(readAiConfig({ GEMINI_API_KEYS: "g", GEMINI_MODEL: "a, b" }).providers[0].models).toEqual(["a", "b"]);
+    expect(readAiConfig({ GEMINI_API_KEYS: "g", GEMINI_MODEL: "a", AI_ASSISTANT_GEMINI_MODEL: "feature-model" }).providers[0].models).toEqual(["feature-model"]);
+  });
+  it("assumes keys share a quota unless told otherwise", () => {
+    expect(readAiConfig({}).independentKeyQuota).toBe(false);
+    expect(readAiConfig({ AI_KEYS_INDEPENDENT_QUOTA: "true" }).independentKeyQuota).toBe(true);
   });
   it("clamps limits to sane ranges and ignores nonsense", () => {
     expect(readAiConfig({ AI_REQUESTS_PER_HOUR: "100000" }).limits.perHour).toBe(20);
@@ -75,8 +95,39 @@ describe("providers", () => {
     expect((init.headers as Record<string, string>).authorization).toBe("Bearer SECRET-GROQ");
     expect(JSON.parse(init.body as string).messages[0]).toEqual({ role: "system", content: "SYS" });
   });
-  it.each([[429, "rate_limit"], [401, "auth"], [403, "auth"], [500, "server"], [503, "server"], [400, "bad_request"], [404, "bad_request"]])("status %i is %s", (status, kind) => {
+  it("Groq: reasoning models are asked for low effort so their reasoning does not eat the answer budget", async () => {
+    const f = respond({ choices: [{ message: { content: "ok" } }] });
+    vi.stubGlobal("fetch", f);
+    await groq.complete("k", "openai/gpt-oss-120b", req);
+    await groq.complete("k", "some-other-model", req);
+    const bodies = f.mock.calls.map((c) => JSON.parse((c as unknown as [string, RequestInit])[1].body as string));
+    expect(bodies[0].reasoning_effort).toBe("low");
+    expect(bodies[1]).not.toHaveProperty("reasoning_effort");
+  });
+  it.each([[429, "rate_limit"], [401, "auth"], [403, "auth"], [500, "server"], [503, "server"], [400, "bad_request"], [404, "model_unavailable"], [504, "timeout"]])("status %i is %s", (status, kind) => {
     expect(kindFromStatus(status as number)).toBe(kind);
+  });
+  it("tells a bad Gemini key (answered with 400) and a retired model apart from a bad request, using fixed phrases only", () => {
+    expect(kindFromStatus(400, '{"error":{"status":"INVALID_ARGUMENT","message":"API key not valid. Please pass a valid API key."}}')).toBe("auth");
+    expect(kindFromStatus(400, '{"error":{"code":"model_decommissioned"}}')).toBe("model_unavailable");
+    expect(kindFromStatus(400, '{"error":{"message":"The model `x` does not exist"}}')).toBe("model_unavailable");
+    expect(kindFromStatus(400, '{"error":{"message":"messages must not be empty"}}')).toBe("bad_request");
+  });
+  it("a provider answering 400 API_KEY_INVALID surfaces as auth without leaking the body", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response('{"error":{"message":"API key not valid SECRET-KEY"}}', { status: 400 })));
+    const e = (await gemini.complete("SECRET-KEY", "m", req).catch((x) => x)) as ProviderError;
+    expect(e.kind).toBe("auth");
+    expect(String(e.message)).not.toMatch(/SECRET/);
+  });
+  it("a safety-blocked or malformed provider answer is an empty response, not text", async () => {
+    vi.stubGlobal("fetch", respond({ candidates: [{ finishReason: "SAFETY" }], promptFeedback: { blockReason: "SAFETY" } }));
+    expect(await gemini.complete("k", "m", req).catch((e) => e.kind)).toBe("empty");
+    vi.stubGlobal("fetch", respond({ unexpected: true }));
+    expect(await groq.complete("k", "m", req).catch((e) => e.kind)).toBe("empty");
+  });
+  it("honours the configured timeout", async () => {
+    vi.stubGlobal("fetch", vi.fn((_u: string, init: RequestInit) => new Promise((_res, rej) => init.signal!.addEventListener("abort", () => rej(Object.assign(new Error("t"), { name: "TimeoutError" }))))));
+    expect(await gemini.complete("k", "m", { ...req, timeoutMs: 20 }).catch((e) => e.kind)).toBe("timeout");
   });
   it("failures never carry the key, the response body or the URL in the message", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("echo SECRET-KEY body", { status: 429, headers: { "retry-after": "12" } })));
@@ -102,7 +153,7 @@ describe("providers", () => {
 });
 
 describe("failover (not rotation)", () => {
-  const cfg = (providers: AiConfig["providers"]): AiConfig => ({ enabled: true, providers, limits: { perHour: 20, tokensPerDay: 60000, maxOutputTokens: 100, maxQuestionChars: 600, timeoutMs: 20000 } });
+  const cfg = (providers: AiConfig["providers"], independentKeyQuota = false): AiConfig => ({ enabled: true, providers, independentKeyQuota, limits: { perHour: 20, tokensPerDay: 60000, maxOutputTokens: 100, maxQuestionChars: 600, timeoutMs: 20000 } });
   const req = { system: "s", messages: [{ role: "user" as const, content: "q" }], maxOutputTokens: 50 };
   const ok = (text: string) => ({ text, promptTokens: 1, completionTokens: 1 });
   const client = (id: "groq" | "gemini", behave: (key: string, n: number) => Promise<ReturnType<typeof ok>>): ProviderClient & { calls: string[] } => {
@@ -121,23 +172,24 @@ describe("failover (not rotation)", () => {
     await generate(cfg([{ id: "groq", model: "m", keys: ["k1", "k2"] }]), req, { groq: g }, pool);
     expect(g.calls).toEqual(["k1", "k1"]);
   });
-  it("moves to the next key only after a rate limit, and puts the limited key on cooldown", async () => {
+  it("with independent quotas, moves to the next key only after a rate limit, and puts the limited key on cooldown", async () => {
     let now = 0;
     const pool = new KeyPool(["k1", "k2"], () => now);
     const g = client("groq", async (key) => { if (key === "k1") throw new ProviderError("rate_limit", 30_000); return ok("b"); });
-    const r = await generate(cfg([{ id: "groq", model: "m", keys: ["k1", "k2"] }]), req, { groq: g }, () => pool);
+    const r = await generate(cfg([{ id: "groq", model: "m", keys: ["k1", "k2"] }], true), req, { groq: g }, () => pool);
     expect(r.text).toBe("b");
     expect(g.calls).toEqual(["k1", "k2"]);
-    await generate(cfg([{ id: "groq", model: "m", keys: ["k1", "k2"] }]), req, { groq: g }, () => pool);
+    await generate(cfg([{ id: "groq", model: "m", keys: ["k1", "k2"] }], true), req, { groq: g }, () => pool);
     expect(g.calls).toEqual(["k1", "k2", "k2"]); // k1 is resting, so it is not tried again
     now = 31_000;
     expect(pool.candidates()).toContain("k1"); // back after its cooldown
   });
   it("falls back to the other provider when every key of the first fails", async () => {
-    const groqC = client("groq", async () => { throw new ProviderError("server"); });
+    const groqC = client("groq", async () => { throw new ProviderError("auth"); });
     const gemC = client("gemini", async () => ok("from gemini"));
     const r = await generate(cfg([{ id: "groq", model: "m", keys: ["q1", "q2"] }, { id: "gemini", model: "g", keys: ["g1"] }]), req, { groq: groqC, gemini: gemC }, pools());
-    expect(r).toMatchObject({ text: "from gemini", provider: "gemini", model: "g" });
+    expect(r).toMatchObject({ text: "from gemini", provider: "gemini", model: "g", fallbacks: 2 });
+    expect(groqC.calls).toEqual(["q1", "q2"]); // a bad credential is not retried on the same key
   });
   it("never makes more than the allowed number of upstream calls for one question", async () => {
     const always = (id: "groq" | "gemini") => client(id, async () => { throw new ProviderError("rate_limit"); });
@@ -205,7 +257,7 @@ type GenFn = (c: AiConfig, r: CompletionRequest) => Promise<RouterResult>;
 
 describe("assistant", () => {
   const enabled = readAiConfig({ AI_ENABLED: "true", GROQ_API_KEYS: "SECRET-KEY-1" });
-  const answer = (text: string) => ({ text, promptTokens: 100, completionTokens: 20, provider: "groq", model: "m" });
+  const answer = (text: string) => ({ text, promptTokens: 100, completionTokens: 20, provider: "groq", model: "m", attempts: 1, fallbacks: 0, rateLimited: 0 });
   function deps(over: Partial<Parameters<typeof ask>[1]> = {}) {
     const reserve = vi.fn(async () => ({ allowed: true as const, id: 7 }));
     const settle = vi.fn(async () => undefined);

@@ -3,6 +3,7 @@ import { budgetStatus, alertLevel, carriedIn, type BudgetStatus, type AlertLevel
 import { localDate, monthRange } from "@/domain/period";
 import { nameMatches } from "@/lib/text";
 import { requireSpace } from "./context";
+import { fetchAll } from "./paging";
 import type { Account, Category, TransactionRow } from "./types";
 import { isLiability } from "./types";
 
@@ -13,14 +14,39 @@ export async function currentMonth(ctx: Pick<Ctx, "profile">) {
   return { ...monthRange(now.year, now.month, ctx.profile.timezone), year: now.year, month: now.month };
 }
 
+/**
+ * Request-scoped memo. One page render asks for the same accounts, balances and categories from several helpers
+ * (analytics alone used to fetch them a dozen times). The cache is keyed on the per-request Supabase client, so it
+ * lives exactly as long as one request, is never shared between users, and is gone before any later read. Only read
+ * paths use it; mutations go through server actions, which build a fresh client.
+ */
+const memos = new WeakMap<object, Map<string, Promise<unknown>>>();
+function memo<T>(ctx: Ctx, key: string, load: () => PromiseLike<T>): Promise<T> {
+  let m = memos.get(ctx.supabase);
+  if (!m) memos.set(ctx.supabase, (m = new Map()));
+  const k = `${ctx.space.id}:${key}`;
+  let p = m.get(k);
+  if (!p) m.set(k, (p = Promise.resolve(load())));
+  return p as Promise<T>;
+}
+const allCategories = (ctx: Ctx) => memo(ctx, "categories", () => ctx.supabase.from("categories").select("*").eq("space_id", ctx.space.id).order("name"));
+const allReversals = (ctx: Ctx) =>
+  memo(ctx, "reversals", async () => ({
+    data: await fetchAll<{ reversal_of: string }>((f, t) => ctx.supabase.from("transactions").select("reversal_of").eq("space_id", ctx.space.id).not("reversal_of", "is", null).order("id").range(f, t)),
+  }));
+
 export interface AccountWithBalance extends Account {
   /** User-facing: what you hold for assets, what you owe for liabilities. */
   balance: number;
 }
 
 export async function listAccounts(ctx: Ctx, includeArchived = false): Promise<AccountWithBalance[]> {
-  const { data: accounts } = await ctx.supabase.from("accounts").select("*").eq("space_id", ctx.space.id).order("created_at");
-  const { data: balances } = await ctx.supabase.from("account_balances").select("account_id,ledger_balance").eq("space_id", ctx.space.id);
+  const [{ data: accounts }, { data: balances }] = await memo(ctx, "accounts", () =>
+    Promise.all([
+      ctx.supabase.from("accounts").select("*").eq("space_id", ctx.space.id).order("created_at"),
+      ctx.supabase.from("account_balances").select("account_id,ledger_balance").eq("space_id", ctx.space.id),
+    ]),
+  );
   const raw = new Map((balances ?? []).map((b) => [b.account_id as string, Number(b.ledger_balance)]));
   return ((accounts ?? []) as Account[])
     .filter((a) => includeArchived || !a.archived_at)
@@ -31,10 +57,8 @@ export async function listAccounts(ctx: Ctx, includeArchived = false): Promise<A
 }
 
 export async function listCategories(ctx: Ctx, kind?: "expense" | "income"): Promise<Category[]> {
-  let q = ctx.supabase.from("categories").select("*").eq("space_id", ctx.space.id).is("archived_at", null).order("name");
-  q = kind ? q.eq("kind", kind) : q.neq("kind", "equity");
-  const { data } = await q;
-  return (data ?? []) as Category[];
+  const { data } = await allCategories(ctx);
+  return ((data ?? []) as Category[]).filter((c) => !c.archived_at && (kind ? c.kind === kind : c.kind !== "equity"));
 }
 
 export interface TxnListItem extends TransactionRow {
@@ -59,8 +83,8 @@ export async function pageTransactions(ctx: Ctx, opts: TxnQuery = {}): Promise<{
   const page = Math.max(1, opts.page ?? 1);
   const [accounts, categories, reversals] = await Promise.all([
     listAccounts(ctx, true),
-    ctx.supabase.from("categories").select("id,name,kind").eq("space_id", ctx.space.id),
-    ctx.supabase.from("transactions").select("reversal_of").eq("space_id", ctx.space.id).not("reversal_of", "is", null),
+    allCategories(ctx),
+    allReversals(ctx),
   ]);
   const matchingCats = opts.category ? (categories.data ?? []).filter((c) => nameMatches(c.name as string, opts.category!)).map((c) => c.id as string) : null;
   if (matchingCats && matchingCats.length === 0) return { rows: [], total: 0 };
@@ -120,15 +144,20 @@ export async function listTransactions(ctx: Ctx, opts: { type?: string; accountI
 
 /** Postings reconstructed from stored entries, for period totals via the domain layer. */
 export async function postingsInRange(ctx: Ctx, from: Date, to: Date): Promise<{ postings: Posting[]; kinds: Map<string, "asset" | "liability" | "expense" | "income" | "equity"> }> {
-  const [{ data: txns }, accounts, cats] = await Promise.all([
-    ctx.supabase
-      .from("transactions")
-      .select("id,type,status,occurred_at,reversal_of,refund_of,ledger_entries(account_id,category_id,amount)")
-      .eq("space_id", ctx.space.id)
-      .gte("occurred_at", from.toISOString())
-      .lt("occurred_at", to.toISOString()),
+  // Every transaction in the period, not just the first 1000: a truncated read here made totals silently wrong.
+  const [txns, accounts, cats] = await Promise.all([
+    fetchAll<{ id: string; type: string; status: string; occurred_at: string; reversal_of: string | null; refund_of: string | null; ledger_entries: unknown }>((f, t) =>
+      ctx.supabase
+        .from("transactions")
+        .select("id,type,status,occurred_at,reversal_of,refund_of,ledger_entries(account_id,category_id,amount)")
+        .eq("space_id", ctx.space.id)
+        .gte("occurred_at", from.toISOString())
+        .lt("occurred_at", to.toISOString())
+        .order("id")
+        .range(f, t),
+    ),
     listAccounts(ctx, true),
-    ctx.supabase.from("categories").select("id,kind").eq("space_id", ctx.space.id),
+    allCategories(ctx),
   ]);
   const kinds = new Map<string, "asset" | "liability" | "expense" | "income" | "equity">();
   accounts.forEach((a) => kinds.set(a.id, isLiability(a.type) ? "liability" : "asset"));
@@ -169,14 +198,18 @@ export async function listBudgets(ctx: Ctx): Promise<BudgetView[]> {
   const prevYear = month.month === 1 ? month.year - 1 : month.year;
   const prevMonth = month.month === 1 ? 12 : month.month - 1;
   const prev = monthRange(prevYear, prevMonth, ctx.profile.timezone);
-  const { data: entries } = await ctx.supabase
-    .from("ledger_entries")
-    .select("category_id, amount, transactions!inner(occurred_at,status)")
-    .eq("space_id", ctx.space.id)
-    .not("category_id", "is", null)
-    .eq("transactions.status", "posted")
-    .gte("transactions.occurred_at", prev.from.toISOString())
-    .lt("transactions.occurred_at", month.to.toISOString());
+  const entries = await fetchAll<unknown>((f, t) =>
+    ctx.supabase
+      .from("ledger_entries")
+      .select("category_id, amount, transactions!inner(occurred_at,status)")
+      .eq("space_id", ctx.space.id)
+      .not("category_id", "is", null)
+      .eq("transactions.status", "posted")
+      .gte("transactions.occurred_at", prev.from.toISOString())
+      .lt("transactions.occurred_at", month.to.toISOString())
+      .order("id")
+      .range(f, t),
+  );
   const spent = new Map<string, number>();
   const prevSpent = new Map<string, number>();
   for (const e of (entries ?? []) as unknown as { category_id: string; amount: number; transactions: { occurred_at: string } | { occurred_at: string }[] }[]) {

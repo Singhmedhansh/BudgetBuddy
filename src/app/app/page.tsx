@@ -27,13 +27,19 @@ export default async function DashboardPage() {
   const now = localDate(new Date(), tz);
   const trendMonths = monthsBack(now.year, now.month, 6);
   const trendStart = monthRange(trendMonths[0].year, trendMonths[0].month, tz).from;
-  const [accounts, budgets, recent, month, cats] = await Promise.all([listAccounts(ctx), listBudgets(ctx), listTransactions(ctx, { limit: 6 }), currentMonth(ctx), listCategories(ctx)]);
-
-  // Bills, subscriptions and goals are read only when their panel is switched on.
-  const [bills, subs, goals] = await Promise.all([
+  // One wave of independent reads. The month range is plain date arithmetic, so the trend postings no longer have to
+  // wait for the account and budget queries, and the optional panels load alongside rather than after them.
+  const monthEnd = monthRange(now.year, now.month, tz).to;
+  const [accounts, budgets, recent, month, cats, bills, subs, goals, trendData] = await Promise.all([
+    listAccounts(ctx),
+    listBudgets(ctx),
+    listTransactions(ctx, { limit: 6 }),
+    currentMonth(ctx),
+    listCategories(ctx),
     prefs.upcoming ? listRecurring(ctx, "bill") : [],
     prefs.upcoming ? listRecurring(ctx, "subscription") : [],
     prefs.goals ? listGoals(ctx) : [],
+    postingsInRange(ctx, trendStart, monthEnd),
   ]);
   const today = todayFor(ctx);
   const upcoming = [...bills, ...subs]
@@ -61,7 +67,7 @@ export default async function DashboardPage() {
     );
   }
 
-  const { postings, kinds } = await postingsInRange(ctx, trendStart, month.to);
+  const { postings, kinds } = trendData;
   const ledger: LedgerAccount[] = [...kinds].map(([id, kind]) => ({ id, kind, currency: space.currency }));
   const totals = periodTotals(ledger, postings, month.from, month.to);
   const byCat = spendingByCategory(ledger, postings, month.from, month.to);

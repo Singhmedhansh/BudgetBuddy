@@ -1,86 +1,229 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
-import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
-import { askAssistantAction, type AssistantState } from "@/app/app/assistant-actions";
+import { ArrowUp, Check, Copy, Gauge, Landmark, Plus, Sparkles, Tags, Wallet } from "lucide-react";
+import { useActionState, useEffect, useOptimistic, useRef, useState, useTransition } from "react";
+import { askAssistantAction, type AssistantState, type Turn } from "@/app/app/assistant-actions";
 
-const EXAMPLES = ["How much did I spend this month?", "Which budget is closest to its limit?", "What is my net worth right now?", "What were my biggest spending categories?"];
+const MAX = 600;
+const EXAMPLES = [
+  { text: "How much did I spend this month?", Icon: Wallet },
+  { text: "Which budget is closest to its limit?", Icon: Gauge },
+  { text: "What is my net worth right now?", Icon: Landmark },
+  { text: "What were my biggest spending categories?", Icon: Tags },
+] as const;
 
-function Send() {
-  const { pending } = useFormStatus();
+function Avatar() {
   return (
-    <button type="submit" disabled={pending} className="rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-fg transition-all hover:-translate-y-px hover:bg-primary-hover disabled:opacity-60">
-      {pending ? "Thinking" : "Ask"}
+    <span aria-hidden className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-sage text-primary">
+      <Sparkles size={14} />
+    </span>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setDone(true);
+          setTimeout(() => setDone(false), 1500);
+        } catch {
+          /* clipboard can be blocked; the text stays selectable */
+        }
+      }}
+      className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted transition-colors hover:bg-sunken hover:text-fg"
+    >
+      {done ? <Check size={12} aria-hidden /> : <Copy size={12} aria-hidden />}
+      {done ? "Copied" : "Copy"}
     </button>
   );
 }
 
-export function AssistantChat({ available, unavailableMessage }: { available: boolean; unavailableMessage: string }) {
-  const [state, action] = useActionState<AssistantState | undefined, FormData>(askAssistantAction, undefined);
+function Chat({ available, unavailableMessage, onNew }: { available: boolean; unavailableMessage: string; onNew: () => void }) {
+  const [state, dispatch] = useActionState<AssistantState | undefined, FormData>(askAssistantAction, undefined);
+  const [, startTransition] = useTransition();
   const turns = state?.turns ?? [];
+  // The person's message appears the moment they send it; it settles into the real list when the answer arrives.
+  const [shown, addOptimistic] = useOptimistic(turns, (cur: Turn[], q: string) => [...cur, { role: "user" as const, content: q }]);
+  const pending = shown.length > turns.length;
+
+  const [text, setText] = useState("");
+  // When an answer fails, hand the question back so nothing has to be retyped.
+  const [seen, setSeen] = useState(state);
+  if (state !== seen) {
+    setSeen(state);
+    if (state?.error && state.question) setText(state.question);
+  }
+
+  const box = useRef<HTMLTextAreaElement>(null);
+  const end = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [text]);
+  useEffect(() => {
+    if (available && window.matchMedia("(pointer: fine)").matches) box.current?.focus();
+  }, [available]);
+  useEffect(() => {
+    if (shown.length > 0) end.current?.scrollIntoView({ block: "end", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }, [shown.length, state?.error]);
+
+  function send(raw: string) {
+    const q = raw.trim();
+    if (!q || pending || !available) return;
+    setText("");
+    const fd = new FormData();
+    fd.set("question", q);
+    fd.set("history", JSON.stringify(turns));
+    startTransition(() => {
+      addOptimistic(q);
+      dispatch(fd);
+    });
+  }
+
+  const empty = shown.length === 0;
+  const canSend = available && !pending && text.trim().length > 0;
+
   return (
-    <div className="space-y-6">
+    <div className="flex min-h-[calc(100dvh-17rem)] flex-col">
       {!available ? (
-        <p role="status" className="rounded-xl border border-line bg-sunken px-4 py-3 text-sm leading-relaxed">
+        <p role="status" className="mb-4 rounded-xl border border-line bg-sunken px-4 py-3 text-sm leading-relaxed">
           {unavailableMessage}
         </p>
       ) : null}
 
-      <ol className="space-y-4" aria-live="polite" aria-label="Conversation">
-        {turns.map((t, i) => (
-          <li key={i} className={t.role === "user" ? "ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm text-primary-fg" : "max-w-[92%] rounded-2xl rounded-bl-md border border-line bg-surface px-4 py-3 text-sm leading-relaxed"}>
-            {t.content}
-            {t.role === "assistant" ? (
-              <span className="mt-2 flex items-center gap-1.5 text-xs text-muted">
-                <Sparkles size={12} aria-hidden />
-                {t.source === "figures" ? "Verified figures from your records" : "Every figure checked against your records"}
+      {empty ? (
+        <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
+          <span aria-hidden className="grid h-12 w-12 place-items-center rounded-full bg-sage text-primary">
+            <Sparkles size={22} />
+          </span>
+          <h2 className="mt-4 font-display text-2xl leading-tight sm:text-3xl">What would you like to know about your money?</h2>
+          <p className="mt-2 max-w-[46ch] text-sm leading-relaxed text-muted">Ask in plain words. Every figure in an answer is checked against your own records before you see it.</p>
+          {available ? (
+            <ul className="mt-8 grid w-full max-w-xl gap-2.5 sm:grid-cols-2">
+              {EXAMPLES.map(({ text: e, Icon }) => (
+                <li key={e}>
+                  <button type="button" onClick={() => send(e)} className="group flex h-full w-full items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-left text-sm transition-all hover:-translate-y-px hover:border-line-strong hover:shadow-md">
+                    <Icon size={16} aria-hidden className="mt-0.5 shrink-0 text-primary" />
+                    <span>{e}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex-1">
+          <div className="mb-4 flex justify-end">
+            <button type="button" onClick={onNew} className="inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:border-line-strong hover:text-fg">
+              <Plus size={12} aria-hidden />
+              New chat
+            </button>
+          </div>
+          <ol className="space-y-6" aria-live="polite" aria-label="Conversation">
+            {shown.map((t, i) =>
+              t.role === "user" ? (
+                <li key={i} className="ml-auto w-fit max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-primary-fg">
+                  {t.content}
+                </li>
+              ) : (
+                <li key={i} className="flex gap-3">
+                  <Avatar />
+                  <div className="min-w-0 max-w-[92%] flex-1">
+                    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{t.content}</p>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Check size={12} aria-hidden className="text-pos" />
+                        {t.source === "figures" ? "Verified figures from your records" : "Every figure checked against your records"}
+                      </span>
+                      <CopyButton text={t.content} />
+                    </div>
+                  </div>
+                </li>
+              ),
+            )}
+          </ol>
+          {pending ? (
+            <div role="status" aria-label="The assistant is thinking" className="mt-6 flex gap-3">
+              <Avatar />
+              <span className="flex items-center gap-1 pt-2.5" aria-hidden>
+                {[0, 150, 300].map((d) => (
+                  <span key={d} style={{ animationDelay: `${d}ms` }} className="h-1.5 w-1.5 rounded-full bg-muted motion-safe:animate-pulse" />
+                ))}
               </span>
-            ) : null}
-          </li>
-        ))}
-      </ol>
+              <span className="sr-only">Thinking</span>
+            </div>
+          ) : null}
+          {state?.error && !pending ? (
+            <p role="alert" className="mt-6 rounded-xl border border-neg/30 bg-neg/10 px-4 py-3 text-sm text-neg-text">
+              {state.error}
+            </p>
+          ) : null}
+          <div ref={end} className="h-2" />
+        </div>
+      )}
 
-      {state?.error ? (
-        <p role="alert" className="text-sm text-neg-text">
+      {empty && state?.error && !pending ? (
+        <p role="alert" className="mb-3 rounded-xl border border-neg/30 bg-neg/10 px-4 py-3 text-sm text-neg-text">
           {state.error}
         </p>
       ) : null}
 
-      <form action={action} className="space-y-3">
-        <input type="hidden" name="history" value={JSON.stringify(turns)} />
-        <label htmlFor="q" className="sr-only">
-          Your question
-        </label>
-        <textarea
-          id="q"
-          name="question"
-          rows={2}
-          maxLength={600}
-          defaultValue={state?.question ?? ""}
-          key={turns.length}
-          disabled={!available}
-          placeholder="Ask about your own money"
-          className="w-full rounded-xl border border-line-strong bg-surface px-4 py-3 text-sm placeholder:text-muted/70 focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
-        />
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-muted">Answers use only figures from your recorded transactions. It cannot see individual transactions.</p>
-          {available ? <Send /> : null}
-        </div>
-      </form>
-
-      {turns.length === 0 ? (
-        <div>
-          <p className="mb-2 text-sm font-medium">Things you could ask</p>
-          <ul className="flex flex-wrap gap-2">
-            {EXAMPLES.map((e) => (
-              <li key={e} className="rounded-full border border-line px-3 py-1.5 text-sm text-muted">
-                {e}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      <div className="sticky bottom-[5.5rem] z-10 -mx-1 mt-4 bg-bg/85 px-1 pb-1 pt-2 backdrop-blur md:bottom-0">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            send(text);
+          }}
+          className="rounded-2xl border border-line-strong bg-surface shadow-md transition-shadow focus-within:border-primary focus-within:shadow-lg"
+        >
+          <label htmlFor="q" className="sr-only">
+            Your question
+          </label>
+          <textarea
+            ref={box}
+            id="q"
+            name="question"
+            rows={1}
+            maxLength={MAX}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                send(text);
+              }
+            }}
+            disabled={!available}
+            placeholder="Ask about your own money"
+            className="block max-h-[200px] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[15px] leading-relaxed !outline-none placeholder:text-muted/70 disabled:cursor-not-allowed disabled:opacity-60"
+          />
+          <div className="flex items-center justify-between gap-3 px-3 pb-2.5 pt-1">
+            <p className="text-xs text-muted">
+              <kbd className="font-sans">Enter</kbd> to send · <kbd className="font-sans">Shift + Enter</kbd> for a new line
+              {text.length > MAX - 100 ? <span className="ml-2 tabular-nums">{text.length}/{MAX}</span> : null}
+            </p>
+            {available ? (
+              <button type="submit" aria-label="Ask" title="Ask" disabled={!canSend} className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-fg transition-all hover:bg-primary-hover active:scale-95 disabled:cursor-not-allowed disabled:opacity-40">
+                <ArrowUp size={18} aria-hidden />
+              </button>
+            ) : null}
+          </div>
+        </form>
+        <p className="mt-2 px-1 text-center text-xs text-muted">Answers use only figures from your recorded transactions. It cannot see individual transactions.</p>
+      </div>
     </div>
   );
+}
+
+export function AssistantChat(props: { available: boolean; unavailableMessage: string }) {
+  // A new chat is a fresh component: its conversation state starts empty.
+  const [session, setSession] = useState(0);
+  return <Chat key={session} {...props} onNew={() => setSession((s) => s + 1)} />;
 }
