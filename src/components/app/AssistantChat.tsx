@@ -154,7 +154,7 @@ function Chat({ available, unavailableMessage, onNew }: { available: boolean; un
               <Avatar />
               <span className="flex items-center gap-1 pt-2.5" aria-hidden>
                 {[0, 150, 300].map((d) => (
-                  <span key={d} style={{ animationDelay: `${d}ms` }} className="h-1.5 w-1.5 rounded-full bg-muted motion-safe:animate-bounce" />
+                  <span key={d} style={{ animationDelay: `${d}ms` }} className="h-1.5 w-1.5 rounded-full bg-muted motion-safe:animate-pulse" />
                 ))}
               </span>
               <span className="sr-only">Thinking</span>
