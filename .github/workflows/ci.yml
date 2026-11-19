@@ -35,6 +35,8 @@ jobs:
       - run: npm ci
       - name: Lint
         run: npm run lint
+      - name: Generate Next route types (a clean checkout has none; tsc needs LayoutProps and friends)
+        run: npx next typegen
       - name: Type-check
         run: npm run typecheck
       - name: Unit and database tests
