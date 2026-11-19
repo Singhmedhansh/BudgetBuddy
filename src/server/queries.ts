@@ -3,6 +3,7 @@ import { budgetStatus, alertLevel, carriedIn, type BudgetStatus, type AlertLevel
 import { localDate, monthRange } from "@/domain/period";
 import { nameMatches } from "@/lib/text";
 import { requireSpace } from "./context";
+import { fetchAll } from "./paging";
 import type { Account, Category, TransactionRow } from "./types";
 import { isLiability } from "./types";
 
@@ -29,7 +30,10 @@ function memo<T>(ctx: Ctx, key: string, load: () => PromiseLike<T>): Promise<T> 
   return p as Promise<T>;
 }
 const allCategories = (ctx: Ctx) => memo(ctx, "categories", () => ctx.supabase.from("categories").select("*").eq("space_id", ctx.space.id).order("name"));
-const allReversals = (ctx: Ctx) => memo(ctx, "reversals", () => ctx.supabase.from("transactions").select("reversal_of").eq("space_id", ctx.space.id).not("reversal_of", "is", null));
+const allReversals = (ctx: Ctx) =>
+  memo(ctx, "reversals", async () => ({
+    data: await fetchAll<{ reversal_of: string }>((f, t) => ctx.supabase.from("transactions").select("reversal_of").eq("space_id", ctx.space.id).not("reversal_of", "is", null).order("id").range(f, t)),
+  }));
 
 export interface AccountWithBalance extends Account {
   /** User-facing: what you hold for assets, what you owe for liabilities. */
@@ -140,13 +144,18 @@ export async function listTransactions(ctx: Ctx, opts: { type?: string; accountI
 
 /** Postings reconstructed from stored entries, for period totals via the domain layer. */
 export async function postingsInRange(ctx: Ctx, from: Date, to: Date): Promise<{ postings: Posting[]; kinds: Map<string, "asset" | "liability" | "expense" | "income" | "equity"> }> {
-  const [{ data: txns }, accounts, cats] = await Promise.all([
-    ctx.supabase
-      .from("transactions")
-      .select("id,type,status,occurred_at,reversal_of,refund_of,ledger_entries(account_id,category_id,amount)")
-      .eq("space_id", ctx.space.id)
-      .gte("occurred_at", from.toISOString())
-      .lt("occurred_at", to.toISOString()),
+  // Every transaction in the period, not just the first 1000: a truncated read here made totals silently wrong.
+  const [txns, accounts, cats] = await Promise.all([
+    fetchAll<{ id: string; type: string; status: string; occurred_at: string; reversal_of: string | null; refund_of: string | null; ledger_entries: unknown }>((f, t) =>
+      ctx.supabase
+        .from("transactions")
+        .select("id,type,status,occurred_at,reversal_of,refund_of,ledger_entries(account_id,category_id,amount)")
+        .eq("space_id", ctx.space.id)
+        .gte("occurred_at", from.toISOString())
+        .lt("occurred_at", to.toISOString())
+        .order("id")
+        .range(f, t),
+    ),
     listAccounts(ctx, true),
     allCategories(ctx),
   ]);
@@ -189,14 +198,18 @@ export async function listBudgets(ctx: Ctx): Promise<BudgetView[]> {
   const prevYear = month.month === 1 ? month.year - 1 : month.year;
   const prevMonth = month.month === 1 ? 12 : month.month - 1;
   const prev = monthRange(prevYear, prevMonth, ctx.profile.timezone);
-  const { data: entries } = await ctx.supabase
-    .from("ledger_entries")
-    .select("category_id, amount, transactions!inner(occurred_at,status)")
-    .eq("space_id", ctx.space.id)
-    .not("category_id", "is", null)
-    .eq("transactions.status", "posted")
-    .gte("transactions.occurred_at", prev.from.toISOString())
-    .lt("transactions.occurred_at", month.to.toISOString());
+  const entries = await fetchAll<unknown>((f, t) =>
+    ctx.supabase
+      .from("ledger_entries")
+      .select("category_id, amount, transactions!inner(occurred_at,status)")
+      .eq("space_id", ctx.space.id)
+      .not("category_id", "is", null)
+      .eq("transactions.status", "posted")
+      .gte("transactions.occurred_at", prev.from.toISOString())
+      .lt("transactions.occurred_at", month.to.toISOString())
+      .order("id")
+      .range(f, t),
+  );
   const spent = new Map<string, number>();
   const prevSpent = new Map<string, number>();
   for (const e of (entries ?? []) as unknown as { category_id: string; amount: number; transactions: { occurred_at: string } | { occurred_at: string }[] }[]) {

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/server/admin";
 import { paypalConfig } from "@/server/payments/config";
 import { currentUser } from "@/server/payments/http";
-import { getPaypalSubscription, paypalStateToBilling } from "@/server/payments/paypal";
+import { syncPaypalSubscription } from "@/server/payments/paypal";
 import { applyBillingEvent, audit, findSubscription } from "@/server/payments/store";
 import { BillingError } from "@/server/payments/types";
 
@@ -23,10 +23,7 @@ export async function GET(request: NextRequest) {
   try {
     const row = await findSubscription(admin, "paypal", id);
     if (!row || row.user_id !== session.user.id) return done("failed");
-    const live = await getPaypalSubscription(cfg, id);
-    const planId = cfg.planIds[row.interval];
-    if (!planId) return done("failed");
-    const event = paypalStateToBilling(live, { userId: session.user.id, planId, amountMinor: row.amount_minor, currency: row.currency }, { eventId: `return:${id}:${live.status}:${live.billing_info?.last_payment?.time ?? "none"}`, eventType: "checkout.returned" });
+    const event = await syncPaypalSubscription(cfg, row, { eventId: `return:${id}:${Math.floor(Date.now() / 60_000)}`, eventType: "checkout.returned" });
     await applyBillingEvent(admin, event);
     return done(event.subscription?.status === "active" ? "success" : event.subscription?.status === "pending" ? "pending" : "failed");
   } catch (e) {

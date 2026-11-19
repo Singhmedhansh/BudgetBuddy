@@ -9,7 +9,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { beforeAll, describe, expect, it } from "vitest";
 
 const U = (n: number) => `00000000-0000-0000-0000-0000000000${String(n).padStart(2, "0")}`;
-const [ALICE, BOB, ADMIN] = [U(1), U(2), U(3)];
+const [ALICE, BOB, ADMIN, DAVE] = [U(1), U(2), U(3), U(4)];
 let db: PGlite;
 
 async function as<T>(role: "authenticated" | "service_role", uid: string | null, fn: () => Promise<T>): Promise<T> {
@@ -39,7 +39,7 @@ beforeAll(async () => {
     create schema auth; create table auth.users (id uuid primary key);
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
     grant usage on schema auth to authenticated, service_role; grant execute on function auth.uid() to authenticated, service_role;
-    insert into auth.users values ${[ALICE, BOB, ADMIN].map((u) => `('${u}')`).join(",")};
+    insert into auth.users values ${[ALICE, BOB, ADMIN, DAVE].map((u) => `('${u}')`).join(",")};
     create schema storage; create table storage.buckets (id text primary key, name text, public boolean default false, file_size_limit bigint, allowed_mime_types text[]);
     create table storage.objects (id uuid default gen_random_uuid() primary key, bucket_id text, name text);
     alter table storage.objects enable row level security;
@@ -101,9 +101,11 @@ describe("applying events", () => {
     await apply({ id: "ev_refund", type: "refund.processed", at: "2026-11-12T00:00:00Z", user: BOB, pay: { provider_payment_id: "pay_bob1", amount_minor: 14900, currency: "INR", status: "refunded" } });
     expect((await asUser<{ status: string }>(BOB, `select status from budgetbuddy.billing_payments where provider_payment_id='pay_bob1'`))[0].status).toBe("refunded");
   });
-  it("a failed renewal marks the subscription past due", async () => {
-    await apply({ id: "ev_pastdue", type: "subscription.halted", at: "2026-11-20T00:00:00Z", user: BOB, sub: { provider_subscription_id: "sub_bob", status: "past_due" } });
-    expect((await asUser<{ status: string }>(BOB, `select status from budgetbuddy.entitlements`))[0].status).toBe("past_due");
+  it("a failed renewal marks the subscription past due (on a fresh subscription, so earlier refunds do not apply)", async () => {
+    await pending(DAVE, "sub_dave");
+    await apply({ id: "dv1", type: "subscription.activated", at: "2026-11-01T00:00:00Z", user: DAVE, sub: { provider_subscription_id: "sub_dave", status: "active", current_period_end: "2027-12-01T00:00:00Z" } });
+    await apply({ id: "dv2", type: "subscription.halted", at: "2026-11-20T00:00:00Z", user: DAVE, sub: { provider_subscription_id: "sub_dave", status: "past_due" } });
+    expect((await asUser<{ status: string }>(DAVE, `select status from budgetbuddy.entitlements`))[0].status).toBe("past_due");
   });
   it("lifecycle: pending, active, renewed, then expired", async () => {
     const sub = (status: string, end: string) => ({ provider_subscription_id: "sub_alice", status, current_period_end: end });

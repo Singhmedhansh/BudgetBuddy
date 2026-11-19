@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/server/admin";
 import { paypalConfig } from "@/server/payments/config";
-import { getPaypalSubscription, paypalEventSubscriptionId, paypalStateToBilling, verifyPaypalWebhook } from "@/server/payments/paypal";
-import { applyBillingEvent, audit, findSubscription } from "@/server/payments/store";
+import { paypalEventSaleId, paypalEventSubscriptionId, syncPaypalSubscription, verifyPaypalWebhook } from "@/server/payments/paypal";
+import { applyBillingEvent, audit, findSubscription, subscriptionForPayment } from "@/server/payments/store";
 import { BillingError } from "@/server/payments/types";
 
 /**
@@ -28,16 +28,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const subId = paypalEventSubscriptionId(event);
-    const row = subId ? await findSubscription(admin, "paypal", subId) : null;
-    if (!subId || !row) {
-      // Not one of ours (or not a subscription event): store the id so a redelivery is a no-op, change nothing else.
+    // Refunds and reversals name the original sale, not the subscription: find it through the payment ledger.
+    const saleId = paypalEventSaleId(event);
+    const row = subId ? await findSubscription(admin, "paypal", subId) : saleId ? await subscriptionForPayment(admin, "paypal", saleId) : null;
+    if (!row || !row.user_id) {
+      // Not one of ours, or a refund for a payment not recorded yet: store the id so a redelivery is a no-op and
+      // change nothing else. The daily reconcile (/api/cron/billing) re-reads PayPal and picks up anything missed.
       await applyBillingEvent(admin, { provider: "paypal", eventId: event.id, eventType: event.event_type, eventAt: new Date(), userId: null, subscription: null, payment: null });
       return NextResponse.json({ ok: true });
     }
-    const planId = cfg.planIds[row.interval];
-    if (!planId) return NextResponse.json({ ok: true });
-    const live = await getPaypalSubscription(cfg, subId);
-    const ev = paypalStateToBilling(live, { userId: row.user_id, planId, amountMinor: row.amount_minor, currency: row.currency }, { eventId: event.id, eventType: event.event_type });
+    const ev = await syncPaypalSubscription(cfg, row, { eventId: event.id, eventType: event.event_type });
     return NextResponse.json({ ok: true, outcome: await applyBillingEvent(admin, ev) });
   } catch (e) {
     if (e instanceof BillingError && ["amount_mismatch", "plan_mismatch", "owner_mismatch"].includes(e.code)) {

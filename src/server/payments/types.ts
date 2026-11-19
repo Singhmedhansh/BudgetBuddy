@@ -19,8 +19,9 @@ export interface PaymentPatch {
   provider_payment_id: string;
   provider_order_id?: string | null;
   provider_subscription_id?: string | null;
-  amount_minor: number;
-  currency: string;
+  /** Omitted for a failed renewal that has no payment of its own: the database then uses the subscription's price. */
+  amount_minor?: number;
+  currency?: string;
   status: PaymentStatus;
   failure_reason?: string | null;
   paid_at?: string | null;
@@ -34,7 +35,8 @@ export interface BillingEvent {
   eventAt: Date;
   userId: string | null;
   subscription: SubscriptionPatch | null;
-  payment: PaymentPatch | null;
+  /** One payment, or several (a PayPal sync reports every transaction of a subscription). */
+  payment: PaymentPatch | PaymentPatch[] | null;
 }
 
 export type ApplyOutcome = "applied" | "duplicate" | "unmatched" | "stale";

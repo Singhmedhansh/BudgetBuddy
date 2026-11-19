@@ -95,6 +95,15 @@ describe("providers", () => {
     expect((init.headers as Record<string, string>).authorization).toBe("Bearer SECRET-GROQ");
     expect(JSON.parse(init.body as string).messages[0]).toEqual({ role: "system", content: "SYS" });
   });
+  it("Groq: reasoning models are asked for low effort so their reasoning does not eat the answer budget", async () => {
+    const f = respond({ choices: [{ message: { content: "ok" } }] });
+    vi.stubGlobal("fetch", f);
+    await groq.complete("k", "openai/gpt-oss-120b", req);
+    await groq.complete("k", "some-other-model", req);
+    const bodies = f.mock.calls.map((c) => JSON.parse((c as unknown as [string, RequestInit])[1].body as string));
+    expect(bodies[0].reasoning_effort).toBe("low");
+    expect(bodies[1]).not.toHaveProperty("reasoning_effort");
+  });
   it.each([[429, "rate_limit"], [401, "auth"], [403, "auth"], [500, "server"], [503, "server"], [400, "bad_request"], [404, "model_unavailable"], [504, "timeout"]])("status %i is %s", (status, kind) => {
     expect(kindFromStatus(status as number)).toBe(kind);
   });

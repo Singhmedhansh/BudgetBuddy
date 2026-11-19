@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { api, USER, choose } from "./helpers";
+import { api, USER, choose, profileTheme, resetTheme } from "./helpers";
 
 /**
  * Settings, account menu, sign-in options, assistant and sample data, on the disposable test user only.
@@ -318,6 +318,7 @@ test.describe("profile completion and preferences (needs migration 9)", () => {
 
   test("the theme chosen in the app is saved to the profile and applied on a fresh browser", async ({ page, browser, baseURL }) => {
     needMigration();
+    await resetTheme(page, "light");
     await open(page, "/app");
     await page.getByRole("radio", { name: "Dark theme" }).click();
     await expect.poll(async () => (await (await api()).from("profiles").select("theme").single()).data?.theme).toBe("dark");
@@ -327,6 +328,7 @@ test.describe("profile completion and preferences (needs migration 9)", () => {
     await expect(other.locator("html")).toHaveAttribute("data-theme", "dark");
     await ctx.close();
     await page.getByRole("radio", { name: "Light theme" }).click();
+    await profileTheme("light", expect); // leave the shared profile as found, and wait until it is saved
   });
 
   test("notification choices persist", async ({ page }) => {

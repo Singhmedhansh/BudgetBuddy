@@ -2,9 +2,13 @@ import { createHmac } from "node:crypto";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { checkoutProviders, paypalConfig, razorpayConfig, type PaypalConfig, type RazorpayConfig } from "./config";
-import { createPaypalSubscription, paypalEventSubscriptionId, paypalStateToBilling, paypalStatus, readPlanPrice, verifyPaypalWebhook, type PpSubscription } from "./paypal";
-import { assertPlan, confirmRazorpayCheckout, createRazorpaySubscription, expectedRazorpayPrice, razorpayEventToBilling, subscriptionStatus, verifyCheckoutSignature } from "./razorpay";
-import { BillingError } from "./types";
+import { createPaypalSubscription, listPaypalTransactions, paypalEventSaleId, paypalEventSubscriptionId, paypalStateToBilling, paypalStatus, readPlanPrice, syncPaypalSubscription, verifyPaypalWebhook, type PpSubscription, type PpTransaction } from "./paypal";
+import { assertPlan, confirmRazorpayCheckout, createRazorpaySubscription, expectedRazorpayPrice, razorpayEventToBilling, reconcileRazorpaySubscription, subscriptionStatus, verifyCheckoutSignature } from "./razorpay";
+import { BillingError, type BillingEvent } from "./types";
+
+/** The first (or only) payment of an event, whichever shape it carries. */
+const firstPayment = (p: BillingEvent["payment"]) => (Array.isArray(p) ? p[0] : p);
+const allPayments = (p: BillingEvent["payment"]) => (p == null ? [] : Array.isArray(p) ? p : [p]);
 
 const UID = "11111111-2222-4333-8444-555555555555";
 const OTHER = "99999999-2222-4333-8444-555555555555";
@@ -106,7 +110,7 @@ describe("Razorpay: checkout signature and verification", () => {
     const ev = await confirmRazorpayCheckout(rz, input(), expectOk, f());
     expect(ev).toMatchObject({ provider: "razorpay", eventId: "verify:pay_1", userId: UID });
     expect(ev.subscription).toMatchObject({ provider_subscription_id: "sub_1", status: "active", current_period_end: new Date(1_802_592_000 * 1000).toISOString() });
-    expect(ev.payment).toMatchObject({ provider_payment_id: "pay_1", amount_minor: 14900, currency: "INR", status: "captured" });
+    expect(firstPayment(ev.payment)).toMatchObject({ provider_payment_id: "pay_1", amount_minor: 14900, currency: "INR", status: "captured" });
   });
   it("a bad signature is rejected before the provider is even asked", async () => {
     const fetcher = f();
@@ -131,7 +135,7 @@ describe("Razorpay: checkout signature and verification", () => {
   });
   it("a failed payment is recorded as failed and grants nothing", async () => {
     const ev = await confirmRazorpayCheckout(rz, input(), expectOk, f(sub({ status: "created", current_end: null }), pay({ status: "failed" })));
-    expect(ev.payment?.status).toBe("failed");
+    expect(firstPayment(ev.payment)?.status).toBe("failed");
     expect(ev.subscription?.status).toBe("pending");
   });
 });
@@ -156,7 +160,23 @@ describe("Razorpay: webhook event mapping", () => {
   });
   it("subscription.charged carries the payment into the ledger", () => {
     const body = { ...ev("subscription.charged"), payload: { ...ev("subscription.charged").payload, payment: { entity: { id: "pay_9", amount: 14900, currency: "INR", status: "captured", created_at: 1_800_000_100 } } } };
-    expect(razorpayEventToBilling(body, "e")!.payment).toMatchObject({ provider_payment_id: "pay_9", provider_subscription_id: "sub_1", amount_minor: 14900, status: "captured" });
+    expect(firstPayment(razorpayEventToBilling(body, "e")!.payment)).toMatchObject({ provider_payment_id: "pay_9", provider_subscription_id: "sub_1", amount_minor: 14900, status: "captured" });
+  });
+  it("a failed renewal writes one failed ledger row, with the same id for Razorpay's retries of that renewal", () => {
+    const pending = razorpayEventToBilling(ev("subscription.pending", { paid_count: 3 }), "e1")!;
+    const halted = razorpayEventToBilling(ev("subscription.halted", { paid_count: 3 }), "e2")!;
+    expect(pending.payment).toEqual({ provider_payment_id: "renewal_failed:sub_1:3", provider_subscription_id: "sub_1", status: "failed", failure_reason: "Renewal payment failed" });
+    expect(firstPayment(halted.payment)?.provider_payment_id).toBe("renewal_failed:sub_1:3"); // same renewal, one row
+    expect(pending.payment).not.toHaveProperty("amount_minor"); // the database fills in the subscription's own price
+    expect(firstPayment(razorpayEventToBilling(ev("subscription.halted", { paid_count: 4 }), "e3")!.payment)?.provider_payment_id).toBe("renewal_failed:sub_1:4"); // the next renewal is a different row
+    expect(razorpayEventToBilling(ev("subscription.activated"), "e")!.payment).toBeNull();
+  });
+  it("reconcile re-reads a subscription for the daily repair job, and refuses one that is not this person's", async () => {
+    const row = { provider_subscription_id: "sub_1", user_id: UID };
+    const f = router({ "/subscriptions/sub_1": { id: "sub_1", plan_id: "plan_M", status: "active", current_start: 1_800_000_000, current_end: 1_802_592_000, notes: { user_id: UID } } });
+    expect((await reconcileRazorpaySubscription(rz, row, "reconcile:x", f))!.subscription).toMatchObject({ status: "active", current_period_end: new Date(1_802_592_000 * 1000).toISOString() });
+    expect(await reconcileRazorpaySubscription(rz, { ...row, user_id: OTHER }, "reconcile:x", f)).toBeNull();
+    expect(await reconcileRazorpaySubscription(rz, { ...row, user_id: null }, "reconcile:x", f)).toBeNull();
   });
   it("a cancellation records when it happened", () => {
     expect(razorpayEventToBilling(ev("subscription.cancelled"), "e")!.subscription?.canceled_at).toBeTruthy();
@@ -164,9 +184,10 @@ describe("Razorpay: webhook event mapping", () => {
   it("payment and refund events move only an existing payment row, found by payment id", () => {
     const p = (event: string, entity: object) => razorpayEventToBilling({ event, created_at: 1_800_000_000, payload: { payment: { entity: { id: "pay_1", amount: 14900, currency: "INR", ...entity } } } }, "e")!;
     expect(p("payment.failed", { status: "failed", error_description: "Card declined" })).toMatchObject({ subscription: null, userId: null, payment: { status: "failed", failure_reason: "Card declined" } });
-    expect(p("payment.captured", { status: "captured" }).payment?.status).toBe("captured");
-    expect(p("refund.processed", { refund_status: "full" }).payment?.status).toBe("refunded");
-    expect(p("refund.created", { refund_status: "partial" }).payment?.status).toBe("partially_refunded");
+    expect(p("payment.failed", { status: "failed", subscription_id: "sub_77" }).payment).toMatchObject({ provider_subscription_id: "sub_77" }); // linked when Razorpay says which subscription
+    expect(firstPayment(p("payment.captured", { status: "captured" }).payment)?.status).toBe("captured");
+    expect(firstPayment(p("refund.processed", { refund_status: "full" }).payment)?.status).toBe("refunded");
+    expect(firstPayment(p("refund.created", { refund_status: "partial" }).payment)?.status).toBe("partially_refunded");
     expect(p("refund.created", {})).toBeNull();
   });
   it("ignores events that change nothing, malformed events, and unknown statuses", () => {
@@ -214,25 +235,38 @@ describe("PayPal: plan, state and verification", () => {
   });
 
   const expectOk = { userId: UID, planId: "P-MONTH", amountMinor: 200, currency: "USD" };
-  const live = (over: Partial<PpSubscription> = {}): PpSubscription => ({ id: "I-ABC", plan_id: "P-MONTH", status: "ACTIVE", custom_id: UID, start_time: "2026-11-01T00:00:00Z", subscriber: { payer_id: "PAYER" }, billing_info: { next_billing_time: "2026-12-01T00:00:00Z", last_payment: { amount: { currency_code: "USD", value: "2.00" }, time: "2026-11-01T00:00:05Z" } }, ...over });
-  const state = (s: PpSubscription) => paypalStateToBilling(s, expectOk, { eventId: "e", eventType: "t" }, new Date("2026-11-02T00:00:00Z"));
+  const live = (over: Partial<PpSubscription> = {}): PpSubscription => ({ id: "I-ABC", plan_id: "P-MONTH", status: "ACTIVE", custom_id: UID, start_time: "2026-11-01T00:00:00Z", subscriber: { payer_id: "PAYER" }, billing_info: { next_billing_time: "2026-12-01T00:00:00Z" }, ...over });
+  const tx = (over: Partial<PpTransaction> = {}): PpTransaction => ({ id: "SALE-1", status: "COMPLETED", time: "2026-11-01T00:00:05Z", amount_with_breakdown: { gross_amount: { currency_code: "USD", value: "2.00" } }, ...over });
+  const state = (s: PpSubscription, txs: PpTransaction[] = [tx()]) => paypalStateToBilling(s, expectOk, { eventId: "e", eventType: "t" }, new Date("2026-11-02T00:00:00Z"), txs);
 
-  it("an active, paid subscription for this person, plan and price grants the plan", () => {
+  it("an active, paid subscription for this person, plan and price grants the plan, and the ledger uses PayPal's real transaction id", () => {
     const ev = state(live());
     expect(ev.subscription).toMatchObject({ status: "active", current_period_end: "2026-12-01T00:00:00Z", provider_customer_id: "PAYER" });
-    expect(ev.payment).toMatchObject({ amount_minor: 200, currency: "USD", status: "captured" });
+    expect(allPayments(ev.payment)).toEqual([{ provider_payment_id: "SALE-1", provider_subscription_id: "I-ABC", amount_minor: 200, currency: "USD", status: "captured", failure_reason: null, paid_at: "2026-11-01T00:00:05Z" }]);
   });
-  it("approval without a recorded payment or renewal date does not grant access", () => {
-    expect(state(live({ billing_info: { next_billing_time: "2026-12-01T00:00:00Z" } })).subscription?.status).toBe("pending");
-    expect(state(live({ billing_info: { last_payment: live().billing_info!.last_payment } })).subscription?.status).toBe("pending");
+  it("approval without a recorded payment or a renewal date does not grant access", () => {
+    expect(state(live(), []).subscription?.status).toBe("pending");
+    expect(state(live({ billing_info: {} })).subscription?.status).toBe("pending");
     expect(state(live({ status: "APPROVAL_PENDING" })).subscription?.status).toBe("pending");
+    expect(state(live(), [tx({ status: "DECLINED" })]).subscription?.status).toBe("pending"); // a declined payment is not a payment
   });
   it("another person's subscription, another plan, or a different amount is refused", () => {
     expect(() => state(live({ custom_id: OTHER }))).toThrow(BillingError);
     expect(() => state(live({ custom_id: null }))).toThrow(BillingError);
     expect(() => state(live({ plan_id: "P-CHEAP" }))).toThrow(BillingError);
-    expect(() => state(live({ billing_info: { next_billing_time: "x", last_payment: { amount: { currency_code: "USD", value: "0.01" }, time: "t" } } }))).toThrow(BillingError);
-    expect(() => state(live({ billing_info: { next_billing_time: "x", last_payment: { amount: { currency_code: "EUR", value: "2.00" }, time: "t" } } }))).toThrow(BillingError);
+    expect(() => state(live(), [tx({ amount_with_breakdown: { gross_amount: { currency_code: "USD", value: "0.01" } } })])).toThrow(BillingError);
+    expect(() => state(live(), [tx({ amount_with_breakdown: { gross_amount: { currency_code: "EUR", value: "2.00" } } })])).toThrow(BillingError);
+  });
+  it("refunds are carried on the payment they belong to: full, partial, and declined renewals", () => {
+    const ev = state(live({ status: "SUSPENDED" }), [
+      tx({ id: "S1", status: "REFUNDED", time: "2026-09-01T00:00:00Z" }),
+      tx({ id: "S2", status: "PARTIALLY_REFUNDED", time: "2026-10-01T00:00:00Z" }),
+      tx({ id: "S3", status: "DECLINED", time: "2026-11-01T00:00:00Z" }),
+      tx({ id: "S4", status: "WEIRD" }),
+    ]);
+    expect(allPayments(ev.payment).map((p) => `${p.provider_payment_id}:${p.status}:${p.paid_at ?? "-"}`)).toEqual(["S1:refunded:2026-09-01T00:00:00Z", "S2:partially_refunded:2026-10-01T00:00:00Z", "S3:failed:-"]);
+    expect(allPayments(ev.payment)[2].failure_reason).toBe("Payment declined");
+    expect(ev.subscription?.status).toBe("past_due");
   });
   it("maps every lifecycle status, including failed renewals and cancellation", () => {
     expect(["APPROVAL_PENDING", "APPROVED", "ACTIVE", "SUSPENDED", "CANCELLED", "EXPIRED", "?"].map(paypalStatus)).toEqual(["pending", "pending", "active", "past_due", "canceled", "expired", null]);
@@ -241,10 +275,28 @@ describe("PayPal: plan, state and verification", () => {
     expect(c.subscription?.status).toBe("canceled");
     expect(c.subscription?.canceled_at).toBeTruthy();
   });
+  it("lists a subscription's transactions from PayPal for a bounded window", async () => {
+    const f = router({ ...tok, "/billing/subscriptions/I-ABC/transactions": { transactions: [tx()] } });
+    expect(await listPaypalTransactions(pp, "I-ABC", "2026-10-01T00:00:00.000Z", new Date("2026-11-02T00:00:00Z"), f)).toHaveLength(1);
+    expect(f.calls.at(-1)!.url).toMatch(/start_time=2026-10-01.*end_time=2026-11-02/);
+  });
+  it("sync reads the subscription and its transactions together and refuses a subscription whose owner is gone", async () => {
+    const row = { provider_subscription_id: "I-ABC", user_id: UID, interval: "month" as const, amount_minor: 200, currency: "USD", created_at: "2026-11-01T00:00:00Z" };
+    const f = router({ ...tok, "/billing/subscriptions/I-ABC/transactions": { transactions: [tx({ id: "S9", status: "REFUNDED" })] }, "/billing/subscriptions/I-ABC": live() });
+    const ev = await syncPaypalSubscription(pp, row, { eventId: "e", eventType: "t" }, f, new Date("2026-11-02T00:00:00Z"));
+    expect(allPayments(ev.payment)[0]).toMatchObject({ provider_payment_id: "S9", status: "refunded" });
+    expect(await code(syncPaypalSubscription(pp, { ...row, user_id: null }, { eventId: "e", eventType: "t" }, f))).toBe("owner_mismatch");
+  });
   it("finds the subscription an event is about", () => {
     expect(paypalEventSubscriptionId({ event_type: "BILLING.SUBSCRIPTION.ACTIVATED", resource: { id: "I-1" } })).toBe("I-1");
     expect(paypalEventSubscriptionId({ event_type: "PAYMENT.SALE.COMPLETED", resource: { billing_agreement_id: "I-2" } })).toBe("I-2");
     expect(paypalEventSubscriptionId({ event_type: "CHECKOUT.ORDER.APPROVED", resource: { id: "x" } })).toBeNull();
+    expect(paypalEventSubscriptionId({ event_type: "PAYMENT.SALE.REFUNDED", resource: { sale_id: "S1" } })).toBeNull(); // refunds name the sale, below
+  });
+  it("finds the original sale a refund or reversal is about", () => {
+    expect(paypalEventSaleId({ event_type: "PAYMENT.SALE.REFUNDED", resource: { id: "REFUND-1", sale_id: "SALE-1" } })).toBe("SALE-1");
+    expect(paypalEventSaleId({ event_type: "PAYMENT.SALE.REVERSED", resource: { sale_id: "SALE-2" } })).toBe("SALE-2");
+    expect(paypalEventSaleId({ event_type: "PAYMENT.SALE.COMPLETED", resource: { id: "x" } })).toBeNull();
   });
 
   describe("webhook signature", () => {
@@ -283,12 +335,12 @@ describe("webhook and checkout routes", () => {
     const query = (table: string) => {
       const chain: Record<string, unknown> = {};
       const self = () => chain;
-      for (const m of ["select", "eq", "in", "lt", "gte", "neq", "order", "limit", "update", "insert"]) chain[m] = self;
+      for (const m of ["select", "eq", "in", "lt", "gte", "neq", "not", "order", "limit", "update", "insert"]) chain[m] = self;
       chain.maybeSingle = async () => ({ data: st.tables[table] ?? null });
       chain.then = (res: (v: unknown) => unknown) => res(table === "billing_audit" ? { count: st.recentCheckouts, data: [] } : { data: (st.tables[table + ":list"] as unknown[]) ?? [], error: null });
       return chain;
     };
-    return { createAdminClient: () => (st.adminOn ? { rpc: async (fn: string, args: Record<string, unknown>) => (st.rpc.push({ fn, args }), st.rpcError ? { data: null, error: { message: "db" } } : { data: st.rpcResult, error: null }), from: query } : null) };
+    return { createAdminClient: () => (st.adminOn ? { rpc: async (fn: string, args: Record<string, unknown>) => (st.rpc.push({ fn, args }), st.rpcError ? { data: null, error: { message: "db" } } : { data: fn === "billing_sweep_expired" ? 2 : st.rpcResult, error: null }), from: query } : null) };
   });
   vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: async () => ({ data: { user: st.user } }) } }) }));
   vi.mock("@/server/site-url", () => ({ siteUrl: async () => "http://127.0.0.1:3100" }));
@@ -384,17 +436,69 @@ describe("webhook and checkout routes", () => {
       expect(st.rpc[0].args).toMatchObject({ p_event_id: "WH-EVT-1", p_user: null, p_subscription: null, p_payment: null });
     });
     it("a verified event for one of ours records PayPal's current state, not the event's claim", async () => {
-      st.tables.billing_subscriptions = { id: "r1", user_id: UID, provider: "paypal", provider_subscription_id: "I-ABC", interval: "month", amount_minor: 200, currency: "USD", status: "active", current_period_end: null, cancel_at_period_end: false, created_at: "x" };
-      vi.stubGlobal("fetch", router({ "/oauth2/token": { access_token: "T", expires_in: 300 }, "/verify-webhook-signature": { verification_status: "SUCCESS" }, "/billing/subscriptions/I-ABC": { id: "I-ABC", plan_id: "P-MONTH", status: "CANCELLED", custom_id: UID } }));
+      st.tables.billing_subscriptions = { id: "r1", user_id: UID, provider: "paypal", provider_subscription_id: "I-ABC", interval: "month", amount_minor: 200, currency: "USD", status: "active", current_period_end: null, cancel_at_period_end: false, created_at: "2026-11-01T00:00:00Z" };
+      vi.stubGlobal("fetch", router({ "/oauth2/token": { access_token: "T", expires_in: 300 }, "/verify-webhook-signature": { verification_status: "SUCCESS" }, "/billing/subscriptions/I-ABC/transactions": { transactions: [] }, "/billing/subscriptions/I-ABC": { id: "I-ABC", plan_id: "P-MONTH", status: "CANCELLED", custom_id: UID } }));
       expect((await call()).status).toBe(200);
       expect(st.rpc[0].args.p_subscription).toMatchObject({ provider_subscription_id: "I-ABC", status: "canceled" });
     });
+    it("a refund names only the sale: it is matched through the ledger and recorded on the original payment", async () => {
+      const refundEvt = JSON.stringify({ id: "WH-REFUND-1", event_type: "PAYMENT.SALE.REFUNDED", resource: { id: "REFUND-1", sale_id: "SALE-1" } });
+      st.tables.billing_payments = { subscription_id: "r1" };
+      st.tables.billing_subscriptions = { id: "r1", user_id: UID, provider: "paypal", provider_subscription_id: "I-ABC", interval: "month", amount_minor: 200, currency: "USD", status: "active", current_period_end: null, cancel_at_period_end: false, created_at: "2026-11-01T00:00:00Z" };
+      vi.stubGlobal("fetch", router({ "/oauth2/token": { access_token: "T", expires_in: 300 }, "/verify-webhook-signature": { verification_status: "SUCCESS" }, "/billing/subscriptions/I-ABC/transactions": { transactions: [{ id: "SALE-1", status: "REFUNDED", time: "2026-11-01T00:00:05Z", amount_with_breakdown: { gross_amount: { currency_code: "USD", value: "2.00" } } }] }, "/billing/subscriptions/I-ABC": { id: "I-ABC", plan_id: "P-MONTH", status: "ACTIVE", custom_id: UID, billing_info: { next_billing_time: "2026-12-01T00:00:00Z" } } }));
+      const res = await (await import("@/app/api/webhooks/paypal/route")).POST(post("/api/webhooks/paypal", refundEvt, hdrs));
+      expect(res.status).toBe(200);
+      expect(st.rpc).toHaveLength(1);
+      expect(st.rpc[0].args.p_event_id).toBe("WH-REFUND-1");
+      expect(st.rpc[0].args.p_payment).toEqual([expect.objectContaining({ provider_payment_id: "SALE-1", status: "refunded" })]);
+    });
+    it("a refund for a payment not in the ledger yet is stored and left for the daily reconcile", async () => {
+      const refundEvt = JSON.stringify({ id: "WH-REFUND-2", event_type: "PAYMENT.SALE.REFUNDED", resource: { id: "REFUND-2", sale_id: "SALE-UNKNOWN" } });
+      vi.stubGlobal("fetch", router({ "/oauth2/token": { access_token: "T", expires_in: 300 }, "/verify-webhook-signature": { verification_status: "SUCCESS" } }));
+      expect((await (await import("@/app/api/webhooks/paypal/route")).POST(post("/api/webhooks/paypal", refundEvt, hdrs))).status).toBe(200);
+      expect(st.rpc[0].args).toMatchObject({ p_event_id: "WH-REFUND-2", p_subscription: null, p_payment: null });
+    });
     it("an inconsistent real subscription is acknowledged, audited and never applied", async () => {
-      st.tables.billing_subscriptions = { id: "r1", user_id: UID, provider: "paypal", provider_subscription_id: "I-ABC", interval: "month", amount_minor: 200, currency: "USD", status: "active", current_period_end: null, cancel_at_period_end: false, created_at: "x" };
-      vi.stubGlobal("fetch", router({ "/oauth2/token": { access_token: "T", expires_in: 300 }, "/verify-webhook-signature": { verification_status: "SUCCESS" }, "/billing/subscriptions/I-ABC": { id: "I-ABC", plan_id: "P-OTHER", status: "ACTIVE", custom_id: UID } }));
+      st.tables.billing_subscriptions = { id: "r1", user_id: UID, provider: "paypal", provider_subscription_id: "I-ABC", interval: "month", amount_minor: 200, currency: "USD", status: "active", current_period_end: null, cancel_at_period_end: false, created_at: "2026-11-01T00:00:00Z" };
+      vi.stubGlobal("fetch", router({ "/oauth2/token": { access_token: "T", expires_in: 300 }, "/verify-webhook-signature": { verification_status: "SUCCESS" }, "/billing/subscriptions/I-ABC/transactions": { transactions: [] }, "/billing/subscriptions/I-ABC": { id: "I-ABC", plan_id: "P-OTHER", status: "ACTIVE", custom_id: UID } }));
       const res = await call();
       expect(await res.json()).toMatchObject({ ok: true, rejected: "plan_mismatch" });
       expect(st.rpc).toHaveLength(0);
+    });
+  });
+
+  describe("daily billing cron", () => {
+    const run = async (auth?: string) => (await import("@/app/api/cron/billing/route")).GET(new NextRequest("http://127.0.0.1:3100/api/cron/billing", { headers: auth ? { authorization: auth } : {} }));
+    beforeEach(() => vi.stubEnv("CRON_SECRET", "cron-secret-0123456789"));
+    it("is closed without a configured secret, and to anyone who does not present it", async () => {
+      vi.stubEnv("CRON_SECRET", "");
+      expect((await run("Bearer cron-secret-0123456789")).status).toBe(503);
+      vi.stubEnv("CRON_SECRET", "short");
+      expect((await run("Bearer short")).status).toBe(503);
+      vi.stubEnv("CRON_SECRET", "cron-secret-0123456789");
+      expect((await run()).status).toBe(401);
+      expect((await run("Bearer wrong-secret-0123456789")).status).toBe(401);
+      expect(st.rpc).toHaveLength(0);
+    });
+    it("sweeps expired subscriptions and re-reads each live one from its provider", async () => {
+      st.tables["billing_subscriptions:list"] = [{ id: "r1", user_id: UID, provider: "paypal", provider_subscription_id: "I-ABC", interval: "month", amount_minor: 200, currency: "USD", status: "active", current_period_end: null, cancel_at_period_end: false, created_at: "2026-11-01T00:00:00Z" }];
+      vi.stubEnv("PAYPAL_CLIENT_ID", "cid");
+      vi.stubEnv("PAYPAL_CLIENT_SECRET", "csecret");
+      vi.stubEnv("PAYPAL_PLAN_ID_ONE_MONTHLY", "P-MONTH");
+      vi.stubGlobal("fetch", router({ "/oauth2/token": { access_token: "T", expires_in: 300 }, "/billing/subscriptions/I-ABC/transactions": { transactions: [{ id: "S1", status: "COMPLETED", time: "2026-11-01T00:00:05Z", amount_with_breakdown: { gross_amount: { currency_code: "USD", value: "2.00" } } }] }, "/billing/subscriptions/I-ABC": { id: "I-ABC", plan_id: "P-MONTH", status: "ACTIVE", custom_id: UID, billing_info: { next_billing_time: "2026-12-01T00:00:00Z" } } }));
+      const res = await run("Bearer cron-secret-0123456789");
+      expect(await res.json()).toEqual({ swept: 2, checked: 1, updated: 1, failed: 0 });
+      expect(st.rpc.map((r) => r.fn)).toEqual(["billing_sweep_expired", "billing_apply_event"]);
+      expect(String(st.rpc[1].args.p_event_id)).toMatch(/^reconcile:I-ABC:\d{4}-\d{2}-\d{2}$/);
+    });
+    it("a provider failure for one subscription is counted, not thrown, and does not stop the run", async () => {
+      st.tables["billing_subscriptions:list"] = [{ id: "r1", user_id: UID, provider: "paypal", provider_subscription_id: "I-ABC", interval: "month", amount_minor: 200, currency: "USD", status: "active", current_period_end: null, cancel_at_period_end: false, created_at: "2026-11-01T00:00:00Z" }];
+      vi.stubEnv("PAYPAL_CLIENT_ID", "cid");
+      vi.stubEnv("PAYPAL_CLIENT_SECRET", "csecret");
+      vi.stubEnv("PAYPAL_PLAN_ID_ONE_MONTHLY", "P-MONTH");
+      vi.stubGlobal("fetch", router({ "/oauth2/token": { access_token: "T", expires_in: 300 }, "/billing/subscriptions/I-ABC": () => new Response("SECRET PROVIDER TEXT", { status: 500 }) }));
+      const res = await run("Bearer cron-secret-0123456789");
+      expect(await res.json()).toMatchObject({ failed: 1, updated: 0 });
     });
   });
 
@@ -440,7 +544,7 @@ describe("webhook and checkout routes", () => {
     describe("verify", () => {
       const verify = async (b: unknown, headers: Record<string, string> = origin) => (await import("@/app/api/billing/razorpay/verify/route")).POST(post("/api/billing/razorpay/verify", b, headers));
       const ok = () => ({ razorpay_payment_id: "pay_1", razorpay_subscription_id: "sub_1", razorpay_signature: sign("pay_1", "sub_1") });
-      const row = (user = UID) => ({ id: "r", user_id: user, provider: "razorpay", provider_subscription_id: "sub_1", interval: "month", amount_minor: 14900, currency: "INR", status: "pending", current_period_end: null, cancel_at_period_end: false, created_at: "x" });
+      const row = (user = UID) => ({ id: "r", user_id: user, provider: "razorpay", provider_subscription_id: "sub_1", interval: "month", amount_minor: 14900, currency: "INR", status: "pending", current_period_end: null, cancel_at_period_end: false, created_at: "2026-11-01T00:00:00Z" });
       const provider = () => vi.stubGlobal("fetch", router({ "/subscriptions/sub_1": { id: "sub_1", plan_id: "plan_M", status: "active", current_start: 1_800_000_000, current_end: 1_802_592_000, notes: { user_id: UID } }, "/payments/pay_1": { id: "pay_1", amount: 14900, currency: "INR", status: "captured", created_at: 1_800_000_000 } }));
 
       it("rejects malformed identifiers and foreign origins", async () => {

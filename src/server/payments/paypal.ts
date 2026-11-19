@@ -1,5 +1,5 @@
 import type { PaypalConfig } from "./config";
-import { BillingError, type BillingEvent, type Interval, type PaymentStatus, type SubscriptionStatus } from "./types";
+import { BillingError, type BillingEvent, type Interval, type PaymentPatch, type PaymentStatus, type SubscriptionStatus } from "./types";
 
 /** International customers pay in the currency of the PayPal plan. PayPal does not take INR from most merchants. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -56,7 +56,25 @@ export interface PpSubscription {
   links?: { rel: string; href: string }[];
 }
 
+export interface PpTransaction {
+  id: string;
+  status: string;
+  time?: string;
+  amount_with_breakdown?: { gross_amount?: { currency_code: string; value: string } };
+}
+
 const minorOf = (value: string) => Math.round(Number(value) * 100);
+
+/**
+ * Every payment of a subscription, as PayPal records it: the real transaction id (the same id PayPal's sale and refund
+ * webhooks name), its amount, and whether it completed, was declined or has been refunded. This is the source of the
+ * payment ledger, so refunds and failed renewals are matched to the payment they belong to.
+ */
+export async function listPaypalTransactions(cfg: PaypalConfig, id: string, sinceIso: string, now: Date = new Date(), fetcher: typeof fetch = fetch): Promise<PpTransaction[]> {
+  const q = `start_time=${encodeURIComponent(sinceIso)}&end_time=${encodeURIComponent(now.toISOString())}`;
+  const r = await call<{ transactions?: PpTransaction[] }>(cfg, "GET", `/v1/billing/subscriptions/${encodeURIComponent(id)}/transactions?${q}`, undefined, fetcher);
+  return r.transactions ?? [];
+}
 
 /** The price PayPal will charge for a plan, read from PayPal by the server. Confirms the plan is live and the right interval. */
 export async function readPlanPrice(cfg: PaypalConfig, interval: Interval, fetcher: typeof fetch = fetch): Promise<{ planId: string; amountMinor: number; currency: string }> {
@@ -109,31 +127,48 @@ export function paypalStatus(status: string): SubscriptionStatus | null {
   }
 }
 
+const TX_STATUS: Record<string, PaymentStatus | undefined> = { COMPLETED: "captured", PARTIALLY_REFUNDED: "partially_refunded", REFUNDED: "refunded", DECLINED: "failed", PENDING: "authorized" };
+
 /**
- * Turns PayPal's own, freshly read subscription into the state to record. Used for the return from PayPal and for
- * every webhook: the callback or event only says "look again"; what is recorded is what PayPal reports now, checked
- * against what the server expected when the checkout began (person, plan, amount, currency).
+ * Turns PayPal's own, freshly read subscription and its transactions into the state to record. Used for the return
+ * from PayPal, every webhook and the daily reconcile: the callback or event only says "look again"; what is recorded
+ * is what PayPal reports now, checked against what the server expected when the checkout began (person, plan, amount,
+ * currency). Every transaction becomes a ledger row under its real id, so a refund or a declined renewal lands on the
+ * payment it belongs to.
  */
 export function paypalStateToBilling(
   sub: PpSubscription,
   expect: { userId: string; planId: string; amountMinor: number; currency: string },
   ids: { eventId: string; eventType: string },
   now: Date = new Date(),
+  transactions: PpTransaction[] = [],
 ): BillingEvent {
   if (!sub.custom_id || !UUID.test(sub.custom_id) || sub.custom_id !== expect.userId) throw new BillingError("owner_mismatch", 403);
   if (sub.plan_id !== expect.planId) throw new BillingError("plan_mismatch");
   const status = paypalStatus(sub.status);
   if (!status) throw new BillingError("provider_error", 502);
-  const last = sub.billing_info?.last_payment;
-  let payment: BillingEvent["payment"] = null;
-  if (last?.amount && last.time) {
+  const payments: PaymentPatch[] = [];
+  for (const t of transactions) {
+    const mapped = TX_STATUS[t.status];
+    const gross = t.amount_with_breakdown?.gross_amount;
+    if (!mapped || !t.id || !gross) continue;
     // The money actually taken must be the price on record. Anything else is never turned into access.
-    if (minorOf(last.amount.value) !== expect.amountMinor || last.amount.currency_code !== expect.currency) throw new BillingError("amount_mismatch");
-    payment = { provider_payment_id: `${sub.id}:${last.time}`, provider_subscription_id: sub.id, amount_minor: expect.amountMinor, currency: expect.currency, status: "captured" as PaymentStatus, paid_at: last.time };
+    if (mapped !== "failed" && (minorOf(gross.value) !== expect.amountMinor || gross.currency_code !== expect.currency)) throw new BillingError("amount_mismatch");
+    payments.push({
+      provider_payment_id: t.id,
+      provider_subscription_id: sub.id,
+      amount_minor: expect.amountMinor,
+      currency: expect.currency,
+      status: mapped,
+      failure_reason: mapped === "failed" ? "Payment declined" : null,
+      paid_at: mapped === "failed" || mapped === "authorized" ? null : t.time ?? null,
+    });
   }
+  const paid = payments.some((p) => p.status === "captured" || p.status === "partially_refunded" || p.status === "refunded");
+  const last = [...payments].filter((p) => p.paid_at).sort((a, b) => String(b.paid_at).localeCompare(String(a.paid_at)))[0];
   const next = sub.billing_info?.next_billing_time ?? null;
   // ACTIVE needs both a recorded payment and a renewal date; otherwise the plan is not granted.
-  const granted = status === "active" && payment !== null && next !== null;
+  const granted = status === "active" && paid && next !== null;
   return {
     provider: "paypal",
     eventId: ids.eventId,
@@ -144,13 +179,31 @@ export function paypalStateToBilling(
       provider_subscription_id: sub.id,
       provider_customer_id: sub.subscriber?.payer_id ?? null,
       status: status === "active" && !granted ? "pending" : status,
-      current_period_start: last?.time ?? null,
+      current_period_start: last?.paid_at ?? null,
       current_period_end: next,
       started_at: sub.start_time ?? null,
       ...(status === "canceled" ? { canceled_at: now.toISOString() } : {}),
     },
-    payment,
+    payment: payments.length ? payments : null,
   };
+}
+
+/** Reads the subscription and its payments from PayPal and returns the state to record. One place, used by every caller. */
+export async function syncPaypalSubscription(
+  cfg: PaypalConfig,
+  row: { provider_subscription_id: string; user_id: string | null; interval: Interval; amount_minor: number; currency: string; created_at: string },
+  ids: { eventId: string; eventType: string },
+  fetcher: typeof fetch = fetch,
+  now: Date = new Date(),
+): Promise<BillingEvent> {
+  const planId = cfg.planIds[row.interval];
+  if (!planId) throw new BillingError("interval_unavailable");
+  if (!row.user_id) throw new BillingError("owner_mismatch", 403);
+  // From a day before the checkout began; if the stored date is unreadable, look back a bounded 400 days instead.
+  const created = new Date(row.created_at).getTime();
+  const since = new Date((Number.isFinite(created) ? Math.min(created, now.getTime()) : now.getTime() - 400 * 86_400_000) - 86_400_000).toISOString();
+  const [sub, transactions] = await Promise.all([getPaypalSubscription(cfg, row.provider_subscription_id, fetcher), listPaypalTransactions(cfg, row.provider_subscription_id, since, now, fetcher)]);
+  return paypalStateToBilling(sub, { userId: row.user_id, planId, amountMinor: row.amount_minor, currency: row.currency }, ids, now, transactions);
 }
 
 /** The PayPal verification call: PayPal itself checks the signature of the webhook delivery. */
@@ -174,6 +227,17 @@ export function paypalEventSubscriptionId(event: unknown): string | null {
   const e = event as { event_type?: string; resource?: { id?: string; billing_agreement_id?: string } };
   const type = e?.event_type ?? "";
   if (type.startsWith("BILLING.SUBSCRIPTION.")) return e.resource?.id ?? null;
-  if (type.startsWith("PAYMENT.SALE.")) return e.resource?.billing_agreement_id ?? null;
+  if (type === "PAYMENT.SALE.COMPLETED" || type === "PAYMENT.SALE.DENIED" || type === "PAYMENT.SALE.PENDING") return e.resource?.billing_agreement_id ?? null;
+  return null;
+}
+
+/**
+ * Refund and reversal events name the original payment (the sale), not the subscription. The route finds the
+ * subscription through the payment already in the ledger and then re-reads PayPal's transactions for it.
+ */
+export function paypalEventSaleId(event: unknown): string | null {
+  const e = event as { event_type?: string; resource?: { sale_id?: string; id?: string } };
+  const type = e?.event_type ?? "";
+  if (type === "PAYMENT.SALE.REFUNDED" || type === "PAYMENT.SALE.REVERSED") return e.resource?.sale_id ?? null;
   return null;
 }

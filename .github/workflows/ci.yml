@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, feat/budget-buddy-v1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+  # Public placeholders so the build needs no real project. Nothing in this job contacts Supabase, a payment provider
+  # or an AI provider: unit and database tests run the real migrations in-process (PGlite) and mock every provider.
+  NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+  NEXT_PUBLIC_SITE_URL: http://localhost:3100
+
+jobs:
+  verify:
+    name: Lint, types, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type-check
+        run: npm run typecheck
+      - name: Unit and database tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Dependency audit (production, high and above)
+        run: npm audit --omit=dev --audit-level=high
+
+  e2e:
+    name: End-to-end (needs the test project secrets)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # One run at a time: every run signs in as the same disposable test user in the same Supabase project.
+    concurrency:
+      group: e2e-shared-test-project
+      cancel-in-progress: false
+    steps:
+      - name: Check for test project secrets
+        id: gate
+        env:
+          HAS: ${{ secrets.E2E_USER_EMAIL != '' && secrets.E2E_USER_PASSWORD != '' && secrets.E2E_SUPABASE_URL != '' && secrets.E2E_SUPABASE_KEY != '' }}
+        run: |
+          echo "run=$HAS" >> "$GITHUB_OUTPUT"
+          if [ "$HAS" != "true" ]; then echo "::notice::E2E skipped: the E2E_* secrets are not available (forks and unconfigured repositories never run it)."; fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+        if: steps.gate.outputs.run == 'true'
+      - run: npx playwright install --with-deps chrome
+        if: steps.gate.outputs.run == 'true'
+      - run: npm run build
+        if: steps.gate.outputs.run == 'true'
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_KEY }}
+      - name: Playwright (production build, entire suite)
+        if: steps.gate.outputs.run == 'true'
+        run: npx playwright test --reporter=line,html
+        env:
+          E2E_PROD: "1"
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_KEY }}
+          E2E_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
+          E2E_SUPABASE_KEY: ${{ secrets.E2E_SUPABASE_KEY }}
+          E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
+          E2E_USER_PASSWORD: ${{ secrets.E2E_USER_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        if: failure() && steps.gate.outputs.run == 'true'
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

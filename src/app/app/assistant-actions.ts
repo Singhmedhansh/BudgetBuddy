@@ -40,19 +40,11 @@ export async function askAssistantAction(prev: AssistantState | undefined, form:
       return r.allowed && r.id !== undefined ? { allowed: true, id: r.id } : { allowed: false, reason: r.reason ?? "hourly" };
     },
     async settle(id, r) {
-      await ctx.supabase.rpc("ai_settle", {
-        p_id: id,
-        p_status: r.status,
-        p_provider: r.provider,
-        p_model: r.model,
-        p_prompt: r.promptTokens,
-        p_completion: r.completionTokens,
-        p_latency: r.latencyMs,
-        p_error_kind: r.errorKind ?? null,
-        p_attempts: r.attempts ?? 0,
-        p_fallbacks: r.fallbacks ?? 0,
-        p_rate_limited: r.rateLimited ?? 0,
-      });
+      const base = { p_id: id, p_status: r.status, p_provider: r.provider, p_model: r.model, p_prompt: r.promptTokens, p_completion: r.completionTokens, p_latency: r.latencyMs };
+      const { error } = await ctx.supabase.rpc("ai_settle", { ...base, p_error_kind: r.errorKind ?? null, p_attempts: r.attempts ?? 0, p_fallbacks: r.fallbacks ?? 0, p_rate_limited: r.rateLimited ?? 0 });
+      // Before migration 11 is applied only the original seven-argument function exists: settle with that, so tokens
+      // and the daily allowance are still recorded whichever order the code and the migration go out in.
+      if (error) await ctx.supabase.rpc("ai_settle", base);
     },
   };
 

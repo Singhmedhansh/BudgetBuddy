@@ -26,7 +26,8 @@ export async function applyBillingEvent(admin: Admin, ev: BillingEvent): Promise
 
 export interface SubscriptionRow {
   id: string;
-  user_id: string;
+  /** Null once the sign-in identity has been removed: the record is kept, the person is gone. */
+  user_id: string | null;
   provider: "razorpay" | "paypal";
   provider_subscription_id: string;
   interval: Interval;
@@ -97,4 +98,13 @@ export async function insertPending(
   });
   if (error) throw new BillingError("provider_error", 500);
   await audit(admin, { userId: row.userId, provider: row.provider, actor: "checkout", action: "checkout_created", detail: { interval: row.interval, subscription: row.providerSubscriptionId } });
+}
+
+/** The subscription a recorded payment belongs to, or null if the payment is not in the ledger (yet). */
+export async function subscriptionForPayment(admin: Admin, provider: string, providerPaymentId: string): Promise<SubscriptionRow | null> {
+  const { data: pay } = await admin.from("billing_payments").select("subscription_id").eq("provider", provider).eq("provider_payment_id", providerPaymentId).maybeSingle();
+  const subId = (pay as { subscription_id: string | null } | null)?.subscription_id;
+  if (!subId) return null;
+  const { data } = await admin.from("billing_subscriptions").select("*").eq("id", subId).maybeSingle();
+  return (data as SubscriptionRow | null) ?? null;
 }

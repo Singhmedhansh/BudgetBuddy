@@ -76,6 +76,9 @@ export const groq: ProviderClient = {
       messages: [{ role: "system", content: req.system }, ...req.messages],
       max_tokens: req.maxOutputTokens,
       temperature: 0.2,
+      // gpt-oss models reason before answering and the reasoning counts against max_tokens: at a small cap they return
+      // an empty answer (finish_reason "length"). Low effort keeps that overhead small.
+      ...(model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" } : {}),
     };
     const json = (await send(
       "https://api.groq.com/openai/v1/chat/completions",

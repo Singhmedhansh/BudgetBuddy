@@ -44,6 +44,8 @@ export interface RzSubscription {
   ended_at?: number | null;
   notes?: { user_id?: string } | unknown[] | null;
   cancel_at_cycle_end?: number | boolean;
+  paid_count?: number | null;
+  charge_at?: number | null;
 }
 export interface RzPayment { id: string; amount: number; currency: string; status: string; order_id?: string | null; created_at?: number; error_description?: string | null; amount_refunded?: number; refund_status?: string | null }
 
@@ -146,7 +148,7 @@ export async function confirmRazorpayCheckout(
 interface WebhookBody {
   event?: string;
   created_at?: number;
-  payload?: { subscription?: { entity?: RzSubscription }; payment?: { entity?: RzPayment & { subscription_id?: string } } };
+  payload?: { subscription?: { entity?: RzSubscription }; payment?: { entity?: RzPayment & { subscription_id?: string | null } } };
 }
 
 /**
@@ -164,17 +166,25 @@ export function razorpayEventToBilling(body: unknown, eventId: string): BillingE
     const status: PaymentStatus | null =
       type.startsWith("refund.") ? (pay.refund_status === "partial" ? "partially_refunded" : pay.refund_status === "full" ? "refunded" : null) : type === "payment.failed" ? "failed" : type === "payment.captured" ? "captured" : null;
     if (!status) return null;
-    return { provider: "razorpay", eventId, eventType: type, eventAt: at, userId: null, subscription: null, payment: { provider_payment_id: pay.id, provider_order_id: pay.order_id ?? null, amount_minor: pay.amount, currency: pay.currency, status, failure_reason: status === "failed" ? pay.error_description ?? "Payment failed" : null, paid_at: status === "captured" ? iso(pay.created_at) : null } };
+    return { provider: "razorpay", eventId, eventType: type, eventAt: at, userId: null, subscription: null, payment: { provider_payment_id: pay.id, provider_order_id: pay.order_id ?? null, provider_subscription_id: pay.subscription_id ?? null, amount_minor: pay.amount, currency: pay.currency, status, failure_reason: status === "failed" ? pay.error_description ?? "Payment failed" : null, paid_at: status === "captured" ? iso(pay.created_at) : null } };
   }
   if (!type.startsWith("subscription.") || !sub?.id) return null;
   const status = subscriptionStatus(
     { "subscription.authenticated": "authenticated", "subscription.activated": "active", "subscription.charged": "active", "subscription.pending": "pending", "subscription.halted": "halted", "subscription.paused": "paused", "subscription.resumed": "active", "subscription.cancelled": "cancelled", "subscription.completed": "completed", "subscription.updated": sub.status }[type] ?? "",
   );
   if (!status) return null;
-  const payment =
+  const charged =
     type === "subscription.charged" && pay?.id
       ? { provider_payment_id: pay.id, provider_order_id: pay.order_id ?? null, provider_subscription_id: sub.id, amount_minor: pay.amount, currency: pay.currency, status: (pay.status === "captured" ? "captured" : "authorized") as PaymentStatus, paid_at: iso(pay.created_at) }
       : null;
+  // A renewal that could not be charged has no payment entity of its own. It is written to the ledger under an id made
+  // from the subscription and how many payments had succeeded so far, so Razorpay's retries of the same renewal
+  // (subscription.pending, then halted) are one row, and the next successful charge is a different one.
+  const renewalFailed =
+    type === "subscription.pending" || type === "subscription.halted"
+      ? { provider_payment_id: `renewal_failed:${sub.id}:${sub.paid_count ?? 0}`, provider_subscription_id: sub.id, status: "failed" as PaymentStatus, failure_reason: "Renewal payment failed" }
+      : null;
+  const payment = charged ?? renewalFailed;
   return {
     provider: "razorpay",
     eventId,
@@ -191,4 +201,17 @@ export function razorpayEventToBilling(body: unknown, eventId: string): BillingE
     },
     payment,
   };
+}
+
+/**
+ * Re-reads one subscription from Razorpay for the daily reconcile. It carries the subscription's state only (payments
+ * arrive through subscription.charged and the verify step), and it can only confirm or correct a status and period:
+ * the database refuses to move a started subscription back to pending or to grant without a paid-through date.
+ */
+export async function reconcileRazorpaySubscription(cfg: RazorpayConfig, row: { provider_subscription_id: string; user_id: string | null }, eventId: string, fetcher?: typeof fetch, now: Date = new Date()): Promise<BillingEvent | null> {
+  const sub = await getRazorpaySubscription(cfg, row.provider_subscription_id, fetcher);
+  if (!row.user_id || userOf(sub.notes) !== row.user_id) return null;
+  const status = subscriptionStatus(sub.status);
+  if (!status) return null;
+  return { provider: "razorpay", eventId, eventType: "reconcile", eventAt: now, userId: row.user_id, subscription: { provider_subscription_id: sub.id, status, current_period_start: iso(sub.current_start), current_period_end: iso(sub.current_end) }, payment: null };
 }

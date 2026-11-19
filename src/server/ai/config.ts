@@ -30,7 +30,7 @@ const MODEL_ENV: Record<ProviderId, string> = { gemini: "GEMINI_MODEL", groq: "G
  * listed. Model catalogues move quickly: confirm these with `npm run ai:models` before enabling, and override with
  * GEMINI_MODEL / GROQ_MODEL (comma-separated lists are accepted) without a code change.
  */
-const MODEL_DEFAULT: Record<ProviderId, string[]> = { gemini: ["gemini-3.6-flash", "gemini-3.5-flash"], groq: ["openai/gpt-oss-120b", "qwen/qwen3.6-27b"] };
+const MODEL_DEFAULT: Record<ProviderId, string[]> = { gemini: ["gemini-3.5-flash-lite", "gemini-3.6-flash"], groq: ["openai/gpt-oss-120b", "openai/gpt-oss-20b"] };
 
 const int = (v: string | undefined, fallback: number, min: number, max: number) => {
   const n = Number(v);

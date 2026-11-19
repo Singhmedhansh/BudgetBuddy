@@ -3,6 +3,36 @@
 Both are built and tested but **off**. Nothing calls an AI provider or takes a payment until you add credentials.
 No credential is stored in the repository; `.env.example` lists every variable with an empty value.
 
+## Verification status (read this first)
+
+Six levels, from weakest to strongest. A feature is only as verified as the **highest level with a tick**; nothing below is
+claimed beyond it.
+
+- **Locally tested**: the real code and the real migration files, run on a developer machine (unit tests, in-process Postgres
+  for the migrations, a production build driven by headless Chrome against the shared Supabase project with a disposable user).
+- **Mock-tested**: provider HTTP calls (Razorpay, PayPal, Gemini, Groq) are replaced by scripted responses. Proves our logic,
+  not that the provider behaves as we assume.
+- **Sandbox-tested**: exercised against a provider's sandbox/test mode with test credentials.
+- **Live-provider-tested**: a real call to a real provider account (for AI there is no sandbox, so this is the only
+  provider-level level).
+- **Preview-deployed**: running on a Vercel preview deployment and smoke-tested there.
+- **Production-deployed**: running on getfintrack.online.
+
+| Capability | Locally | Mock | Sandbox | Live provider | Preview | Production |
+| --- | :-: | :-: | :-: | :-: | :-: | :-: |
+| Faster navigation (parallel context, request memo, loading states) | yes | n/a | n/a | n/a | no | no |
+| AI gateway routing, fallback, retry, cooldowns, dedup | yes | yes | n/a | **yes** (2 live tests: real answer, forced failover Gemini to Groq) | no | no |
+| AI model names | n/a | n/a | n/a | **yes** (live catalogue lists them; a real call to each provider answered) | no | no |
+| Razorpay checkout, signature and amount verification, webhooks | yes | yes | **no** | no | no | no |
+| PayPal checkout, verification, webhooks, refunds and renewals via transactions | yes | yes | **no** | no | no | no |
+| Billing rules, ledger, RLS, rollback (migrations 11 and 12) | yes (in-process Postgres) | n/a | n/a | n/a | **not applied anywhere** | no |
+| Billing and admin pages | rendered with the tables absent only | n/a | n/a | n/a | no | no |
+| Daily billing cron | yes | yes | no | no | no | no |
+| End-to-end suite (324 tests) | yes (production build, real Supabase, disposable user) | n/a | n/a | n/a | no | no |
+| GitHub Actions CI (`.github/workflows/ci.yml`) | its commands run locally (lint, types, tests, build with placeholder env) | n/a | n/a | n/a | not yet run on GitHub; the e2e job runs only where the `E2E_*` secrets exist | n/a |
+
+Live payments are not tested and are disabled in code. AI is verified but switched off (`AI_ENABLED` unset). Migrations 11 and 12 are not applied to any database.
+
 ## AI gateway
 
 All AI calls go through one server-side gateway (`src/server/ai`). Components never call a provider. Keys are read from
@@ -22,18 +52,32 @@ logs, errors or the usage dashboard. A test scans the production browser bundle 
 
 ### Models: check before enabling
 
-Model catalogues move. Both defaults this project originally shipped with were **retired by their providers in 2026**
-(`gemini-2.0-flash` on 1 June, `llama-3.3-70b-versatile` on 16 August), so the assistant would have failed the moment it
-was switched on. The defaults are now ordered lists: Gemini `gemini-3.6-flash`, then `gemini-3.5-flash`; Groq
-`openai/gpt-oss-120b`, then `qwen/qwen3.6-27b`. These were taken from the providers' deprecation pages, and snapshots of
-those pages disagreed with each other, so they have **not been verified against a live key**. Run:
+Model catalogues move, and **documentation pages contradict each other**, so no name here is trusted until a live key says so.
+
+- Both defaults this project originally shipped with are reported **retired** in 2026 (`gemini-2.0-flash`, 1 June;
+  `llama-3.3-70b-versatile`, 16 August), though Groq's current model page still lists the latter. That disagreement is the
+  reason for the check below.
+- Current defaults, ordered (the second is used only when the first is reported gone): Gemini `gemini-3.5-flash-lite`, then
+  `gemini-3.6-flash`; Groq `openai/gpt-oss-120b`, then `openai/gpt-oss-20b`.
+- **Verified live on 19 Nov 2026** with the three Gemini and four Groq keys (`npm run ai:models -- --smoke` exits 0, and
+  `AI_LIVE_TEST=1` runs `src/server/ai/live.test.ts`). The live catalogues list all four names. This corrected two things the
+  documentation pages got wrong: an earlier draft's fallbacks `gemini-3.5-flash` and `qwen/qwen3.6-27b` do not exist.
+  Observed behaviour worth knowing:
+  - `gemini-3.6-flash` returned **HTTP 503** on every attempt during testing and `gemini-3.8-flash` timed out, so
+    `gemini-3.5-flash-lite` is the primary because it answered on all three keys. Gemini answers took 5 to 10 s; Groq under 1 s.
+    Preferred-provider order is Gemini first as requested; set `AI_PROVIDER_ORDER=groq,gemini` if latency matters more.
+  - `openai/gpt-oss-120b` is a reasoning model: with a very small `max_tokens` its hidden reasoning consumes the whole budget and it
+    returns an **empty answer** (`finish_reason: length`). The gateway uses 700 tokens and sends `reasoning_effort: low` for this family.
+  - This verifies names, keys and the gateway code paths; it is **not** a load or quota test.
+- The keys are stored in Vercel (Preview and Production, type Sensitive) as `GEMINI_API_KEYS` and `GROQ_API_KEYS`. **`AI_ENABLED`
+  is not set anywhere**, so the assistant is off until you set it.
 
 ```
-npm run ai:models              # lists which configured names each provider offers today
-npm run ai:models -- --smoke   # plus one tiny prompt per provider (about 20 output tokens)
+npm run ai:models              # lists which configured names each provider offers today (exit 0 = all found, 1 = failed, 2 = no keys)
+npm run ai:models -- --smoke   # plus one tiny prompt per provider (about 20 output tokens); exit 1 = a model is missing or failed
 ```
 
-and set `GEMINI_MODEL` / `GROQ_MODEL` to whatever it reports. A model the provider says is gone is rested for 30 minutes
+Then set `GEMINI_MODEL` / `GROQ_MODEL` to whatever it reports, and only then set `AI_ENABLED=true`. A model the provider says is gone is rested for 30 minutes
 and the next name in the list is used automatically.
 
 ### How requests are routed
@@ -94,7 +138,9 @@ Subscriptions), not a one-off payment presented as one.
    **The international (USD) price is an owner decision and has no default.**
 3. Set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, the plan ids, `PAYPAL_CLIENT_ID`,
    `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`, `PAYPAL_ENVIRONMENT=sandbox`, and `SUPABASE_SERVICE_ROLE_KEY`.
-4. Register webhooks: Razorpay → `https://<host>/api/webhooks/razorpay` (subscription.*, payment.captured/failed,
+4. Set `CRON_SECRET` (16+ random characters). `vercel.json` schedules `/api/cron/billing` daily at 03:00 UTC; it sweeps expired
+   subscriptions and re-reads every live subscription from both providers to repair any missed webhook.
+5. Register webhooks: Razorpay → `https://<host>/api/webhooks/razorpay` (subscription.*, payment.captured/failed,
    refund.*); PayPal → `https://<host>/api/webhooks/paypal` (BILLING.SUBSCRIPTION.*, PAYMENT.SALE.COMPLETED).
 
 ### How a payment becomes access
@@ -121,14 +167,26 @@ Subscriptions), not a one-off payment presented as one.
   five checkouts per hour, no second subscription while one is running, same-origin check on every cookie-authenticated
   route, input limited to a validated period name (no price is ever read from the browser).
 
+### Ledger behaviour for refunds and failed renewals
+
+- **PayPal.** Every sync reads the subscription's transaction list from PayPal and writes each transaction under its real id, with
+  its state (completed, partly refunded, refunded, declined). `PAYMENT.SALE.REFUNDED`/`REVERSED` name the original sale: the
+  webhook finds the subscription through the payment already in the ledger and re-syncs. A refund that arrives before its payment
+  is recorded is stored as unmatched and repaired by the next daily reconcile.
+- **Razorpay.** `subscription.pending`/`halted` (a renewal that could not be charged) writes a `failed` ledger row
+  `renewal_failed:<subscription>:<paid_count>`, so retries of one renewal are one row. `refund.*` and `payment.*` events move an
+  existing payment row, found by payment id (or by subscription id when Razorpay supplies it).
+- **Effect on access:** see `docs/migrations-11-12-review.md` (a full refund of the latest payment ends access; failed renewal is
+  past due with a seven-day grace; cancellation keeps access to the paid period end).
+- Duplicate events are no-ops; an older event never overwrites newer state; a payment never moves backwards.
+
 ### Known limits
 
-- Razorpay `payment.*` events carry no subscription, so a failed **renewal** is reflected through `subscription.pending`
-  / `halted` (status past due), not as a ledger row. Refunds are matched by payment id.
-- PayPal refunds are not matched to ledger rows (PayPal's sale id is not exposed on the subscription); they are in
-  PayPal's own records.
-- PayPal payments are keyed `subscription:payment time` because the subscription API does not return the sale id.
-- Billing rows are financial records and are **not** removed by "delete my data" (migration 12 header). Retention is an
-  owner decision to confirm with the privacy policy.
-- No sandbox or live credentials were available while this was built, so provider calls are covered by mocked-response
-  tests only. Run the sandbox checkout end to end before going live.
+- The PayPal transaction `id` is assumed to equal the sale id in PayPal's sale/refund webhooks, and Razorpay's `payment.*`
+  entity may not name a subscription. Both fail safe (stored as unmatched, repaired daily) but only a sandbox run confirms the
+  fast path.
+- Billing rows are financial records and are **not** removed by "delete my data", nor by deleting the sign-in identity (migration 12
+  header). Retention is an owner decision to confirm with the privacy policy.
+- The refund-ends-access rule is a chosen policy awaiting owner confirmation.
+- No sandbox or live credentials were available, so provider calls are covered by mocked-response tests only. Run the sandbox
+  checkout end to end before going live.

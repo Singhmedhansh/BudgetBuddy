@@ -280,6 +280,14 @@ test.describe.serial("CSV import and export", () => {
     expect(all.status()).toBe(200);
     const json = await all.json();
     expect(JSON.stringify(json)).not.toMatch(/service_role|password|refresh_token/i);
+
+    // A backup must hold every transaction. PostgREST stops at 1000 rows per request, so an export that does not page
+    // is silently incomplete for anyone with more than that; this user's space is well past it.
+    const sb = await api();
+    const sp = await spaceId(sb);
+    const { count } = await sb.from("transactions").select("id", { count: "exact", head: true }).eq("space_id", sp);
+    expect(json.transactions).toHaveLength(count!);
+    expect(new Set(json.transactions.map((t: { id: string }) => t.id)).size).toBe(count);
   });
 });
 
