@@ -32,3 +32,29 @@ test("a PDF statement is read by AI into reviewable rows, with AI category sugge
   await expect(page.getByText("UBER TRIP 8841")).toBeVisible();
   console.log("review rows:", await page.getByText(/Suggested by AI|Suggested from earlier/).count(), "category suggestions shown");
 });
+
+test("chat feel: a suggestion sends, Enter sends, the message shows at once, New chat clears", async ({ page }) => {
+  await page.goto("/app/assistant");
+  await page.waitForLoadState("networkidle");
+  const conversation = page.getByRole("list", { name: "Conversation" });
+  const checked = conversation.getByText(/checked against your records|Verified figures from your records/);
+
+  await page.getByRole("button", { name: "What is my net worth right now?" }).click();
+  await expect(conversation.getByText("What is my net worth right now?")).toBeVisible({ timeout: 3_000 }); // appears before the answer
+  await expect(checked).toHaveCount(1, { timeout: 90_000 });
+  await expect(page.getByRole("button", { name: "Copy" })).toBeVisible();
+
+  const box = page.getByLabel("Your question");
+  await expect(page.getByRole("button", { name: "Ask" })).toBeDisabled(); // empty box cannot send
+  await box.fill("How much did I spend this month?");
+  await box.press("Shift+Enter"); // newline, not send
+  await expect(conversation.getByText("How much did I spend this month?")).toHaveCount(0);
+  await box.press("Backspace");
+  await box.press("Enter");
+  await expect(checked).toHaveCount(2, { timeout: 90_000 });
+  await expect(box).toHaveValue("");
+
+  await page.getByRole("button", { name: "New chat" }).click();
+  await expect(page.getByRole("heading", { name: /What would you like to know/ })).toBeVisible();
+  await expect(conversation).toHaveCount(0);
+});

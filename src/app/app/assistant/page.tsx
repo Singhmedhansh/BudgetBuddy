@@ -13,7 +13,7 @@ export default async function AssistantPage() {
   return (
     <>
       <PageHeader title="Assistant" description="Ask questions about your own recorded money. It never invents figures." />
-      <div className="max-w-2xl">
+      <div className="mx-auto max-w-3xl">
         <AssistantChat available={status.available} unavailableMessage={MESSAGES.disabled} />
       </div>
     </>

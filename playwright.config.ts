@@ -13,6 +13,8 @@ try {
 
 const PORT = Number(process.env.E2E_PORT ?? 3100);
 const prod = process.env.E2E_PROD === "1";
+// Point the suite at an already-deployed URL (e.g. a Vercel preview). No local server is started then.
+const remote = process.env.E2E_BASE_URL;
 
 const base = { channel: "chrome" as const };
 export default defineConfig({
@@ -23,8 +25,8 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   reporter: [["list"], ["json", { outputFile: "test-results/e2e.json" }]],
-  use: { baseURL: `http://127.0.0.1:${PORT}`, trace: "retain-on-failure", screenshot: "only-on-failure", ...base },
-  webServer: {
+  use: { baseURL: remote ?? `http://127.0.0.1:${PORT}`, trace: "retain-on-failure", screenshot: "only-on-failure", ...base },
+  webServer: remote ? undefined : {
     command: prod ? `npx next start -p ${PORT} -H 127.0.0.1` : `npx next dev -p ${PORT} -H 127.0.0.1`,
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: true,
