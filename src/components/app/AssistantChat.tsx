@@ -5,7 +5,6 @@ import {
   BookOpen,
   CalendarClock,
   Check,
-  Copy,
   Gauge,
   Landmark,
   PiggyBank,
@@ -31,7 +30,13 @@ import {
 } from "@/app/app/assistant-actions";
 import { AssistantMark } from "@/components/app/AssistantMark";
 import { FinnVisuals } from "@/components/app/FinnVisuals";
-import { RichText } from "@/components/app/RichText";
+import {
+  CopyButton,
+  MicButton,
+  Thumbs,
+  TypedText,
+} from "@/components/app/FinnExtras";
+import type { Insight } from "@/server/ai/insights";
 import { UsageMeter, LimitCard } from "@/components/app/FinnUsage";
 import type { Quota } from "@/server/ai/chats";
 import { BRAND } from "@/config/brand";
@@ -63,28 +68,6 @@ function Avatar() {
   return <AssistantMark size={28} className="mt-0.5 shrink-0" />;
 }
 
-function CopyButton({ text }: { text: string }) {
-  const [done, setDone] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setDone(true);
-          setTimeout(() => setDone(false), 1500);
-        } catch {
-          /* clipboard can be blocked; the text stays selectable */
-        }
-      }}
-      className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-muted transition-colors hover:bg-sunken hover:text-fg"
-    >
-      {done ? <Check size={12} aria-hidden /> : <Copy size={12} aria-hidden />}
-      {done ? "Copied" : "Copy"}
-    </button>
-  );
-}
-
 function Chat({
   available,
   unavailableMessage,
@@ -96,7 +79,9 @@ function Chat({
   initialChatId,
   quota,
   onSaved,
+  insights,
 }: {
+  insights: Insight[];
   initialTurns: Turn[];
   initialChatId: string | null;
   quota: Quota | null;
@@ -123,17 +108,27 @@ function Chat({
 
   // Which saved chat this is, and how much of the plan's allowance is left (counted here as answers arrive).
   const chatId = state?.chatId ?? initialChatId;
-  const answered = turns.filter((t) => t.role === "assistant").length - initialTurns.filter((t) => t.role === "assistant").length;
+  const answered =
+    turns.filter((t) => t.role === "assistant").length -
+    initialTurns.filter((t) => t.role === "assistant").length;
   const used = quota ? quota.questionsToday + Math.max(0, answered) : 0;
-  const exhausted = Boolean(quota) && (used >= quota!.questionsPerDay || quota!.tokensMonth >= quota!.tokensPerMonth || state?.limit !== undefined);
-  const limitKind: "day" | "month" = state?.limit?.kind ?? (quota && quota.tokensMonth >= quota.tokensPerMonth ? "month" : "day");
+  const exhausted =
+    Boolean(quota) &&
+    (used >= quota!.questionsPerDay ||
+      quota!.tokensMonth >= quota!.tokensPerMonth ||
+      state?.limit !== undefined);
+  const limitKind: "day" | "month" =
+    state?.limit?.kind ??
+    (quota && quota.tokensMonth >= quota.tokensPerMonth ? "month" : "day");
   const lastSaved = useRef<string>("");
   useEffect(() => {
     if (!chatId) return;
     const key = chatId + ":" + turns.length;
-    if (key === lastSaved.current || turns.length === initialTurns.length) return;
+    if (key === lastSaved.current || turns.length === initialTurns.length)
+      return;
     lastSaved.current = key;
-    if (!initialChatId) window.history.replaceState(null, "", "/app/assistant?c=" + chatId);
+    if (!initialChatId)
+      window.history.replaceState(null, "", "/app/assistant?c=" + chatId);
     onSaved(chatId, turns.find((t) => t.role === "user")?.content ?? "");
   }, [chatId, turns, initialChatId, initialTurns.length, onSaved]);
 
@@ -222,6 +217,42 @@ function Chat({
               ))}
             </dl>
           ) : null}
+          {insights.length > 0 ? (
+            <section
+              aria-label="What Finn noticed"
+              className="mt-6 w-full max-w-xl text-left"
+            >
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
+                {BRAND.assistantName} noticed
+              </h3>
+              <ul className="space-y-2">
+                {insights.map((i) => (
+                  <li key={i.text}>
+                    <button
+                      type="button"
+                      disabled={exhausted}
+                      onClick={() => send(i.ask)}
+                      className="flex w-full items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-left text-sm transition-all hover:border-line-strong hover:shadow-sm disabled:opacity-60"
+                    >
+                      <span
+                        aria-hidden
+                        className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                        style={{
+                          background:
+                            i.tone === "warn"
+                              ? "var(--warn)"
+                              : i.tone === "good"
+                                ? "var(--pos)"
+                                : "var(--info)",
+                        }}
+                      />
+                      <span>{i.text}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           {available ? (
             <ul className="mt-6 grid w-full max-w-xl gap-2.5 sm:grid-cols-2">
               {starters.map(({ text: e, kind }) => {
@@ -230,8 +261,9 @@ function Chat({
                   <li key={e}>
                     <button
                       type="button"
+                      disabled={exhausted}
                       onClick={() => send(e)}
-                      className="group flex h-full w-full items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-left text-sm transition-all hover:-translate-y-px hover:border-line-strong hover:shadow-md"
+                      className="group flex h-full w-full items-start gap-3 rounded-xl border border-line bg-surface px-4 py-3 text-left text-sm transition-all hover:-translate-y-px hover:border-line-strong hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:shadow-none"
                     >
                       <Icon
                         size={16}
@@ -275,14 +307,28 @@ function Chat({
                 <li key={i} className="flex gap-3">
                   <Avatar />
                   <div className="min-w-0 max-w-[92%] flex-1">
-                    <RichText text={t.content} />
-                    {t.visuals?.length ? <FinnVisuals visuals={t.visuals} /> : null}
+                    <TypedText
+                      text={t.content}
+                      animate={
+                        i === shown.length - 1 &&
+                        i >= initialTurns.length &&
+                        !state?.error
+                      }
+                    />
+                    {t.visuals?.length ? (
+                      <FinnVisuals visuals={t.visuals} />
+                    ) : null}
                     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                       <span className="inline-flex items-center gap-1.5">
                         <Check size={12} aria-hidden className="text-pos" />
-                        {t.source === "general" ? "General guidance, not from your records" : t.source === "figures" ? "Verified figures from your records" : "Figures checked against your records"}
+                        {t.source === "general"
+                          ? "General guidance, not from your records"
+                          : t.source === "figures"
+                            ? "Verified figures from your records"
+                            : "Figures checked against your records"}
                       </span>
                       <CopyButton text={t.content} />
+                      {t.id ? <Thumbs id={t.id} initial={t.feedback} /> : null}
                     </div>
                   </div>
                 </li>
@@ -352,7 +398,13 @@ function Chat({
       ) : null}
 
       {quota ? <UsageMeter quota={quota} used={used} /> : null}
-      {exhausted && quota ? <LimitCard plan={quota.plan} kind={limitKind} perDay={quota.questionsPerDay} /> : null}
+      {exhausted && quota ? (
+        <LimitCard
+          plan={quota.plan}
+          kind={limitKind}
+          perDay={quota.questionsPerDay}
+        />
+      ) : null}
 
       <div className="sticky bottom-[5.5rem] z-10 -mx-1 mt-4 bg-bg/85 px-1 pb-1 pt-2 backdrop-blur md:bottom-0">
         <form
@@ -398,15 +450,21 @@ function Chat({
               ) : null}
             </p>
             {available ? (
-              <button
-                type="submit"
-                aria-label="Ask"
-                title="Ask"
-                disabled={!canSend}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-fg transition-all hover:bg-primary-hover active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <ArrowUp size={18} aria-hidden />
-              </button>
+              <span className="flex items-center gap-2">
+                <MicButton
+                  disabled={exhausted || pending}
+                  onText={(v) => setText((cur) => (cur ? cur + " " : "") + v)}
+                />
+                <button
+                  type="submit"
+                  aria-label="Ask"
+                  title="Ask"
+                  disabled={!canSend}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-fg transition-all hover:bg-primary-hover active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ArrowUp size={18} aria-hidden />
+                </button>
+              </span>
             ) : null}
           </div>
         </form>
@@ -429,6 +487,7 @@ export interface AssistantChatProps {
   initialTurns: Turn[];
   initialChatId: string | null;
   quota: Quota | null;
+  insights: Insight[];
   onSaved: (chatId: string, firstQuestion: string) => void;
   /** Starts a fresh chat (the history rail and the button in the chat both use it). */
   onNew: () => void;

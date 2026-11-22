@@ -13,18 +13,30 @@ code), and answer any general money question from its own knowledge, tagged so t
 | Trust | Answers are tagged "from your records" or "general guidance"; unverifiable sentences are cut, not the whole answer; benchmarks allowed only when they do not address the person |
 | Product feel | Name and mark, personalised starter questions, snapshot tiles, follow-up chips, bold and bullet rendering |
 
-## Next, in priority order
+## Also built (23 Nov 2026)
 
-1. **Clarifying questions and memory of the conversation.** Ask for the one missing detail (tax regime, loan type, horizon). Keep the last chat per person so it can be resumed. (Research: chatbots are wrong about tax when they never ask for the relevant details.)
-2. **Streaming answers.** Words appear as they are written; the wait feels half as long.
-3. **Actions, with confirmation.** "Add a 450 expense for groceries yesterday", "set a Food budget of 6,000", "remind me about rent". Finn proposes, the person taps Confirm, the app writes. Never writes on its own.
-4. **Proactive insights.** A weekly recap and alerts ("Food is up 40% against last month", "rent is due in 3 days", "a subscription price changed") on the dashboard and by email.
-5. **Live data for general answers.** Current repo rate, PPF/EPF rate, tax slabs and limits from a maintained table or a search tool, with the date shown, so rates are never guessed.
-6. **Documents.** Upload a bank statement, salary slip or loan sheet and ask about it.
-7. **Feedback and review.** Thumbs up or down on every answer, a "report a wrong answer" flow, and a private review list for improving prompts. Error repair matters: a wrong answer corrected gracefully keeps trust.
-8. **Scenario planning.** "What if I pay 5,000 extra on the loan", "what if I cut Food by 20%": show the new projection next to the current one.
-9. **Voice and WhatsApp.** Ask while on the move; log expenses by message.
-10. **Evaluation set.** 200 saved questions (own-numbers and general) run on every change, scoring correctness, refusal behaviour and figure leaks, before anything ships.
+| Area | What exists |
+| --- | --- |
+| Charts | Donuts, bars, income-against-spending columns, EMI and SIP growth lines, progress bars, bill timelines and stat cards, built in code from the verified facts |
+| Saved chats | Left rail with search, Pinned / Today / Yesterday / Previous 7 days / Earlier, rename, pin, delete; private to the person |
+| Plan allowances | Free 5 questions a day, FinTrack One 50 a day, monthly token caps behind them (AI_ALLOWANCE in plans.ts); a meter and an upgrade card |
+| Answer layout | Bold recommendation first, short headings, numbered steps, small comparison tables; newest answer appears word by word |
+| Actions with confirmation | "Add a 450 grocery expense", "Set my Food budget to 6000" become a card with Confirm and Cancel. No model involved, everything checked again on the server, saved once even if tapped twice |
+| What Finn noticed | Over-budget lines, overdue and due-soon bills, categories up 25% or more, pace above usual, low savings rate, thin emergency cushion, subscriptions cost, goals behind |
+| What-if scenarios | "What if I cut Food by 20%": worked out in code from the usual month, shown as before and after |
+| Live reference data | Repo rate, PPF, Sukanya, SCSS, NSC, EPF and income tax slabs, each with its date and source (src/config/reference-data.ts); Finn quotes the date and says to confirm at the source |
+| Feedback | Thumbs up or down on every answer, saved with the message (migration 15) |
+| Voice | A microphone button in the composer where the browser supports speech recognition |
+| Saved question set | 70 questions in src/server/ai/eval run on every change; a live guardrail set runs against the real model on demand |
+
+## Still to build, in priority order
+
+1. **True streaming.** Today the answer is checked before it is shown, then revealed word by word. Real streaming needs the figure check to run per sentence as text arrives.
+2. **Weekly recap by email and alerts.** The "Finn noticed" logic exists; it needs a scheduled job and an email provider.
+3. **Documents.** Ask about an uploaded statement, salary slip or loan sheet (the Import page already reads statements).
+4. **WhatsApp.** Log expenses and ask questions by message; needs a WhatsApp Business account.
+5. **Review queue.** A private list of thumbs-down answers for improving prompts.
+6. **Refreshing reference data.** A monthly check of the dated figures against their sources.
 
 ## Rules Finn keeps
 

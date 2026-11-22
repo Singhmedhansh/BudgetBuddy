@@ -1,3 +1,4 @@
+import { ActionCard } from "@/components/app/FinnAction";
 import type { Tone, Visual } from "@/server/ai/visuals";
 
 /**
@@ -513,6 +514,8 @@ export function FinnVisuals({ visuals }: { visuals: Visual[] }) {
             return <Columns key={i} v={v} />;
           case "line":
             return <Line key={i} v={v} />;
+          case "action":
+            return <ActionCard key={i} action={v.action} />;
           case "timeline":
             return <Timeline key={i} v={v} />;
         }

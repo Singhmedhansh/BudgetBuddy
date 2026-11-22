@@ -1,7 +1,18 @@
 import { z } from "zod";
-import { parseStatementAmount, parseStatementDate, type DateOrder, type ParsedRow, type RowProblem } from "@/domain/statement";
+import {
+  parseStatementAmount,
+  parseStatementDate,
+  type DateOrder,
+  type ParsedRow,
+  type RowProblem,
+} from "@/domain/statement";
 import { clean } from "./grounding";
-import { extractJsonArray, runTask, type TaskDeps, type TaskFailure } from "./task";
+import {
+  extractJsonArray,
+  runTask,
+  type TaskDeps,
+  type TaskFailure,
+} from "./task";
 
 /**
  * AI help for statements. The model never writes to the ledger and is never trusted:
@@ -20,11 +31,16 @@ export type AiStatementFailure = TaskFailure | "too_long" | "unreadable";
 
 /** Text that may be shown to a person. None of it names a provider, a model or a key. */
 export const AI_STATEMENT_MESSAGES: Record<AiStatementFailure, string> = {
-  disabled: "AI reading is not switched on yet. Upload a CSV instead, or try again once it is enabled.",
-  limit: "You have reached today's AI allowance. Try again later, or upload a CSV instead.",
-  unavailable: "The AI reader could not be reached just now. Please try again in a moment, or upload a CSV instead.",
-  too_long: "That statement is too long to read in one go. Split it by month and import the parts.",
-  unreadable: "No transactions could be read from that file. If the PDF is a scan or a photo, export a CSV or a text-based PDF from your bank instead.",
+  disabled:
+    "AI reading is not switched on yet. Upload a CSV instead, or try again once it is enabled.",
+  limit:
+    "You have reached today's AI allowance. Try again later, or upload a CSV instead.",
+  unavailable:
+    "The AI reader could not be reached just now. Please try again in a moment, or upload a CSV instead.",
+  too_long:
+    "That statement is too long to read in one go. Split it by month and import the parts.",
+  unreadable:
+    "No transactions could be read from that file. If the PDF is a scan or a photo, export a CSV or a text-based PDF from your bank instead.",
 };
 
 // ───────── reading a statement ─────────
@@ -71,17 +87,36 @@ export interface ExtractResult {
 }
 
 /** Checks one model row against the statement text, then parses it strictly. Returns the row or a reason it was dropped. */
-export function verifyAiRow(raw: z.infer<typeof rowSchema>, fullText: string, normText: string, opts: { currency: string; dateOrder: DateOrder }): { row: Omit<ParsedRow, "line"> } | { reason: string } {
-  if (!squash(fullText).includes(squash(raw.date))) return { reason: `The date "${raw.date.slice(0, 30)}" is not in the statement.` };
+export function verifyAiRow(
+  raw: z.infer<typeof rowSchema>,
+  fullText: string,
+  normText: string,
+  opts: { currency: string; dateOrder: DateOrder },
+): { row: Omit<ParsedRow, "line"> } | { reason: string } {
+  if (!squash(fullText).includes(squash(raw.date)))
+    return {
+      reason: `The date "${raw.date.slice(0, 30)}" is not in the statement.`,
+    };
   const date = parseStatementDate(raw.date, opts.dateOrder);
-  if (!date) return { reason: `Could not read the date "${raw.date.slice(0, 30)}".` };
+  if (!date)
+    return { reason: `Could not read the date "${raw.date.slice(0, 30)}".` };
 
   const amountText = raw.amount.trim();
-  if (!normText.includes(squash(amountText).replace(/[,\s]/g, ""))) return { reason: `The amount "${amountText.slice(0, 30)}" is not in the statement.` };
+  if (!normText.includes(squash(amountText).replace(/[,\s]/g, "")))
+    return {
+      reason: `The amount "${amountText.slice(0, 30)}" is not in the statement.`,
+    };
   const signed = parseStatementAmount(amountText, opts.currency);
-  if (signed === null || signed === 0) return { reason: `Could not read the amount "${amountText.slice(0, 30)}".` };
+  if (signed === null || signed === 0)
+    return {
+      reason: `Could not read the amount "${amountText.slice(0, 30)}".`,
+    };
   // A printed sign or Dr/Cr marker wins; otherwise the direction the model gave decides.
-  const marked = /^\s*[-(]|dr\.?\s*$|debit\s*$/i.test(amountText) ? "out" : /cr\.?\s*$|credit\s*$/i.test(amountText) ? "in" : null;
+  const marked = /^\s*[-(]|dr\.?\s*$|debit\s*$/i.test(amountText)
+    ? "out"
+    : /cr\.?\s*$|credit\s*$/i.test(amountText)
+      ? "in"
+      : null;
   const direction = marked ?? raw.direction;
   const amount = direction === "out" ? -Math.abs(signed) : Math.abs(signed);
 
@@ -89,11 +124,18 @@ export function verifyAiRow(raw: z.infer<typeof rowSchema>, fullText: string, no
   if (!description) return { reason: "The description is empty." };
   const lower = fullText.toLowerCase();
   const missing = words(description).filter((w) => !lower.includes(w));
-  if (missing.length > 0) return { reason: `The description "${description.slice(0, 40)}" is not in the statement.` };
+  if (missing.length > 0)
+    return {
+      reason: `The description "${description.slice(0, 40)}" is not in the statement.`,
+    };
   return { row: { date, description, amount } };
 }
 
-export async function readStatementWithAi(text: string, deps: TaskDeps, opts: { currency: string; dateOrder: DateOrder }): Promise<ExtractResult | { ok: false; reason: AiStatementFailure }> {
+export async function readStatementWithAi(
+  text: string,
+  deps: TaskDeps,
+  opts: { currency: string; dateOrder: DateOrder },
+): Promise<ExtractResult | { ok: false; reason: AiStatementFailure }> {
   const chunks = chunkText(text);
   if (chunks.length > MAX_CHUNKS) return { ok: false, reason: "too_long" };
   if (chunks.length === 0) return { ok: false, reason: "unreadable" };
@@ -103,7 +145,11 @@ export async function readStatementWithAi(text: string, deps: TaskDeps, opts: { 
   const problems: RowProblem[] = [];
   let line = 0;
   for (const chunk of chunks) {
-    const res = await runTask(deps, { system: EXTRACT_SYSTEM, messages: [{ role: "user", content: `STATEMENT TEXT:\n${chunk}` }], maxOutputTokens: 4000 });
+    const res = await runTask(deps, {
+      system: EXTRACT_SYSTEM,
+      messages: [{ role: "user", content: `STATEMENT TEXT:\n${chunk}` }],
+      maxOutputTokens: 4000,
+    });
     if (!res.ok) return { ok: false, reason: res.reason };
     const items = extractJsonArray(res.text);
     if (!items) return { ok: false, reason: "unavailable" };
@@ -111,7 +157,10 @@ export async function readStatementWithAi(text: string, deps: TaskDeps, opts: { 
       line++;
       const parsed = rowSchema.safeParse(item);
       if (!parsed.success) {
-        problems.push({ line, reason: "The reader returned a row in an unexpected shape." });
+        problems.push({
+          line,
+          reason: "The reader returned a row in an unexpected shape.",
+        });
         continue;
       }
       const v = verifyAiRow(parsed.data, text, normText, opts);
@@ -131,7 +180,12 @@ export interface CategoryChoice {
   kind: "expense" | "income";
 }
 
-const catSchema = z.array(z.object({ i: z.number().int().min(0), c: z.number().int().min(0).nullable() }));
+const catSchema = z.array(
+  z.object({
+    i: z.number().int().min(0),
+    c: z.number().int().min(0).nullable(),
+  }),
+);
 const MAX_DESCRIPTIONS = 150;
 
 /**
@@ -139,12 +193,22 @@ const MAX_DESCRIPTIONS = 150;
  * model is shown only the description text and the direction, never an amount, and can answer only with a number
  * from the person's own list, so it cannot invent a category or touch an amount.
  */
-export async function categoriseWithAi(items: { description: string; direction: "in" | "out" }[], categories: CategoryChoice[], deps: TaskDeps): Promise<Map<string, string>> {
+export async function categoriseWithAi(
+  items: { description: string; direction: "in" | "out" }[],
+  categories: CategoryChoice[],
+  deps: TaskDeps,
+): Promise<Map<string, string>> {
   const out = new Map<string, string>();
-  const unique = [...new Map(items.map((x) => [`${x.direction}|${x.description}`, x])).values()].slice(0, MAX_DESCRIPTIONS);
+  const unique = [
+    ...new Map(
+      items.map((x) => [`${x.direction}|${x.description}`, x]),
+    ).values(),
+  ].slice(0, MAX_DESCRIPTIONS);
   if (unique.length === 0 || categories.length === 0) return out;
 
-  const list = categories.map((c, n) => `${n}: ${clean(c.name)} (${c.kind})`).join("\n");
+  const list = categories
+    .map((c, n) => `${n}: ${clean(c.name)} (${c.kind})`)
+    .join("\n");
   const system = [
     "You file bank transactions into the person's own spending categories. Reply with ONLY a JSON array, no prose.",
     'Each item: {"i": <transaction number>, "c": <category number or null>}. Use null when no category clearly fits.',
@@ -153,8 +217,14 @@ export async function categoriseWithAi(items: { description: string; direction: 
     "CATEGORIES:",
     list,
   ].join("\n");
-  const user = unique.map((x, n) => `${n}: [${x.direction}] ${clean(x.description, 80)}`).join("\n");
-  const res = await runTask(deps, { system, messages: [{ role: "user", content: user }], maxOutputTokens: 3000 });
+  const user = unique
+    .map((x, n) => `${n}: [${x.direction}] ${clean(x.description, 80)}`)
+    .join("\n");
+  const res = await runTask(deps, {
+    system,
+    messages: [{ role: "user", content: user }],
+    maxOutputTokens: 3000,
+  });
   if (!res.ok) return out;
   const arr = extractJsonArray(res.text);
   const parsed = catSchema.safeParse(arr);
@@ -163,7 +233,8 @@ export async function categoriseWithAi(items: { description: string; direction: 
     const item = unique[i];
     const cat = c === null ? undefined : categories[c];
     if (!item || !cat) continue;
-    if (cat.kind !== (item.direction === "out" ? "expense" : "income")) continue;
+    if (cat.kind !== (item.direction === "out" ? "expense" : "income"))
+      continue;
     out.set(`${item.direction}|${item.description}`, cat.id);
   }
   return out;

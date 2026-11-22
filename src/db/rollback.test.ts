@@ -1,6 +1,6 @@
 /**
- * Rollback and recovery for migrations 11 to 14. Applies everything, puts data in, runs the down scripts in the
- * documented order (14, 13, 12, then 11), checks the previous behaviour is back, then re-applies them forward.
+ * Rollback and recovery for migrations 11 to 15. Applies everything, puts data in, runs the down scripts in the
+ * documented order (15, 14, 13, 12, then 11), checks the previous behaviour is back, then re-applies them forward.
  */
 import { randomUUID } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
@@ -15,6 +15,7 @@ const M11 = MIGRATIONS.find((f) => f.startsWith("20261118000011"))!;
 const M12 = MIGRATIONS.find((f) => f.startsWith("20261118000012"))!;
 const M13 = MIGRATIONS.find((f) => f.startsWith("20261122000013"))!;
 const M14 = MIGRATIONS.find((f) => f.startsWith("20261123000014"))!;
+const M15 = MIGRATIONS.find((f) => f.startsWith("20261123000015"))!;
 const USER = randomUUID();
 let db: PGlite;
 
@@ -47,12 +48,13 @@ beforeAll(async () => {
 });
 
 describe("rollback and recovery of migrations 11 and 12", () => {
-  it("applies cleanly on top of migrations 1 to 10, and 11 to 14 are the last four", () => {
-    expect(MIGRATIONS.slice(-4)).toEqual([M11, M12, M13, M14]);
+  it("applies cleanly on top of migrations 1 to 10, and 11 to 15 are the last five", () => {
+    expect(MIGRATIONS.slice(-5)).toEqual([M11, M12, M13, M14, M15]);
   });
 
   it("rolls back 12, then 11, leaving the earlier schema as it was", async () => {
     await db.exec(`insert into budgetbuddy.billing_subscriptions (user_id, provider, provider_subscription_id, interval, amount_minor, currency) values ('${USER}','razorpay','sub_rb','month',14900,'INR')`);
+    await db.exec(read("supabase/rollback/20261123000015_finn_feedback_down.sql"));
     await db.exec(read("supabase/rollback/20261123000014_finn_history_and_quotas_down.sql"));
     expect(await exists(`select 1 from pg_class where relname in ('finn_conversations','finn_messages')`)).toBe(false);
     expect(await exists(`select 1 from pg_proc where proname in ('ai_reserve_plan','ai_quota')`)).toBe(false);
@@ -86,6 +88,7 @@ describe("rollback and recovery of migrations 11 and 12", () => {
     await db.exec(read(`supabase/migrations/${M12}`));
     await db.exec(read(`supabase/migrations/${M13}`));
     await db.exec(read(`supabase/migrations/${M14}`));
+    await db.exec(read(`supabase/migrations/${M15}`));
     await db.exec(`grant usage on schema budgetbuddy to service_role;`);
     await db.exec(`insert into budgetbuddy.billing_subscriptions (user_id, provider, provider_subscription_id, interval, amount_minor, currency) values ('${USER}','razorpay','sub_again','month',14900,'INR')`);
     await db.exec(`set role service_role`);

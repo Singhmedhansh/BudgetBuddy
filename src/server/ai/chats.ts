@@ -13,6 +13,8 @@ export interface ChatSummary {
   updatedAt: string;
 }
 export interface StoredTurn {
+  id?: number;
+  feedback?: "up" | "down";
   role: "user" | "assistant";
   content: string;
   source?: "model" | "figures" | "general";
@@ -143,25 +145,28 @@ export async function loadChat(
   if (!convo) return null;
   const { data: msgs } = await db
     .from("finn_messages")
-    .select("role,content,source,visuals")
+    .select("id,role,content,source,visuals,feedback")
     .eq("conversation_id", id)
     .order("id", { ascending: true })
     .limit(200);
+  type Row = {
+    id: number;
+    role: "user" | "assistant";
+    content: string;
+    source: StoredTurn["source"] | null;
+    visuals: Visual[] | null;
+    feedback: "up" | "down" | null;
+  };
   return {
     id: convo.id as string,
     title: convo.title as string,
-    turns: (
-      (msgs ?? []) as {
-        role: "user" | "assistant";
-        content: string;
-        source: StoredTurn["source"] | null;
-        visuals: Visual[] | null;
-      }[]
-    ).map((m) => ({
+    turns: ((msgs ?? []) as Row[]).map((m) => ({
+      id: m.id,
       role: m.role,
       content: m.content,
       ...(m.source ? { source: m.source } : {}),
       ...(m.visuals?.length ? { visuals: m.visuals } : {}),
+      ...(m.feedback ? { feedback: m.feedback } : {}),
     })),
   };
 }
@@ -176,7 +181,7 @@ export async function saveExchange(
     question: string;
     answer: StoredTurn;
   },
-): Promise<string | null> {
+): Promise<{ chatId: string; answerId: number | null } | null> {
   try {
     let id = args.chatId;
     if (id) {
@@ -216,13 +221,20 @@ export async function saveExchange(
         visuals: args.answer.visuals?.length ? args.answer.visuals : null,
       },
     ];
-    const { error } = await db.from("finn_messages").insert(rows);
+    const { data: saved, error } = await db
+      .from("finn_messages")
+      .insert(rows)
+      .select("id,role");
     if (error) return null;
+    const answerId =
+      ((saved ?? []) as { id: number; role: string }[]).find(
+        (r) => r.role === "assistant",
+      )?.id ?? null;
     await db
       .from("finn_conversations")
       .update({ updated_at: new Date().toISOString() })
       .eq("id", id);
-    return id;
+    return { chatId: id, answerId };
   } catch {
     return null;
   }

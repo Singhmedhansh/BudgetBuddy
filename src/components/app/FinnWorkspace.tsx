@@ -28,6 +28,7 @@ import {
   type ChatSummary,
   type Quota,
 } from "@/server/ai/chats";
+import type { Insight } from "@/server/ai/insights";
 import type { Starter } from "@/server/ai/suggestions";
 
 interface Props {
@@ -41,6 +42,7 @@ interface Props {
   name: string | null;
   starters: Starter[];
   snapshot: Snapshot[];
+  insights: Insight[];
   /** False until migration 14 is applied: chats then work as before but are not saved. */
   historyReady: boolean;
 }
@@ -310,6 +312,7 @@ export function FinnWorkspace(p: Props) {
           initialTurns={p.initialTurns}
           initialChatId={p.activeId}
           quota={p.quota}
+          insights={p.insights}
           onNew={newChat}
           onSaved={(id, firstQuestion) => {
             setCurrentId(id);

@@ -4,12 +4,16 @@ import { AiUnavailableError, generate, type RouterResult } from "./router";
 import type { CompletionRequest } from "./types";
 
 export type TaskFailure = "disabled" | "limit" | "unavailable";
-export type TaskResult = { ok: true; text: string } | { ok: false; reason: TaskFailure };
+export type TaskResult =
+  { ok: true; text: string } | { ok: false; reason: TaskFailure };
 
 export interface TaskDeps {
   config?: AiConfig;
   usage: UsageStore;
-  generate?: (config: AiConfig, req: CompletionRequest) => Promise<RouterResult>;
+  generate?: (
+    config: AiConfig,
+    req: CompletionRequest,
+  ) => Promise<RouterResult>;
   now?: () => number;
 }
 
@@ -18,11 +22,21 @@ export interface TaskDeps {
  * assistant: nothing is called unless AI is switched on and configured, usage is reserved before the call and
  * settled after it, and a failure is reported as a category, never as a provider message or a key.
  */
-export async function runTask(deps: TaskDeps, req: Omit<CompletionRequest, "timeoutMs">): Promise<TaskResult> {
+export async function runTask(
+  deps: TaskDeps,
+  req: Omit<CompletionRequest, "timeoutMs">,
+): Promise<TaskResult> {
   const config = deps.config ?? readAiConfig();
   if (!aiStatus(config).available) return { ok: false, reason: "disabled" };
-  const slot = await deps.usage.reserve({ perHour: config.limits.perHour, tokensPerDay: config.limits.tokensPerDay });
-  if (!slot.allowed) return { ok: false, reason: slot.reason === "not_ready" ? "unavailable" : "limit" };
+  const slot = await deps.usage.reserve({
+    perHour: config.limits.perHour,
+    tokensPerDay: config.limits.tokensPerDay,
+  });
+  if (!slot.allowed)
+    return {
+      ok: false,
+      reason: slot.reason === "not_ready" ? "unavailable" : "limit",
+    };
 
   const now = deps.now ?? Date.now;
   const started = now();
@@ -44,9 +58,24 @@ export async function runTask(deps: TaskDeps, req: Omit<CompletionRequest, "time
     return { ok: true, text: out.text };
   } catch (e) {
     const trail = e instanceof AiUnavailableError ? e.trail : [];
-    const kind = e instanceof AiUnavailableError ? (e.cause_ === "all_failed" ? (trail.at(-1)?.kind ?? "all_failed") : e.cause_) : "internal";
+    const kind =
+      e instanceof AiUnavailableError
+        ? e.cause_ === "all_failed"
+          ? (trail.at(-1)?.kind ?? "all_failed")
+          : e.cause_
+        : "internal";
     await deps.usage
-      .settle(slot.id, { status: "error", provider: null, model: null, promptTokens: 0, completionTokens: 0, latencyMs: now() - started, errorKind: kind, attempts: trail.length, rateLimited: trail.filter((t) => t.kind === "rate_limit").length })
+      .settle(slot.id, {
+        status: "error",
+        provider: null,
+        model: null,
+        promptTokens: 0,
+        completionTokens: 0,
+        latencyMs: now() - started,
+        errorKind: kind,
+        attempts: trail.length,
+        rateLimited: trail.filter((t) => t.kind === "rate_limit").length,
+      })
       .catch(() => undefined);
     return { ok: false, reason: "unavailable" };
   }

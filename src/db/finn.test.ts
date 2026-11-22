@@ -65,6 +65,19 @@ describe("saved chats are private", () => {
   });
 });
 
+describe("thumbs", () => {
+  it("a person marks their own answer, and nothing else on a message can change", async () => {
+    const c = (await q<{ id: string }>(ALICE, `insert into budgetbuddy.finn_conversations (user_id, title) values ('${ALICE}', 'T') returning id`))[0].id;
+    const m = (await q<{ id: string }>(ALICE, `insert into budgetbuddy.finn_messages (conversation_id, user_id, role, content) values ('${c}', '${ALICE}', 'assistant', 'ok') returning id`))[0].id;
+    await q(ALICE, `update budgetbuddy.finn_messages set feedback = 'up' where id = ${m}`);
+    expect((await q<{ f: string }>(ALICE, `select feedback f from budgetbuddy.finn_messages where id = ${m}`))[0].f).toBe("up");
+    expect(await denied(q(ALICE, `update budgetbuddy.finn_messages set content = 'changed' where id = ${m}`))).toBe(true);
+    expect(await denied(q(ALICE, `update budgetbuddy.finn_messages set feedback = 'meh' where id = ${m}`))).toBe(true);
+    await q(BOB, `update budgetbuddy.finn_messages set feedback = 'down' where id = ${m}`);
+    expect((await q<{ f: string }>(ALICE, `select feedback f from budgetbuddy.finn_messages where id = ${m}`))[0].f).toBe("up");
+  });
+});
+
 describe("plan allowances", () => {
   const dayStart = "now() - interval '2 hours'";
   const monthStart = "now() - interval '10 days'";

@@ -12,39 +12,127 @@ export interface Facts {
   held: string;
   owed: string;
   accounts: { name: string; type: string; balance: string }[];
-  thisMonth: { label: string; income: string; spending: string; net: string; keptPercent: number | null };
+  thisMonth: {
+    label: string;
+    income: string;
+    spending: string;
+    net: string;
+    keptPercent: number | null;
+  };
   topCategories: { name: string; amount: string; percent: number }[];
   /** Average of the last few full months' income minus spending, worked out by code. Absent without history. */
   monthlyNet?: { amount: string; months: number };
   /** Set only when the question names a target amount to save for. Worked out by code, never by the model. */
-  savingsPlan?: { target: string; perMonth: string; months: number | null; spendableNow?: string; canAffordNow?: boolean; leftAfter?: string };
+  savingsPlan?: {
+    target: string;
+    perMonth: string;
+    months: number | null;
+    spendableNow?: string;
+    canAffordNow?: boolean;
+    leftAfter?: string;
+  };
   /** Where the person is, so general answers use the right country's products, rules and currency. */
   region?: { country: string | null; currency: string };
   /** Worked out by code when the question names a loan, SIP or growth example with its numbers. */
   calculation?: Calculation;
+  /** A what-if on their own spending, worked out in code ("what if I cut Food by 20%"). */
+  scenario?: {
+    what: string;
+    percent: number;
+    usualMonthly: string;
+    newMonthly: string;
+    savesPerMonth: string;
+    savesPerYear: string;
+    monthlySavingNow?: string;
+    monthlySavingAfter?: string;
+  };
+  /** Dated reference figures (rates, tax rules) relevant to the question. Quote them with their date and source. */
+  reference?: { label: string; value: string; asOf: string; source: string }[];
   /** A cushion of 3 and 6 months of their usual spending, and how many months they hold now. */
-  emergencyFund?: { threeMonths: string; sixMonths: string; monthsHeld: number | null };
+  emergencyFund?: {
+    threeMonths: string;
+    sixMonths: string;
+    monthsHeld: number | null;
+  };
   /** The 50/30/20 split of their usual monthly income, worked out by code. */
-  rule503020?: { basisIncome: string; needs: string; wants: string; savings: string };
+  rule503020?: {
+    basisIncome: string;
+    needs: string;
+    wants: string;
+    savings: string;
+  };
   /** Money in everyday accounts (savings, current, cash, wallets), as opposed to investments. */
   spendable?: string;
   /** The last six months, oldest first, the current month last (still in progress). */
   history?: { label: string; income: string; spending: string; net: string }[];
   /** Top spending categories with how they moved. changePercent is this month against last month. */
-  categories?: { name: string; thisMonth: string; lastMonth: string; changePercent: number | null; avg3m: string }[];
+  categories?: {
+    name: string;
+    thisMonth: string;
+    lastMonth: string;
+    changePercent: number | null;
+    avg3m: string;
+  }[];
   /** Where money went, by payee: this month and the last 90 days. */
-  payees?: { name: string; thisMonth: string; last90Days: string; visits90: number }[];
+  payees?: {
+    name: string;
+    thisMonth: string;
+    last90Days: string;
+    visits90: number;
+  }[];
   /** Where this month is heading, worked out by code from the spending so far. */
-  pace?: { daysElapsed: number; daysLeft: number; dailyAverage: string; projectedMonthEnd: string; budgetLeftPerDay: string | null; savingsRatePercent: number | null; monthsOfCover: number | null };
-  bills?: { name: string; kind: "bill" | "subscription"; amount: string; due: string; state: string }[];
+  pace?: {
+    daysElapsed: number;
+    daysLeft: number;
+    dailyAverage: string;
+    projectedMonthEnd: string;
+    budgetLeftPerDay: string | null;
+    savingsRatePercent: number | null;
+    monthsOfCover: number | null;
+  };
+  bills?: {
+    name: string;
+    kind: "bill" | "subscription";
+    amount: string;
+    due: string;
+    state: string;
+  }[];
   subscriptions?: { active: number; monthlyTotal: string; yearlyTotal: string };
-  goals?: { name: string; target: string; saved: string; remaining: string; deadline: string | null; monthlyNeeded: string | null; health: string }[];
-  debts?: { name: string; owed: string; ratePercent: number | null; minPayment: string | null }[];
-  budgets: { name: string; lines: { category: string; limit: string; spent: string; remaining: string; overBy: string; state: string }[] }[];
+  goals?: {
+    name: string;
+    target: string;
+    saved: string;
+    remaining: string;
+    deadline: string | null;
+    monthlyNeeded: string | null;
+    health: string;
+  }[];
+  debts?: {
+    name: string;
+    owed: string;
+    ratePercent: number | null;
+    minPayment: string | null;
+  }[];
+  budgets: {
+    name: string;
+    lines: {
+      category: string;
+      limit: string;
+      spent: string;
+      remaining: string;
+      overBy: string;
+      state: string;
+    }[];
+  }[];
 }
 
 /** User-controlled names go into the prompt as data, so they are stripped of control characters and capped. */
-export const clean = (s: string, max = 60) => s.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+export const clean = (s: string, max = 60) =>
+  s
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
 
 export function systemPrompt(facts: Facts): string {
   return [
@@ -57,6 +145,8 @@ export function systemPrompt(facts: Facts): string {
     "- Lead with the answer in the first sentence. Then short context, and where it helps one concrete next step. Simple questions: under 100 words. When they ask you to explain, compare options or make a plan, you may go to about 220 words and structure it: a bold one-line recommendation first, then short ### headings (at most three), numbered steps for plans, '- ' bullets for lists, and one small markdown table (at most 4 rows) when comparing options side by side. Warm, plain, no lectures, **bold** only for the one or two things that matter. Charts are drawn for you separately, so do not describe or draw them.",
     "- In [A] answers use only amounts, percentages and counts that appear in FACTS, written exactly as they appear there, with space.currency. Never add, subtract, multiply, estimate, convert or project their figures yourself. Everything needed is already worked out: history, categories (changePercent), payees, pace, bills, subscriptions, goals, debts, savingsPlan, calculation, emergencyFund, rule503020.",
     "- If FACTS has calculation, the person asked a what-if (EMI, SIP or growth): state the results exactly as given, then explain what drives them. If it has savingsPlan, answer from it: whether they can afford it now (canAffordNow, spendableNow, leftAfter), else how many months at perMonth; if months is null, say nothing is being saved per month right now, so it will not be reached at this pace, and name the biggest category in categories as the place to start.",
+    "- If FACTS has scenario, the person asked a what-if on their own spending: give usualMonthly, newMonthly, savesPerMonth and savesPerYear exactly as given, and if monthlySavingAfter is present say what their monthly saving becomes. Do not invent other numbers.",
+    "- If FACTS has reference, use only those figures for rates, tax slabs and limits: say the figure, its asOf date and its source in one short line, and tell them to confirm at the source before acting. If a rate or rule they ask about is not in reference, give the idea without a number and say to check the official figure.",
     "- For why-questions about spending, compare categories and payees by changePercent and amounts and name the biggest movers.",
     "- In [G] answers you may use well-known benchmarks and typical figures (rules of thumb, typical ranges, how a product works). Never state or imply a figure about THEIR money in a [G] answer. Anything that changes over time or by provider (interest rates, tax slabs, limits, fees) must be given as approximate and followed by a pointer to check the official or current figure. Never invent specific rates, fund names, or product features.",
     "- When the answer truly depends on something you do not know (their income, tax regime, loan type, goal, time horizon), give the general answer first, then ask for the one detail that would sharpen it. Do not interrogate.",
@@ -71,7 +161,8 @@ export function systemPrompt(facts: Facts): string {
 }
 
 // ───────── figure verification ─────────
-const CURRENCY_MARK = /[₹$€£]|\b(?:INR|USD|EUR|GBP|AED|SGD|AUD|CAD|Rs\.?|rupees?|dollars?|euros?|pounds?)\b/i;
+const CURRENCY_MARK =
+  /[₹$€£]|\b(?:INR|USD|EUR|GBP|AED|SGD|AUD|CAD|Rs\.?|rupees?|dollars?|euros?|pounds?)\b/i;
 
 /** A decimal number written the way the app writes it: separators removed, dot as the decimal point. */
 function toNumber(token: string): number | null {
@@ -100,14 +191,20 @@ export function allowedNumbers(facts: Facts): Set<number> {
 export function unverifiedFigures(answer: string, facts: Facts): string[] {
   const allowed = allowedNumbers(facts);
   const bad: string[] = [];
-  for (const m of answer.matchAll(/(?:[₹$€£]\s*)?\d[\d,   ]*(?:\.\d+)?\s*(%)?/g)) {
+  for (const m of answer.matchAll(
+    /(?:[₹$€£]\s*)?\d[\d,   ]*(?:\.\d+)?\s*(%)?/g,
+  )) {
     const raw = m[0].trim();
     const num = toNumber(raw.replace(/^[₹$€£]\s*/, "").replace(/\s*%$/, ""));
     if (num === null) continue;
     const idx = m.index ?? 0;
     const around = answer.slice(Math.max(0, idx - 6), idx + raw.length + 8);
     const digits = raw.replace(/\D/g, "");
-    const looksLikeAmount = CURRENCY_MARK.test(around) || /\.\d/.test(raw) || digits.length >= 4 || Boolean(m[1]);
+    const looksLikeAmount =
+      CURRENCY_MARK.test(around) ||
+      /\.\d/.test(raw) ||
+      digits.length >= 4 ||
+      Boolean(m[1]);
     // A year such as 2026 is not an amount; it is allowed when it is the facts' own year.
     if (!looksLikeAmount) continue;
     if (!allowed.has(Math.round(num * 100) / 100)) bad.push(raw);
@@ -131,19 +228,48 @@ export function factsSummary(facts: Facts): string {
     `As of ${facts.asOf}, in ${facts.space.name}: net worth ${facts.netWorth} ${c} (you hold ${facts.held}, you owe ${facts.owed}).`,
     `${facts.thisMonth.label}: income ${facts.thisMonth.income}, spending ${facts.thisMonth.spending}.`,
   ];
-  if (facts.topCategories.length) lines.push(`Biggest spending: ${facts.topCategories.map((t) => `${t.name} ${t.amount} (${t.percent}%)`).join(", ")}.`);
-  const watch = facts.budgets.flatMap((b) => b.lines.filter((l) => l.state !== "ok").map((l) => `${l.category} is ${l.state === "over" ? `over by ${l.overBy}` : `close to its limit, ${l.remaining} left`}`));
+  if (facts.topCategories.length)
+    lines.push(
+      `Biggest spending: ${facts.topCategories.map((t) => `${t.name} ${t.amount} (${t.percent}%)`).join(", ")}.`,
+    );
+  const watch = facts.budgets.flatMap((b) =>
+    b.lines
+      .filter((l) => l.state !== "ok")
+      .map(
+        (l) =>
+          `${l.category} is ${l.state === "over" ? `over by ${l.overBy}` : `close to its limit, ${l.remaining} left`}`,
+      ),
+  );
   if (watch.length) lines.push(`Budgets to watch: ${watch.join("; ")}.`);
   return lines.join(" ");
 }
 
-const SUFFIX: Record<string, number> = { k: 1e3, thousand: 1e3, l: 1e5, lac: 1e5, lakh: 1e5, lakhs: 1e5, m: 1e6, mn: 1e6, million: 1e6, cr: 1e7, crore: 1e7 };
+const SUFFIX: Record<string, number> = {
+  k: 1e3,
+  thousand: 1e3,
+  l: 1e5,
+  lac: 1e5,
+  lakh: 1e5,
+  lakhs: 1e5,
+  m: 1e6,
+  mn: 1e6,
+  million: 1e6,
+  cr: 1e7,
+  crore: 1e7,
+};
 
 /** The amount a question wants to save for ("a monitor which is 7K inr" gives 7000), or null when it names none. */
 export function targetAmount(question: string): number | null {
-  if (!/\b(save|saving|savings|afford|buy|purchase|reach|how long|months?)\b/i.test(question)) return null;
+  if (
+    !/\b(save|saving|savings|afford|buy|purchase|reach|how long|months?)\b/i.test(
+      question,
+    )
+  )
+    return null;
   let best: number | null = null;
-  for (const m of question.matchAll(/(\d[\d,]*(?:\.\d+)?)\s*(thousand|lakhs?|lac|crore|million|mn|cr|k|l|m)?(?![a-z0-9])/gi)) {
+  for (const m of question.matchAll(
+    /(\d[\d,]*(?:\.\d+)?)\s*(thousand|lakhs?|lac|crore|million|mn|cr|k|l|m)?(?![a-z0-9])/gi,
+  )) {
     const n = Number(m[1].replace(/,/g, ""));
     if (!Number.isFinite(n)) continue;
     const v = n * (m[2] ? (SUFFIX[m[2].toLowerCase()] ?? 1) : 1);
@@ -153,25 +279,55 @@ export function targetAmount(question: string): number | null {
 }
 
 /** How many months a target takes at the average monthly saving: whole months, rounded up. Pure arithmetic, done here. */
-export function savingsPlan(question: string, facts: Facts): Facts["savingsPlan"] | undefined {
+export function savingsPlan(
+  question: string,
+  facts: Facts,
+): Facts["savingsPlan"] | undefined {
   const target = targetAmount(question);
   if (target === null || !facts.monthlyNet) return undefined;
   const perMonth = Number(facts.monthlyNet.amount);
   const t = target.toFixed(2);
-  const spendable = facts.spendable !== undefined ? Number(facts.spendable) : null;
-  const affordNow = spendable !== null && Number.isFinite(spendable) ? { spendableNow: facts.spendable, canAffordNow: spendable >= target, ...(spendable >= target ? { leftAfter: (spendable - target).toFixed(2) } : {}) } : {};
-  if (!Number.isFinite(perMonth) || perMonth <= 0) return { target: t, perMonth: facts.monthlyNet.amount, months: null, ...affordNow };
-  return { target: t, perMonth: facts.monthlyNet.amount, months: Math.ceil(target / perMonth - 1e-9), ...affordNow };
+  const spendable =
+    facts.spendable !== undefined ? Number(facts.spendable) : null;
+  const affordNow =
+    spendable !== null && Number.isFinite(spendable)
+      ? {
+          spendableNow: facts.spendable,
+          canAffordNow: spendable >= target,
+          ...(spendable >= target
+            ? { leftAfter: (spendable - target).toFixed(2) }
+            : {}),
+        }
+      : {};
+  if (!Number.isFinite(perMonth) || perMonth <= 0)
+    return {
+      target: t,
+      perMonth: facts.monthlyNet.amount,
+      months: null,
+      ...affordNow,
+    };
+  return {
+    target: t,
+    perMonth: facts.monthlyNet.amount,
+    months: Math.ceil(target / perMonth - 1e-9),
+    ...affordNow,
+  };
 }
 
 /** Splits a leading [A] or [G] tag off a model reply. A missing tag is treated as [A], the strict case. */
 export function splitTag(text: string): { tag: "A" | "G"; body: string } {
   const m = /^\s*\[(A|G)\]\s*/i.exec(text);
-  return m ? { tag: m[1].toUpperCase() as "A" | "G", body: text.slice(m[0].length).trim() } : { tag: "A", body: text.trim() };
+  return m
+    ? {
+        tag: m[1].toUpperCase() as "A" | "G",
+        body: text.slice(m[0].length).trim(),
+      }
+    : { tag: "A", body: text.trim() };
 }
 
 const FIRST_PERSON = /\b(you|your|you're|you've|yours|yourself)\b/i;
-const GENERAL_CUE = /\b(typically|usually|generally|rule of thumb|recommended|benchmark|on average|commonly|experts?|many people|aim for|at least|often|roughly|around|about)\b/i;
+const GENERAL_CUE =
+  /\b(typically|usually|generally|rule of thumb|recommended|benchmark|on average|commonly|experts?|many people|aim for|at least|often|roughly|around|about)\b/i;
 
 /**
  * Checks a reply by sentence. A general reply (tag G) may quote benchmarks, so only sentences that speak about the
@@ -179,9 +335,17 @@ const GENERAL_CUE = /\b(typically|usually|generally|rule of thumb|recommended|be
  * plainly a general benchmark ("experts usually suggest 3 to 6 months") and does not address the person may keep its
  * numbers. Returns the safe text, or null when nothing safe remains.
  */
-export function enforceFigures(body: string, tag: "A" | "G", facts: Facts): { text: string; clean: boolean } | null {
-  if (tag === "A" && unverifiedFigures(body, facts).length === 0) return { text: body, clean: true };
-  const parts = body.split(/(?<=[.!?])\s+|\n+/).map((p) => p.trim()).filter(Boolean);
+export function enforceFigures(
+  body: string,
+  tag: "A" | "G",
+  facts: Facts,
+): { text: string; clean: boolean } | null {
+  if (tag === "A" && unverifiedFigures(body, facts).length === 0)
+    return { text: body, clean: true };
+  const parts = body
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
   const kept = parts.filter((p) => {
     if (unverifiedFigures(p, facts).length === 0) return true;
     const personal = FIRST_PERSON.test(p);

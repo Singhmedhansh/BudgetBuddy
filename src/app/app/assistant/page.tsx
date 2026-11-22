@@ -7,6 +7,7 @@ import { MESSAGES } from "@/server/ai/assistant";
 import { listChats, loadChat, loadQuota } from "@/server/ai/chats";
 import { aiStatus } from "@/server/ai/config";
 import { loadFacts } from "@/server/ai/facts";
+import { insightsFrom } from "@/server/ai/insights";
 import { starters } from "@/server/ai/suggestions";
 import { requireSpace } from "@/server/context";
 import {
@@ -95,6 +96,7 @@ export default async function AssistantPage({
         name={name}
         starters={starters(facts)}
         snapshot={snapshot}
+        insights={facts ? insightsFrom(facts) : []}
         historyReady={quota !== null}
       />
     </>

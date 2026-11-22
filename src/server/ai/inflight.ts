@@ -8,7 +8,10 @@ import { createHash } from "node:crypto";
  */
 const flights = new Map<string, Promise<unknown>>();
 
-export const flightKey = (userId: string, ...parts: string[]) => createHash("sha256").update([userId, ...parts].join("\u0000")).digest("hex");
+export const flightKey = (userId: string, ...parts: string[]) =>
+  createHash("sha256")
+    .update([userId, ...parts].join("\u0000"))
+    .digest("hex");
 
 export function coalesce<T>(key: string, run: () => Promise<T>): Promise<T> {
   const existing = flights.get(key);

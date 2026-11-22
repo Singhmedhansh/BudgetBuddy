@@ -16,7 +16,15 @@ export interface CompletionResult {
   completionTokens: number;
 }
 
-export type ProviderErrorKind = "rate_limit" | "auth" | "server" | "bad_request" | "network" | "timeout" | "empty" | "model_unavailable";
+export type ProviderErrorKind =
+  | "rate_limit"
+  | "auth"
+  | "server"
+  | "bad_request"
+  | "network"
+  | "timeout"
+  | "empty"
+  | "model_unavailable";
 
 /** A provider failure with a safe, key-free message. `kind` decides whether failing over to another key is sensible. */
 export class ProviderError extends Error {
@@ -34,5 +42,9 @@ export class ProviderError extends Error {
 
 export interface ProviderClient {
   id: "gemini" | "groq";
-  complete(apiKey: string, model: string, req: CompletionRequest): Promise<CompletionResult>;
+  complete(
+    apiKey: string,
+    model: string,
+    req: CompletionRequest,
+  ): Promise<CompletionResult>;
 }

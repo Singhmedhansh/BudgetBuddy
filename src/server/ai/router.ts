@@ -1,6 +1,12 @@
 import { PROVIDERS } from "./providers";
 import { type AiConfig } from "./config";
-import { ProviderError, type CompletionRequest, type CompletionResult, type ProviderClient, type ProviderErrorKind } from "./types";
+import {
+  ProviderError,
+  type CompletionRequest,
+  type CompletionResult,
+  type ProviderClient,
+  type ProviderErrorKind,
+} from "./types";
 
 /**
  * Failover, deliberately not rotation. A key is used until it fails; only then is the next one tried, and only a
@@ -37,10 +43,18 @@ export class KeyPool {
    * would be refused the same way and only burn an attempt.
    */
   markFailed(key: string, err: ProviderError, providerWide = false) {
-    const cooldown = err.kind === "rate_limit" ? (err.retryAfterMs ?? 60_000) : err.kind === "auth" ? 15 * 60_000 : err.kind === "server" ? 30_000 : 0;
+    const cooldown =
+      err.kind === "rate_limit"
+        ? (err.retryAfterMs ?? 60_000)
+        : err.kind === "auth"
+          ? 15 * 60_000
+          : err.kind === "server"
+            ? 30_000
+            : 0;
     if (cooldown <= 0) return;
     const until = this.now() + cooldown;
-    if (providerWide && err.kind === "rate_limit") this.keys.forEach((k) => this.coolingUntil.set(k, until));
+    if (providerWide && err.kind === "rate_limit")
+      this.keys.forEach((k) => this.coolingUntil.set(k, until));
     else this.coolingUntil.set(key, until);
   }
   /** A model the provider says is gone is not asked again for a while; the next model in the list is used. */
@@ -55,7 +69,13 @@ export class KeyPool {
   }
   /** Counts only, for health display. Never the keys. */
   health() {
-    return { keys: this.keys.length, keysAvailable: this.available().length, modelsResting: [...this.modelCoolingUntil.keys()].filter((m) => !this.modelAvailable(m)) };
+    return {
+      keys: this.keys.length,
+      keysAvailable: this.available().length,
+      modelsResting: [...this.modelCoolingUntil.keys()].filter(
+        (m) => !this.modelAvailable(m),
+      ),
+    };
   }
 }
 
@@ -94,8 +114,15 @@ const poolFor = (id: string, keys: string[]) => {
 };
 
 /** Health of the pools in this server instance: counts and model names only. Instances do not share it. */
-export function gatewayHealth(config: AiConfig, pool: (id: string, keys: string[]) => KeyPool = poolFor) {
-  return config.providers.map((p) => ({ provider: p.id, models: p.models ?? [p.model], ...pool(p.id, p.keys).health() }));
+export function gatewayHealth(
+  config: AiConfig,
+  pool: (id: string, keys: string[]) => KeyPool = poolFor,
+) {
+  return config.providers.map((p) => ({
+    provider: p.id,
+    models: p.models ?? [p.model],
+    ...pool(p.id, p.keys).health(),
+  }));
 }
 
 /** At most this many upstream calls for one question, across all providers, keys and retries. */
@@ -105,7 +132,11 @@ export const MAX_SAME_KEY_RETRIES = 1;
 export const BACKOFF_BASE_MS = 300;
 
 /** Exponential backoff with full jitter: random in [0, base * 2^attempt). Bounded so a retry never stalls a request. */
-export function backoffMs(attempt: number, random: () => number = Math.random, base = BACKOFF_BASE_MS) {
+export function backoffMs(
+  attempt: number,
+  random: () => number = Math.random,
+  base = BACKOFF_BASE_MS,
+) {
   return Math.floor(random() * Math.min(base * 2 ** attempt, 2_000));
 }
 
@@ -123,13 +154,16 @@ export async function generate(
   pool: (id: string, keys: string[]) => KeyPool = poolFor,
   hooks: GatewayHooks = {},
 ): Promise<RouterResult> {
-  if (config.providers.length === 0) throw new AiUnavailableError("no_providers");
-  const sleep = hooks.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)));
+  if (config.providers.length === 0)
+    throw new AiUnavailableError("no_providers");
+  const sleep =
+    hooks.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)));
   const call = { ...req, timeoutMs: req.timeoutMs ?? config.limits.timeoutMs };
   const trail: AttemptRecord[] = [];
   let attempts = 0;
   let sawBadRequest = false;
-  const fail = () => new AiUnavailableError(sawBadRequest ? "bad_request" : "all_failed", trail);
+  const fail = () =>
+    new AiUnavailableError(sawBadRequest ? "bad_request" : "all_failed", trail);
 
   for (const p of config.providers) {
     const client = clients[p.id];
@@ -146,9 +180,17 @@ export async function generate(
           try {
             const out = await client.complete(key, model, call);
             keys.markOk(key);
-            return { ...out, provider: p.id, model, attempts, fallbacks: trail.length, rateLimited: trail.filter((t) => t.kind === "rate_limit").length };
+            return {
+              ...out,
+              provider: p.id,
+              model,
+              attempts,
+              fallbacks: trail.length,
+              rateLimited: trail.filter((t) => t.kind === "rate_limit").length,
+            };
           } catch (e) {
-            const err = e instanceof ProviderError ? e : new ProviderError("network");
+            const err =
+              e instanceof ProviderError ? e : new ProviderError("network");
             trail.push({ provider: p.id, model, kind: err.kind });
             keys.markFailed(key, err, !config.independentKeyQuota);
             // The same request will be refused the same way by the next key, so do not spend more calls on it.
@@ -162,12 +204,17 @@ export async function generate(
               break;
             }
             // A transient failure gets one jittered retry on the same key; everything else moves on.
-            if (TRANSIENT.includes(err.kind) && retry < MAX_SAME_KEY_RETRIES && attempts < MAX_UPSTREAM_ATTEMPTS) {
+            if (
+              TRANSIENT.includes(err.kind) &&
+              retry < MAX_SAME_KEY_RETRIES &&
+              attempts < MAX_UPSTREAM_ATTEMPTS
+            ) {
               await sleep(backoffMs(retry, hooks.random));
               continue;
             }
             // Shared quota: the provider is rested, so stop asking its other keys and fall back to the next provider.
-            if (err.kind === "rate_limit" && !config.independentKeyQuota) providerRested = true;
+            if (err.kind === "rate_limit" && !config.independentKeyQuota)
+              providerRested = true;
             break;
           }
         }

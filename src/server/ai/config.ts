@@ -20,35 +20,72 @@ export const PROVIDER_IDS: ProviderId[] = ["gemini", "groq"];
  */
 export type AiFeature = "assistant";
 
-const KEYS_ENV: Record<ProviderId, string> = { gemini: "GEMINI_API_KEYS", groq: "GROQ_API_KEYS" };
+const KEYS_ENV: Record<ProviderId, string> = {
+  gemini: "GEMINI_API_KEYS",
+  groq: "GROQ_API_KEYS",
+};
 /** Numbered variables (GEMINI_API_KEY_1, GEMINI_API_KEY_2, ...) are read as well as the comma-separated pool. */
-const NUMBERED_ENV: Record<ProviderId, string> = { gemini: "GEMINI_API_KEY", groq: "GROQ_API_KEY" };
-const MODEL_ENV: Record<ProviderId, string> = { gemini: "GEMINI_MODEL", groq: "GROQ_MODEL" };
+const NUMBERED_ENV: Record<ProviderId, string> = {
+  gemini: "GEMINI_API_KEY",
+  groq: "GROQ_API_KEY",
+};
+const MODEL_ENV: Record<ProviderId, string> = {
+  gemini: "GEMINI_MODEL",
+  groq: "GROQ_MODEL",
+};
 /**
  * Defaults are ordered: the first is tried, the next only when the provider reports the model gone. The previous
  * defaults (gemini-2.0-flash, llama-3.3-70b-versatile) were retired by their providers in 2026, so they are not
  * listed. Model catalogues move quickly: confirm these with `npm run ai:models` before enabling, and override with
  * GEMINI_MODEL / GROQ_MODEL (comma-separated lists are accepted) without a code change.
  */
-const MODEL_DEFAULT: Record<ProviderId, string[]> = { gemini: ["gemini-3.5-flash-lite", "gemini-3.6-flash"], groq: ["openai/gpt-oss-120b", "openai/gpt-oss-20b"] };
+const MODEL_DEFAULT: Record<ProviderId, string[]> = {
+  gemini: ["gemini-3.5-flash-lite", "gemini-3.6-flash"],
+  groq: ["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
+};
 
-const int = (v: string | undefined, fallback: number, min: number, max: number) => {
+const int = (
+  v: string | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+) => {
   const n = Number(v);
   return Number.isFinite(n) && n >= min && n <= max ? Math.floor(n) : fallback;
 };
 
 /** Distinct, trimmed, non-empty keys. A key listed twice is used once, so the pool cannot be inflated by repetition. */
 export function parseKeys(raw: string | undefined): string[] {
-  return [...new Set((raw ?? "").split(",").map((k) => k.trim()).filter(Boolean))];
+  return [
+    ...new Set(
+      (raw ?? "")
+        .split(",")
+        .map((k) => k.trim())
+        .filter(Boolean),
+    ),
+  ];
 }
 
 /** Keys from `<NAME>_1 .. <NAME>_9` followed by the comma-separated pool, de-duplicated, numbered ones first. */
-export function collectKeys(env: Record<string, string | undefined>, id: ProviderId): string[] {
-  const numbered = Array.from({ length: 9 }, (_, i) => env[`${NUMBERED_ENV[id]}_${i + 1}`]?.trim() ?? "").filter(Boolean);
+export function collectKeys(
+  env: Record<string, string | undefined>,
+  id: ProviderId,
+): string[] {
+  const numbered = Array.from(
+    { length: 9 },
+    (_, i) => env[`${NUMBERED_ENV[id]}_${i + 1}`]?.trim() ?? "",
+  ).filter(Boolean);
   return [...new Set([...numbered, ...parseKeys(env[KEYS_ENV[id]])])];
 }
 
-const parseModels = (raw: string | undefined) => [...new Set((raw ?? "").split(",").map((m) => m.trim()).filter(Boolean))];
+const parseModels = (raw: string | undefined) => [
+  ...new Set(
+    (raw ?? "")
+      .split(",")
+      .map((m) => m.trim())
+      .filter(Boolean),
+  ),
+];
 
 export interface AiProviderConfig {
   id: ProviderId;
@@ -70,19 +107,34 @@ export interface AiConfig {
    * every key really belongs to a separate project or organisation.
    */
   independentKeyQuota?: boolean;
-  limits: { perHour: number; tokensPerDay: number; maxOutputTokens: number; maxQuestionChars: number; timeoutMs: number };
+  limits: {
+    perHour: number;
+    tokensPerDay: number;
+    maxOutputTokens: number;
+    maxQuestionChars: number;
+    timeoutMs: number;
+  };
 }
 
-export function readAiConfig(env: Record<string, string | undefined> = process.env, feature: AiFeature = "assistant"): AiConfig {
+export function readAiConfig(
+  env: Record<string, string | undefined> = process.env,
+  feature: AiFeature = "assistant",
+): AiConfig {
   const order = (env.AI_PROVIDER_ORDER ?? "gemini,groq")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter((s): s is ProviderId => PROVIDER_IDS.includes(s as ProviderId));
   const ordered = [...new Set([...order, ...PROVIDER_IDS])];
   const modelsFor = (id: ProviderId) => {
-    const featureModels = parseModels(env[`AI_${feature.toUpperCase()}_${id.toUpperCase()}_MODEL`]);
+    const featureModels = parseModels(
+      env[`AI_${feature.toUpperCase()}_${id.toUpperCase()}_MODEL`],
+    );
     const configured = parseModels(env[MODEL_ENV[id]]);
-    return featureModels.length ? featureModels : configured.length ? configured : MODEL_DEFAULT[id];
+    return featureModels.length
+      ? featureModels
+      : configured.length
+        ? configured
+        : MODEL_DEFAULT[id];
   };
   return {
     enabled: env.AI_ENABLED === "true",
@@ -103,11 +155,14 @@ export function readAiConfig(env: Record<string, string | undefined> = process.e
   };
 }
 
-export type AiStatus = { available: true } | { available: false; reason: "disabled" | "no_providers" };
+export type AiStatus =
+  | { available: true }
+  | { available: false; reason: "disabled" | "no_providers" };
 
 /** What the UI is allowed to know: whether the assistant can run, and never which keys or providers are set up. */
 export function aiStatus(config: AiConfig = readAiConfig()): AiStatus {
   if (!config.enabled) return { available: false, reason: "disabled" };
-  if (config.providers.length === 0) return { available: false, reason: "no_providers" };
+  if (config.providers.length === 0)
+    return { available: false, reason: "no_providers" };
   return { available: true };
 }

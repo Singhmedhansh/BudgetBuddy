@@ -9,12 +9,26 @@ import { generate, KeyPool } from "./router";
 import { categoriseWithAi, readStatementWithAi } from "./statement";
 import type { UsageStore } from "./assistant";
 
-const env = { ...process.env, GEMINI_API_KEYS: process.env.GEMINI_API_KEYS ?? process.env["GEMINI_API_KEYS "], GROQ_API_KEYS: process.env.GROQ_API_KEYS ?? process.env["GROQ_API_KEYS "], AI_ENABLED: "true" };
-const live = process.env.AI_LIVE_TEST === "1" && Boolean(env.GEMINI_API_KEYS) && Boolean(env.GROQ_API_KEYS);
-const req = { system: "Answer in one short sentence.", messages: [{ role: "user" as const, content: "What is 2 plus 2?" }], maxOutputTokens: 700 };
+const env = {
+  ...process.env,
+  GEMINI_API_KEYS:
+    process.env.GEMINI_API_KEYS ?? process.env["GEMINI_API_KEYS "],
+  GROQ_API_KEYS: process.env.GROQ_API_KEYS ?? process.env["GROQ_API_KEYS "],
+  AI_ENABLED: "true",
+};
+const live =
+  process.env.AI_LIVE_TEST === "1" &&
+  Boolean(env.GEMINI_API_KEYS) &&
+  Boolean(env.GROQ_API_KEYS);
+const req = {
+  system: "Answer in one short sentence.",
+  messages: [{ role: "user" as const, content: "What is 2 plus 2?" }],
+  maxOutputTokens: 700,
+};
 const pools = () => {
   const m = new Map<string, KeyPool>();
-  return (id: string, keys: string[]) => m.get(id) ?? (m.set(id, new KeyPool(keys)), m.get(id)!);
+  return (id: string, keys: string[]) =>
+    m.get(id) ?? (m.set(id, new KeyPool(keys)), m.get(id)!);
 };
 
 describe.skipIf(!live)("gateway against the real providers", () => {
@@ -22,20 +36,30 @@ describe.skipIf(!live)("gateway against the real providers", () => {
     const r = await generate(readAiConfig(env), req, undefined, pools());
     expect(r.text.length).toBeGreaterThan(0);
     expect(["gemini", "groq"]).toContain(r.provider);
-    console.log(`live: answered by ${r.provider} / ${r.model} after ${r.attempts} attempt(s), ${r.fallbacks} fallback(s)`);
+    console.log(
+      `live: answered by ${r.provider} / ${r.model} after ${r.attempts} attempt(s), ${r.fallbacks} fallback(s)`,
+    );
   }, 120_000);
 
   it("falls back to Groq when every Gemini key is rejected, without retrying the bad keys", async () => {
-    const bogus = readAiConfig({ ...env, GEMINI_API_KEYS: "invalid-key-one,invalid-key-two" });
+    const bogus = readAiConfig({
+      ...env,
+      GEMINI_API_KEYS: "invalid-key-one,invalid-key-two",
+    });
     const r = await generate(bogus, req, undefined, pools());
     expect(r.provider).toBe("groq");
     expect(r.fallbacks).toBeGreaterThanOrEqual(1);
     expect(r.attempts).toBeLessThanOrEqual(4);
-    console.log(`live: fallback worked, answered by groq / ${r.model} after ${r.attempts} attempt(s)`);
+    console.log(
+      `live: fallback worked, answered by groq / ${r.model} after ${r.attempts} attempt(s)`,
+    );
   }, 120_000);
 
   it("reads a statement and categorises it, with every row verified against the text", async () => {
-    const usage: UsageStore = { reserve: async () => ({ allowed: true, id: 1 }), settle: async () => undefined };
+    const usage: UsageStore = {
+      reserve: async () => ({ allowed: true, id: 1 }),
+      settle: async () => undefined,
+    };
     const config = readAiConfig(env);
     const text = [
       "ACME BANK  Account statement  01/11/2026 to 30/11/2026",
@@ -46,17 +70,35 @@ describe.skipIf(!live)("gateway against the real providers", () => {
       "09/11/2026  UBER TRIP 8841                     1,200.50                60,349.50",
       "Closing balance 60,349.50",
     ].join("\n");
-    const read = await readStatementWithAi(text, { config, usage }, { currency: "INR", dateOrder: "dmy" });
+    const read = await readStatementWithAi(
+      text,
+      { config, usage },
+      { currency: "INR", dateOrder: "dmy" },
+    );
     expect(read.ok).toBe(true);
     if (!read.ok) return;
-    console.log("live: statement rows", JSON.stringify(read.rows.map((r) => [r.date, r.description, r.amount])), "dropped", read.problems.length);
-    expect(read.rows.map((r) => r.amount).sort((a, b) => a - b)).toEqual([-120050, -45000, 5000000]);
+    console.log(
+      "live: statement rows",
+      JSON.stringify(read.rows.map((r) => [r.date, r.description, r.amount])),
+      "dropped",
+      read.problems.length,
+    );
+    expect(read.rows.map((r) => r.amount).sort((a, b) => a - b)).toEqual([
+      -120050, -45000, 5000000,
+    ]);
     const cats = [
       { id: "food", name: "Food", kind: "expense" as const },
       { id: "travel", name: "Travel", kind: "expense" as const },
       { id: "salary", name: "Salary", kind: "income" as const },
     ];
-    const picks = await categoriseWithAi(read.rows.map((r) => ({ description: r.description, direction: (r.amount > 0 ? "in" : "out") as "in" | "out" })), cats, { config, usage });
+    const picks = await categoriseWithAi(
+      read.rows.map((r) => ({
+        description: r.description,
+        direction: (r.amount > 0 ? "in" : "out") as "in" | "out",
+      })),
+      cats,
+      { config, usage },
+    );
     console.log("live: categories", JSON.stringify([...picks.entries()]));
     expect(picks.size).toBeGreaterThanOrEqual(2);
   }, 180_000);

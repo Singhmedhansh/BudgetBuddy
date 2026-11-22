@@ -9,6 +9,32 @@ import type { Facts } from "./grounding";
  * Pictures for Finn's answers. They are built here, in code, from the same verified facts as the text, so a chart can
  * never show a number the person's records do not support. The model writes words; this file chooses the picture.
  */
+/** Something Finn proposes to do. Nothing happens until the person taps Confirm; the server then checks everything again. */
+export type FinnAction =
+  | {
+      kind: "add_transaction";
+      type: "expense" | "income";
+      amount: number;
+      amountDisplay: string;
+      accountId: string;
+      accountName: string;
+      categoryId: string;
+      categoryName: string;
+      date: string;
+      merchant: string | null;
+      clientKey: string;
+    }
+  | {
+      kind: "set_budget_limit";
+      budgetId: string;
+      budgetName: string;
+      categoryId: string;
+      categoryName: string;
+      amount: number;
+      amountDisplay: string;
+      previousDisplay: string | null;
+    };
+
 export type Tone = "ok" | "warn" | "bad" | "neutral";
 export type Visual =
   | {
@@ -57,6 +83,7 @@ export type Visual =
         tone?: Tone;
       }[];
     }
+  | { type: "action"; action: FinnAction }
   | {
       type: "timeline";
       title: string;
@@ -114,6 +141,59 @@ export function buildVisuals(question: string, facts: Facts): Visual[] {
   if (facts.calculation)
     return calculationVisuals(facts.calculation, money, compact);
 
+  // 1b. A what-if on their own spending.
+  if (facts.scenario) {
+    const c = facts.scenario;
+    add({
+      type: "stats",
+      items: [
+        { label: `Cut ${c.what} by`, value: `${c.percent}%` },
+        {
+          label: "You keep each month",
+          value: money(c.savesPerMonth),
+          tone: "ok",
+        },
+        { label: "Over a year", value: money(c.savesPerYear), tone: "ok" },
+      ],
+    });
+    add({
+      type: "bars",
+      title: `${c.what}: now and after the cut`,
+      items: [
+        {
+          label: "Usual month",
+          value: n(c.usualMonthly),
+          display: money(c.usualMonthly),
+        },
+        {
+          label: `After a ${c.percent}% cut`,
+          value: n(c.newMonthly),
+          display: money(c.newMonthly),
+          tone: "ok",
+        },
+      ],
+    });
+    if (c.monthlySavingNow && c.monthlySavingAfter)
+      add({
+        type: "bars",
+        title: "What you save each month",
+        items: [
+          {
+            label: "Now",
+            value: Math.max(0, n(c.monthlySavingNow)),
+            display: money(c.monthlySavingNow),
+          },
+          {
+            label: "After the cut",
+            value: Math.max(0, n(c.monthlySavingAfter)),
+            display: money(c.monthlySavingAfter),
+            tone: "ok",
+          },
+        ],
+      });
+    return out;
+  }
+
   // 2. Saving for something.
   if (facts.savingsPlan) {
     const p = facts.savingsPlan;
@@ -156,7 +236,9 @@ export function buildVisuals(question: string, facts: Facts): Visual[] {
   }
 
   if (
-    /emergency|cushion|rainy|runway|how long could i|cover/.test(q) &&
+    /emergency|cushion|rainy|runway|how long could i|\blive on\b|months of (?:expenses|spending)|cover/.test(
+      q,
+    ) &&
     facts.emergencyFund
   ) {
     const e = facts.emergencyFund;
@@ -212,7 +294,7 @@ export function buildVisuals(question: string, facts: Facts): Visual[] {
   }
 
   if (
-    /budget|limit|over\b|on track|stay within/.test(q) &&
+    /budget|limit|over budget|on track|stay within/.test(q) &&
     facts.budgets.length > 0
   ) {
     const lines = facts.budgets
@@ -348,7 +430,11 @@ export function buildVisuals(question: string, facts: Facts): Visual[] {
     return out;
   }
 
+  // "How much can I spend per day" is about pace, not about where the money went.
+  const paceQ =
+    /per day|daily|pace|projected|month.?end|on pace|rest of the month/.test(q);
   const spendy =
+    !paceQ &&
     /spend|spent|categor|where.*(money|go|went)|biggest|expens|food|top\b|cut back|payee|merchant|shop/.test(
       q,
     );
@@ -367,13 +453,11 @@ export function buildVisuals(question: string, facts: Facts): Visual[] {
       type: "donut",
       title: `Where your money went in ${facts.thisMonth.label}`,
       center: { value: money(total), label: "spent so far" },
-      items: cats
-        .slice(0, 6)
-        .map((c) => ({
-          label: c.name,
-          value: n(c.thisMonth),
-          display: money(c.thisMonth),
-        })),
+      items: cats.slice(0, 6).map((c) => ({
+        label: c.name,
+        value: n(c.thisMonth),
+        display: money(c.thisMonth),
+      })),
     });
     const risen = [...cats]
       .filter((c) => c.changePercent !== null && c.changePercent >= 15)
