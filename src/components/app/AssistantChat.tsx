@@ -20,6 +20,7 @@ import {
   useEffect,
   useOptimistic,
   useRef,
+  useMemo,
   useState,
   useTransition,
 } from "react";
@@ -31,6 +32,8 @@ import {
 import { AssistantMark } from "@/components/app/AssistantMark";
 import { FinnVisuals } from "@/components/app/FinnVisuals";
 import { RichText } from "@/components/app/RichText";
+import { UsageMeter, LimitCard } from "@/components/app/FinnUsage";
+import type { Quota } from "@/server/ai/chats";
 import { BRAND } from "@/config/brand";
 import {
   followUps,
@@ -89,7 +92,15 @@ function Chat({
   name,
   starters,
   snapshot,
+  initialTurns,
+  initialChatId,
+  quota,
+  onSaved,
 }: {
+  initialTurns: Turn[];
+  initialChatId: string | null;
+  quota: Quota | null;
+  onSaved: (chatId: string, firstQuestion: string) => void;
   available: boolean;
   unavailableMessage: string;
   onNew: () => void;
@@ -100,15 +111,31 @@ function Chat({
   const [state, dispatch] = useActionState<
     AssistantState | undefined,
     FormData
-  >(askAssistantAction, undefined);
+  >(askAssistantAction, { turns: initialTurns, chatId: initialChatId });
   const [, startTransition] = useTransition();
-  const turns = state?.turns ?? [];
+  const turns = useMemo(() => state?.turns ?? [], [state?.turns]);
   // The person's message appears the moment they send it; it settles into the real list when the answer arrives.
   const [shown, addOptimistic] = useOptimistic(
     turns,
     (cur: Turn[], q: string) => [...cur, { role: "user" as const, content: q }],
   );
   const pending = shown.length > turns.length;
+
+  // Which saved chat this is, and how much of the plan's allowance is left (counted here as answers arrive).
+  const chatId = state?.chatId ?? initialChatId;
+  const answered = turns.filter((t) => t.role === "assistant").length - initialTurns.filter((t) => t.role === "assistant").length;
+  const used = quota ? quota.questionsToday + Math.max(0, answered) : 0;
+  const exhausted = Boolean(quota) && (used >= quota!.questionsPerDay || quota!.tokensMonth >= quota!.tokensPerMonth || state?.limit !== undefined);
+  const limitKind: "day" | "month" = state?.limit?.kind ?? (quota && quota.tokensMonth >= quota.tokensPerMonth ? "month" : "day");
+  const lastSaved = useRef<string>("");
+  useEffect(() => {
+    if (!chatId) return;
+    const key = chatId + ":" + turns.length;
+    if (key === lastSaved.current || turns.length === initialTurns.length) return;
+    lastSaved.current = key;
+    if (!initialChatId) window.history.replaceState(null, "", "/app/assistant?c=" + chatId);
+    onSaved(chatId, turns.find((t) => t.role === "user")?.content ?? "");
+  }, [chatId, turns, initialChatId, initialTurns.length, onSaved]);
 
   const [text, setText] = useState("");
   // When an answer fails, hand the question back so nothing has to be retyped.
@@ -143,11 +170,12 @@ function Chat({
 
   function send(raw: string) {
     const q = raw.trim();
-    if (!q || pending || !available) return;
+    if (!q || pending || !available || exhausted) return;
     setText("");
     const fd = new FormData();
     fd.set("question", q);
     fd.set("history", JSON.stringify(turns));
+    if (chatId) fd.set("chat", chatId);
     startTransition(() => {
       addOptimistic(q);
       dispatch(fd);
@@ -155,7 +183,7 @@ function Chat({
   }
 
   const empty = shown.length === 0;
-  const canSend = available && !pending && text.trim().length > 0;
+  const canSend = available && !exhausted && !pending && text.trim().length > 0;
 
   return (
     <div className="flex min-h-[calc(100dvh-17rem)] flex-col">
@@ -323,6 +351,9 @@ function Chat({
         </p>
       ) : null}
 
+      {quota ? <UsageMeter quota={quota} used={used} /> : null}
+      {exhausted && quota ? <LimitCard plan={quota.plan} kind={limitKind} perDay={quota.questionsPerDay} /> : null}
+
       <div className="sticky bottom-[5.5rem] z-10 -mx-1 mt-4 bg-bg/85 px-1 pb-1 pt-2 backdrop-blur md:bottom-0">
         <form
           onSubmit={(e) => {
@@ -352,7 +383,7 @@ function Chat({
                 send(text);
               }
             }}
-            disabled={!available}
+            disabled={!available || exhausted}
             placeholder={`Ask ${BRAND.assistantName} about your money`}
             className="block max-h-[200px] w-full resize-none bg-transparent shadow-none focus-visible:shadow-none px-4 pb-1 pt-3.5 text-[15px] leading-relaxed !outline-none placeholder:text-muted/70 disabled:cursor-not-allowed disabled:opacity-60"
           />
@@ -382,23 +413,27 @@ function Chat({
         <p className="mt-2 px-1 text-center text-xs text-muted">
           {BRAND.assistantName} uses only figures from your recorded
           transactions and checks every number before showing it. It cannot see
-          individual transactions.
+          your account numbers.
         </p>
       </div>
     </div>
   );
 }
 
-export function AssistantChat(props: {
+export interface AssistantChatProps {
   available: boolean;
   unavailableMessage: string;
   name: string | null;
   starters: Starter[];
   snapshot: Snapshot[];
-}) {
-  // A new chat is a fresh component: its conversation state starts empty.
-  const [session, setSession] = useState(0);
-  return (
-    <Chat key={session} {...props} onNew={() => setSession((s) => s + 1)} />
-  );
+  initialTurns: Turn[];
+  initialChatId: string | null;
+  quota: Quota | null;
+  onSaved: (chatId: string, firstQuestion: string) => void;
+  /** Starts a fresh chat (the history rail and the button in the chat both use it). */
+  onNew: () => void;
+}
+
+export function AssistantChat(props: AssistantChatProps) {
+  return <Chat {...props} />;
 }

@@ -69,3 +69,42 @@ describe("starters and follow-ups", () => {
     expect(f.length).toBeGreaterThan(0);
   });
 });
+
+import { parseBlocks } from "@/components/app/RichText";
+import { groupChats, periodStarts, titleFrom } from "./chats";
+
+describe("rich text blocks", () => {
+  it("reads headings, numbered lists, bullets and tables", () => {
+    const b = parseBlocks("**Pay the loan first.**\n### Why\n- It costs 11%\n- SIP is not guaranteed\n1. Build a cushion\n2. Clear the loan\n| Option | Cost |\n|---|---|\n| Loan | 11% |\n| SIP | varies |");
+    expect(b.map((x) => x.kind)).toEqual(["p", "h", "ul", "ol", "table"]);
+    const t = b[4];
+    if (t.kind !== "table") throw new Error("table");
+    expect(t.head).toEqual(["Option", "Cost"]);
+    expect(t.rows).toEqual([["Loan", "11%"], ["SIP", "varies"]]);
+  });
+});
+
+describe("saved chats", () => {
+  it("titles come from the first question, trimmed", () => {
+    expect(titleFrom("  How much did I spend this month?  ")).toBe("How much did I spend this month");
+    expect(titleFrom("x".repeat(80)).length).toBeLessThanOrEqual(52);
+    expect(titleFrom("   ")).toBe("New chat");
+  });
+  it("groups pinned first, then by recency in the person's time zone", () => {
+    const now = new Date("2026-11-22T10:00:00Z");
+    const h = (hoursAgo: number) => new Date(now.getTime() - hoursAgo * 3_600_000).toISOString();
+    const chats = [
+      { id: "a", title: "A", pinned: false, updatedAt: h(1) },
+      { id: "b", title: "B", pinned: false, updatedAt: h(30) },
+      { id: "c", title: "C", pinned: true, updatedAt: h(500) },
+      { id: "d", title: "D", pinned: false, updatedAt: h(24 * 4) },
+      { id: "e", title: "E", pinned: false, updatedAt: h(24 * 20) },
+    ];
+    expect(groupChats(chats, now, "UTC").map((g) => [g.group, g.chats.map((c) => c.id)])).toEqual([["Pinned", ["c"]], ["Today", ["a"]], ["Yesterday", ["b"]], ["Previous 7 days", ["d"]], ["Earlier", ["e"]]]);
+  });
+  it("counts allowances from the start of the local day and month", () => {
+    const { dayStart, monthStart } = periodStarts(new Date("2026-11-22T20:00:00Z"), "Asia/Kolkata");
+    expect(dayStart.toISOString()).toBe("2026-11-22T18:30:00.000Z"); // 23 Nov 00:00 IST
+    expect(monthStart.toISOString()).toBe("2026-10-31T18:30:00.000Z"); // 1 Nov 00:00 IST
+  });
+});

@@ -14,6 +14,15 @@ export const TRIAL_DAYS = 5;
 export type PlanId = "free" | "pro";
 export type Interval = "month" | "year";
 
+/**
+ * What Finn, the money assistant, may be asked on each plan. Questions are what people see; the monthly token figure is
+ * the cost guard behind it (a question is roughly 4,000 to 6,000 tokens with the person's figures attached).
+ */
+export const AI_ALLOWANCE: Record<PlanId, { questionsPerDay: number; tokensPerMonth: number }> = {
+  free: { questionsPerDay: 5, tokensPerMonth: 150_000 },
+  pro: { questionsPerDay: 50, tokensPerMonth: 2_000_000 },
+};
+
 export interface Price {
   currency: "INR" | "USD";
   interval: Interval;
@@ -39,6 +48,7 @@ export const PLANS: Plan[] = [
       "Savings goals",
       "CSV import with preview and duplicate checks",
       "Core dashboard and basic analytics",
+      "Finn, your money assistant: 5 questions a day",
       "Export and delete your data any time",
     ],
     prices: [{ currency: "INR", interval: "month", amountMinor: 0 }],
@@ -50,7 +60,7 @@ export const PLANS: Plan[] = [
     features: [
       "Everything in Free",
       "Forecasting and what-if scenarios",
-      "AI assistant with a monthly allowance",
+      "Finn, your money assistant: 50 questions a day, with charts",
       "Advanced analytics and downloadable reports",
       "Smart categorisation and larger imports",
       "Automation rules",

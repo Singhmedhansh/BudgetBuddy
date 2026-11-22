@@ -7,7 +7,7 @@ import type { ChatMessage, CompletionRequest } from "./types";
 
 export type AssistantOutcome =
   | { ok: true; answer: string; verified: true; source: "model" | "figures" | "general"; visuals?: Visual[] }
-  | { ok: false; reason: "disabled" | "no_providers" | "too_long" | "empty" | "hourly" | "daily" | "unavailable" | "not_ready"; message: string };
+  | { ok: false; reason: "disabled" | "no_providers" | "plan_day" | "plan_month" | "too_long" | "empty" | "hourly" | "daily" | "unavailable" | "not_ready"; message: string };
 
 /** Sentences shown to people. None names a provider, a key, a model or an internal error. */
 export const MESSAGES = {
@@ -16,6 +16,8 @@ export const MESSAGES = {
   empty: "Ask a question about your own money, for example how much you spent this month.",
   hourly: "You have reached the hourly limit for the assistant. Try again a little later.",
   daily: "You have used today's assistant allowance. It resets within 24 hours.",
+  plan_day: "You have used all of today's questions for your plan. They reset at midnight.",
+  plan_month: "You have used this month's Finn allowance for your plan. It resets on the 1st.",
   unavailable: "The assistant could not answer right now. Nothing was charged to your allowance beyond this try. Please try again in a moment.",
   not_ready: "The assistant needs a database update that has not been applied yet.",
 } as const;
@@ -36,13 +38,15 @@ export interface UsageResult {
 
 export interface UsageStore {
   /** Reserve a call before making it, so parallel requests cannot slip past the limits. */
-  reserve(limits: { perHour: number; tokensPerDay: number }): Promise<{ allowed: true; id: number } | { allowed: false; reason: "hourly" | "daily" } | { allowed: false; reason: "not_ready" }>;
+  reserve(limits: { perHour: number; tokensPerDay: number; plan?: { questionsPerDay: number; tokensPerMonth: number; dayStart: string; monthStart: string } }): Promise<{ allowed: true; id: number } | { allowed: false; reason: "hourly" | "daily" | "plan_day" | "plan_month" } | { allowed: false; reason: "not_ready" }>;
   settle(id: number, r: UsageResult): Promise<void>;
 }
 
 export interface AssistantDeps {
   config?: AiConfig;
   usage: UsageStore;
+  /** The person's plan allowance and the start of their day and month, counted in the database. */
+  plan?: { questionsPerDay: number; tokensPerMonth: number; dayStart: string; monthStart: string };
   loadFacts: () => Promise<Facts>;
   generate?: (config: AiConfig, req: CompletionRequest) => Promise<RouterResult>;
   now?: () => number;
@@ -64,7 +68,7 @@ export async function ask(question: string, deps: AssistantDeps, history: ChatMe
   if (!q) return fail("empty");
   if (q.length > config.limits.maxQuestionChars) return { ok: false, reason: "too_long", message: `Keep the question under ${config.limits.maxQuestionChars} characters.` };
 
-  const slot = await deps.usage.reserve({ perHour: config.limits.perHour, tokensPerDay: config.limits.tokensPerDay });
+  const slot = await deps.usage.reserve({ perHour: config.limits.perHour, tokensPerDay: config.limits.tokensPerDay, plan: deps.plan });
   if (!slot.allowed) return fail(slot.reason);
 
   const now = deps.now ?? Date.now;

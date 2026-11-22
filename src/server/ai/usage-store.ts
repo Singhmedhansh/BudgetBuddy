@@ -6,6 +6,15 @@ type Rpc = { rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<{ d
 export function usageStoreFor(supabase: Rpc): UsageStore {
   return {
     async reserve(limits) {
+      type Reason = "hourly" | "daily" | "plan_day" | "plan_month";
+      // The plan's allowance is enforced when migration 14 is applied; before that the older per-day token guard is used.
+      if (limits.plan) {
+        const { data, error } = await supabase.rpc("ai_reserve_plan", { p_per_hour: limits.perHour, p_questions_per_day: limits.plan.questionsPerDay, p_day_start: limits.plan.dayStart, p_tokens_per_month: limits.plan.tokensPerMonth, p_month_start: limits.plan.monthStart });
+        if (!error) {
+          const p = data as { allowed: boolean; id?: number; reason?: Reason };
+          return p.allowed && p.id !== undefined ? { allowed: true, id: p.id } : { allowed: false, reason: p.reason ?? "hourly" };
+        }
+      }
       const { data, error } = await supabase.rpc("ai_reserve", { p_per_hour: limits.perHour, p_tokens_per_day: limits.tokensPerDay });
       if (error) return { allowed: false, reason: "not_ready" };
       const r = data as { allowed: boolean; id?: number; reason?: "hourly" | "daily" };

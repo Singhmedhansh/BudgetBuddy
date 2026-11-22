@@ -1,12 +1,18 @@
 import type { Metadata } from "next";
-import { BRAND } from "@/config/brand";
+import { FinnWorkspace } from "@/components/app/FinnWorkspace";
 import { PageHeader } from "@/components/app/ui";
-import { AssistantChat } from "@/components/app/AssistantChat";
+import { BRAND } from "@/config/brand";
+import type { PlanId } from "@/config/plans";
 import { MESSAGES } from "@/server/ai/assistant";
+import { listChats, loadChat, loadQuota } from "@/server/ai/chats";
 import { aiStatus } from "@/server/ai/config";
-import { requireSpace } from "@/server/context";
 import { loadFacts } from "@/server/ai/facts";
 import { starters } from "@/server/ai/suggestions";
+import { requireSpace } from "@/server/context";
+import {
+  resolveEntitlement,
+  type EntitlementRow,
+} from "@/server/payments/entitlements";
 
 export const metadata: Metadata = { title: "Finn" };
 
@@ -17,12 +23,33 @@ const money = (v: string, cur: string) =>
     maximumFractionDigits: 0,
   }).format(Number(v));
 
-export default async function AssistantPage() {
+export default async function AssistantPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ c?: string }>;
+}) {
+  const sp = await searchParams;
   const ctx = await requireSpace();
   const status = aiStatus();
+  const now = new Date();
+
+  const { data: ent } = await ctx.supabase
+    .from("entitlements")
+    .select("plan,status,current_period_end")
+    .maybeSingle();
+  const plan: PlanId = resolveEntitlement(
+    ent as EntitlementRow | null,
+    now,
+  ).plan;
+  const [chats, active, quota] = await Promise.all([
+    listChats(ctx.supabase),
+    sp.c ? loadChat(ctx.supabase, sp.c) : Promise.resolve(null),
+    loadQuota(ctx.supabase, plan, now, ctx.profile.timezone),
+  ]);
+
   // The starters and the snapshot come from the person's own records; if they cannot be read, the page still works.
   let facts: Awaited<ReturnType<typeof loadFacts>> | null = null;
-  if (status.available) {
+  if (status.available && !active) {
     try {
       facts = await loadFacts(ctx);
     } catch {
@@ -55,17 +82,21 @@ export default async function AssistantPage() {
     <>
       <PageHeader
         title={`Ask ${BRAND.assistantName}`}
-        description={`${BRAND.assistantName} answers questions about your own recorded money and works out savings goals. Every figure is checked against your records.`}
+        description={`${BRAND.assistantName} answers questions about your own recorded money and any money question you have. Every figure about you is checked against your records.`}
       />
-      <div className="mx-auto max-w-3xl">
-        <AssistantChat
-          available={status.available}
-          unavailableMessage={MESSAGES.disabled}
-          name={name}
-          starters={starters(facts)}
-          snapshot={snapshot}
-        />
-      </div>
+      <FinnWorkspace
+        chats={chats}
+        activeId={active?.id ?? null}
+        initialTurns={active?.turns ?? []}
+        quota={quota}
+        timeZone={ctx.profile.timezone}
+        available={status.available}
+        unavailableMessage={MESSAGES.disabled}
+        name={name}
+        starters={starters(facts)}
+        snapshot={snapshot}
+        historyReady={quota !== null}
+      />
     </>
   );
 }

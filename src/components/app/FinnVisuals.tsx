@@ -76,7 +76,8 @@ function Donut({ v }: { v: Extract<Visual, { type: "donut" }> }) {
   const total = v.items.reduce((s, i) => s + i.value, 0) || 1;
   const R = 42;
   const C = 2 * Math.PI * R;
-  let offset = 0;
+  // Where each slice starts, as a running total of the slices before it.
+  const starts = v.items.map((_, i) => v.items.slice(0, i).reduce((sum, p) => sum + (p.value / total) * C, 0));
   return (
     <Card
       title={v.title}
@@ -99,7 +100,7 @@ function Donut({ v }: { v: Extract<Visual, { type: "donut" }> }) {
           />
           {v.items.map((it, i) => {
             const len = (it.value / total) * C;
-            const seg = (
+            return (
               <circle
                 key={it.label}
                 cx="55"
@@ -109,15 +110,13 @@ function Donut({ v }: { v: Extract<Visual, { type: "donut" }> }) {
                 stroke={PALETTE[i % PALETTE.length]}
                 strokeWidth="14"
                 strokeDasharray={`${Math.max(0, len - 1.5)} ${C}`}
-                strokeDashoffset={-offset}
+                strokeDashoffset={-starts[i]}
                 className="finn-donut"
                 style={{ animationDelay: `${i * 90}ms` }}
               >
                 <title>{`${it.label}: ${it.display}`}</title>
               </circle>
             );
-            offset += len;
-            return seg;
           })}
           {v.center ? (
             <g transform="rotate(90 55 55)">
