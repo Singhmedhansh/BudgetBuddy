@@ -98,6 +98,11 @@ export async function loadFacts(ctx: Ctx): Promise<Facts> {
     monthsOfCover: avgSpend > 0 ? Math.round((spendable / avgSpend) * 10) / 10 : null,
   };
 
+  // Rules of thumb worked out in code from their usual month, so general advice can be made personal without model maths.
+  const usualIncome = completed.length ? Math.round(completed.reduce((x, m) => x + m.totals.income, 0) / completed.length) : totals.income;
+  const emergencyFund: Facts["emergencyFund"] = avgSpend > 0 ? { threeMonths: dec(avgSpend * 3), sixMonths: dec(avgSpend * 6), monthsHeld: pace.monthsOfCover } : undefined;
+  const rule503020: Facts["rule503020"] = usualIncome > 0 ? { basisIncome: dec(usualIncome), needs: dec(Math.round(usualIncome * 0.5)), wants: dec(Math.round(usualIncome * 0.3)), savings: dec(Math.round(usualIncome * 0.2)) } : undefined;
+
   const [payees, bills, subscriptions, goals, debts] = await Promise.all([
     soft(async () => {
       const since = new Date(Date.now() - 90 * DAY);
@@ -132,6 +137,9 @@ export async function loadFacts(ctx: Ctx): Promise<Facts> {
   return {
     asOf: `${today.year}-${String(today.month).padStart(2, "0")}-${String(today.day).padStart(2, "0")}`,
     space: { name: clean(space.name), currency: cur, sample: Boolean(space.is_sample) },
+    region: { country: profile.country ?? null, currency: cur },
+    emergencyFund,
+    rule503020,
     netWorth: dec(held - owed),
     spendable: dec(spendable),
     monthlyNet,

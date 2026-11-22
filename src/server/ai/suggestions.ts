@@ -1,6 +1,6 @@
 import type { Facts } from "./grounding";
 
-export type StarterKind = "spend" | "budget" | "worth" | "category" | "save" | "bills" | "goals" | "subs" | "pace";
+export type StarterKind = "learn" | "spend" | "budget" | "worth" | "category" | "save" | "bills" | "goals" | "subs" | "pace";
 export interface Starter {
   text: string;
   kind: StarterKind;
@@ -19,15 +19,18 @@ export function starters(f: Facts | null): Starter[] {
   if (f?.goals && f.goals.length > 0) out.push({ text: "How are my savings goals going?", kind: "goals" });
   if (f?.subscriptions) out.push({ text: "How much do my subscriptions cost me a year?", kind: "subs" });
   out.push({ text: "How many months to save for a 10K purchase?", kind: "save" });
+  out.push({ text: "How big should my emergency fund be?", kind: "learn" });
+  out.push({ text: "What would the EMI be on a 5 lakh loan at 10% for 3 years?", kind: "learn" });
   out.push({ text: "What is my net worth right now?", kind: "worth" });
-  out.push({ text: "Where did most of my money go?", kind: "category" });
-  return out.slice(0, 6);
+  return out.slice(0, 8);
 }
 
 /** Up to three natural next questions after an answer, picked by topic. */
 export function followUps(question: string): string[] {
   const q = question.toLowerCase();
-  const pick: string[] = /bill|due|subscri/.test(q)
+  const pick: string[] = /emi|loan|interest|credit|sip|invest|fund|tax|insurance|retire|pension|inflation|ppf|nps|mutual/.test(q)
+    ? ["How would that apply to my own numbers?", "What is the safest way to start?", "What mistakes should I avoid here?"]
+    : /bill|due|subscri/.test(q)
     ? ["How much do my subscriptions cost me a year?", "What is due in the next week?", "Which bill is the biggest?"]
     : /goal/.test(q)
       ? ["Which goal is furthest behind?", "How much should I put in each month?", "What is my net worth right now?"]

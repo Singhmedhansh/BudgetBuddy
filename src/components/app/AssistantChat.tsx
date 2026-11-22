@@ -2,6 +2,7 @@
 
 import {
   ArrowUp,
+  BookOpen,
   CalendarClock,
   Check,
   Copy,
@@ -38,6 +39,7 @@ import {
 
 const MAX = 600;
 const ICONS: Record<StarterKind, typeof Wallet> = {
+  learn: BookOpen,
   spend: Wallet,
   budget: Gauge,
   worth: Landmark,
@@ -248,9 +250,7 @@ function Chat({
                     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                       <span className="inline-flex items-center gap-1.5">
                         <Check size={12} aria-hidden className="text-pos" />
-                        {t.source === "figures"
-                          ? "Verified figures from your records"
-                          : "Every figure checked against your records"}
+                        {t.source === "general" ? "General guidance, not from your records" : t.source === "figures" ? "Verified figures from your records" : "Figures checked against your records"}
                       </span>
                       <CopyButton text={t.content} />
                     </div>

@@ -57,7 +57,7 @@ describe("starters and follow-ups", () => {
   it("offers questions for what is recorded, at most six", () => {
     const f: Facts = { ...base, bills: [{ name: "Rent", kind: "bill", amount: "9000.00", due: "2026-12-01", state: "upcoming" }], categories: [{ name: "Food", thisMonth: "5000.00", lastMonth: "3000.00", changePercent: 67, avg3m: "3200.00" }], goals: [{ name: "Trip", target: "50000.00", saved: "1000.00", remaining: "49000.00", deadline: null, monthlyNeeded: null, health: "no deadline" }] };
     const s = starters(f).map((x) => x.text);
-    expect(s.length).toBeLessThanOrEqual(6);
+    expect(s.length).toBeLessThanOrEqual(8);
     expect(s).toContain("Why is my Food spending up?");
     expect(s).toContain("What bills are coming up?");
     expect(s).toContain("How are my savings goals going?");

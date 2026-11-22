@@ -11,7 +11,7 @@ export interface Turn {
   role: "user" | "assistant";
   content: string;
   /** Marks an answer built only from verified figures rather than free model text. */
-  source?: "model" | "figures";
+  source?: "model" | "figures" | "general";
 }
 export interface AssistantState {
   turns: Turn[];
@@ -19,7 +19,7 @@ export interface AssistantState {
   question?: string;
 }
 
-const turnSchema = z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(2000), source: z.enum(["model", "figures"]).optional() })).max(12);
+const turnSchema = z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(2000), source: z.enum(["model", "figures", "general"]).optional() })).max(12);
 
 export async function askAssistantAction(prev: AssistantState | undefined, form: FormData): Promise<AssistantState> {
   const ctx = await requireSpace();

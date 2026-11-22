@@ -1,10 +1,11 @@
 import { aiStatus, readAiConfig, type AiConfig } from "./config";
-import { dropUnverified, factsSummary, savingsPlan, systemPrompt, unverifiedFigures, type Facts } from "./grounding";
+import { detectCalculation } from "./calculators";
+import { enforceFigures, factsSummary, savingsPlan, splitTag, systemPrompt, type Facts } from "./grounding";
 import { AiUnavailableError, generate, type RouterResult } from "./router";
 import type { ChatMessage, CompletionRequest } from "./types";
 
 export type AssistantOutcome =
-  | { ok: true; answer: string; verified: true; source: "model" | "figures" }
+  | { ok: true; answer: string; verified: true; source: "model" | "figures" | "general" }
   | { ok: false; reason: "disabled" | "no_providers" | "too_long" | "empty" | "hourly" | "daily" | "unavailable" | "not_ready"; message: string };
 
 /** Sentences shown to people. None names a provider, a key, a model or an internal error. */
@@ -93,6 +94,8 @@ export async function ask(question: string, deps: AssistantDeps, history: ChatMe
 
   const plan = savingsPlan(q, facts);
   if (plan) facts = { ...facts, savingsPlan: plan };
+  const calculation = detectCalculation(q);
+  if (calculation) facts = { ...facts, calculation };
 
   // Only the last few turns are sent, capped in length, so a long conversation cannot inflate cost.
   const turns = history.slice(-4).map((m) => ({ role: m.role, content: m.content.slice(0, 800) }));
@@ -108,13 +111,9 @@ export async function ask(question: string, deps: AssistantDeps, history: ChatMe
   }
   await settle("ok", out);
 
-  // Every amount in the answer must come from the facts. Otherwise the person gets the verified figures instead.
-  const bad = unverifiedFigures(out.text, facts);
-  if (bad.length > 0) {
-    // Keep what is verified; only fall back to the plain summary when nothing useful survives.
-    const safe = dropUnverified(out.text, facts);
-    if (safe.length >= 30) return { ok: true, answer: safe, verified: true, source: "model" };
-    return { ok: true, answer: factsSummary(facts), verified: true, source: "figures" };
-  }
-  return { ok: true, answer: out.text, verified: true, source: "model" };
+  // Every figure about the person must come from the facts. General answers may quote benchmarks, but never their numbers.
+  const { tag, body } = splitTag(out.text);
+  const checked = enforceFigures(body, tag, facts);
+  if (!checked) return { ok: true, answer: factsSummary(facts), verified: true, source: "figures" };
+  return { ok: true, answer: checked.text, verified: true, source: tag === "G" ? "general" : "model" };
 }
