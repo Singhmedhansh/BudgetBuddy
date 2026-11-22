@@ -8,10 +8,11 @@ const NOW = new Date("2026-11-13T12:00:00Z");
 const day = (n: number) => new Date(NOW.getTime() + n * 864e5).toISOString();
 
 describe("payments configuration", () => {
-  it("live payments are disabled in code, whatever the environment says", () => {
-    expect(LIVE_PAYMENTS_ALLOWED).toBe(false);
-    const s = paymentsStatus({ RAZORPAY_KEY_ID: "k", RAZORPAY_KEY_SECRET: "s", PAYPAL_CLIENT_ID: "c", PAYPAL_CLIENT_SECRET: "s", PAYMENTS_LIVE: "true", PAYMENTS_MODE: "live" });
-    expect(s).toEqual({ mode: "sandbox", configured: ["razorpay", "paypal"], checkoutOpen: false });
+  it("live payments are allowed in code, and the mode follows the keys, not a free-form setting", () => {
+    expect(LIVE_PAYMENTS_ALLOWED).toBe(true);
+    const base = { RAZORPAY_KEY_SECRET: "s", PAYPAL_CLIENT_ID: "c", PAYPAL_CLIENT_SECRET: "s" };
+    expect(paymentsStatus({ ...base, RAZORPAY_KEY_ID: "rzp_test_k", PAYMENTS_LIVE: "true", PAYMENTS_MODE: "live" })).toEqual({ mode: "sandbox", configured: ["razorpay", "paypal"], checkoutOpen: true });
+    expect(paymentsStatus({ ...base, RAZORPAY_KEY_ID: "rzp_live_k" }).mode).toBe("live");
   });
   it("with no credentials nothing is configured", () => {
     expect(paymentsStatus({})).toEqual({ mode: "sandbox", configured: [], checkoutOpen: false });

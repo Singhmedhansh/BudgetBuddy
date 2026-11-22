@@ -1,3 +1,4 @@
+import { TRIAL_DAYS } from "@/config/plans";
 import type { PaypalConfig } from "./config";
 import { BillingError, type BillingEvent, type Interval, type PaymentPatch, type PaymentStatus, type SubscriptionStatus } from "./types";
 
@@ -52,7 +53,7 @@ export interface PpSubscription {
   custom_id?: string | null;
   start_time?: string;
   subscriber?: { payer_id?: string };
-  billing_info?: { next_billing_time?: string | null; last_payment?: { amount?: { currency_code: string; value: string }; time?: string }; failed_payments_count?: number };
+  billing_info?: { cycle_executions?: { tenure_type: string; cycles_completed?: number; cycles_remaining?: number; total_cycles?: number }[]; next_billing_time?: string | null; last_payment?: { amount?: { currency_code: string; value: string }; time?: string }; failed_payments_count?: number };
   links?: { rel: string; href: string }[];
 }
 
@@ -77,33 +78,38 @@ export async function listPaypalTransactions(cfg: PaypalConfig, id: string, sinc
 }
 
 /** The price PayPal will charge for a plan, read from PayPal by the server. Confirms the plan is live and the right interval. */
-export async function readPlanPrice(cfg: PaypalConfig, interval: Interval, fetcher: typeof fetch = fetch): Promise<{ planId: string; amountMinor: number; currency: string }> {
-  const planId = cfg.planIds[interval];
+export async function readPlanPrice(cfg: PaypalConfig, interval: Interval, fetcher: typeof fetch = fetch, opts: { trialDays?: number; planId?: string } = {}): Promise<{ planId: string; amountMinor: number; currency: string }> {
+  // A trial uses the plan made for that trial length: the standard one from the environment, or one a coupon names.
+  const planId = opts.planId ?? (opts.trialDays ? cfg.trialPlanIds?.[interval] : cfg.planIds[interval]);
   if (!planId) throw new BillingError("interval_unavailable");
   const plan = await call<PpPlan>(cfg, "GET", `/v1/billing/plans/${encodeURIComponent(planId)}`, undefined, fetcher);
   const regular = (plan.billing_cycles ?? []).filter((c) => c.tenure_type === "REGULAR");
+  const trials = (plan.billing_cycles ?? []).filter((c) => c.tenure_type === "TRIAL");
+  // The free cycle is exactly what we promised (that many days at price zero) on a trial plan, and absent on every other plan.
+  const trialOk = opts.trialDays ? trials.length === 1 && trials[0].frequency.interval_unit === "DAY" && trials[0].frequency.interval_count === opts.trialDays && Number(trials[0].pricing_scheme?.fixed_price?.value ?? "1") === 0 : trials.length === 0;
+  if (!trialOk) throw new BillingError("plan_mismatch");
   const unit = interval === "month" ? "MONTH" : "YEAR";
   const price = regular[0]?.pricing_scheme?.fixed_price;
-  // One regular cycle, no trial pricing games: the plan must be active, charge once per interval, and have a price.
+  // One regular cycle: the plan must be active, charge once per interval, and have a price.
   if (plan.status !== "ACTIVE" || regular.length !== 1 || regular[0].frequency.interval_unit !== unit || regular[0].frequency.interval_count !== 1 || !price) throw new BillingError("plan_mismatch");
   const amountMinor = minorOf(price.value);
   if (!(amountMinor > 0) || !/^[A-Z]{3}$/.test(price.currency_code)) throw new BillingError("plan_mismatch");
   return { planId, amountMinor, currency: price.currency_code };
 }
 
-export async function createPaypalSubscription(cfg: PaypalConfig, interval: Interval, userId: string, urls: { returnUrl: string; cancelUrl: string; brand: string }, fetcher: typeof fetch = fetch) {
-  const price = await readPlanPrice(cfg, interval, fetcher);
+export async function createPaypalSubscription(cfg: PaypalConfig, interval: Interval, userId: string, urls: { returnUrl: string; cancelUrl: string; brand: string }, fetcher: typeof fetch = fetch, opts: { trialDays?: number; planId?: string } = {}) {
+  const price = await readPlanPrice(cfg, interval, fetcher, opts);
   const sub = await call<PpSubscription>(
     cfg,
     "POST",
     "/v1/billing/subscriptions",
     { plan_id: price.planId, custom_id: userId, application_context: { brand_name: urls.brand, shipping_preference: "NO_SHIPPING", user_action: "SUBSCRIBE_NOW", return_url: urls.returnUrl, cancel_url: urls.cancelUrl } },
     fetcher,
-    { "PayPal-Request-Id": `fintrack-${userId}-${interval}-${Math.floor(Date.now() / 600_000)}`, prefer: "return=representation" },
+    { "PayPal-Request-Id": `fintrack-${userId}-${interval}${opts.trialDays ? `-trial${opts.trialDays}` : ""}-${Math.floor(Date.now() / 600_000)}`, prefer: "return=representation" },
   );
   const approve = sub.links?.find((l) => l.rel === "approve")?.href;
   if (!sub.id || !approve || !/^https:\/\/([a-z0-9-]+\.)*paypal\.com\//.test(approve)) throw new BillingError("provider_error", 502);
-  return { id: sub.id, approveUrl: approve, amountMinor: price.amountMinor, currency: price.currency };
+  return { id: sub.id, approveUrl: approve, amountMinor: price.amountMinor, currency: price.currency, planId: price.planId };
 }
 
 export const getPaypalSubscription = (cfg: PaypalConfig, id: string, fetcher: typeof fetch = fetch) => call<PpSubscription>(cfg, "GET", `/v1/billing/subscriptions/${encodeURIComponent(id)}`, undefined, fetcher);
@@ -138,13 +144,14 @@ const TX_STATUS: Record<string, PaymentStatus | undefined> = { COMPLETED: "captu
  */
 export function paypalStateToBilling(
   sub: PpSubscription,
-  expect: { userId: string; planId: string; amountMinor: number; currency: string },
+  expect: { userId: string; planId: string | string[]; amountMinor: number; currency: string; trialPlanIds?: string[]; trialDays?: number },
   ids: { eventId: string; eventType: string },
   now: Date = new Date(),
   transactions: PpTransaction[] = [],
 ): BillingEvent {
   if (!sub.custom_id || !UUID.test(sub.custom_id) || sub.custom_id !== expect.userId) throw new BillingError("owner_mismatch", 403);
-  if (sub.plan_id !== expect.planId) throw new BillingError("plan_mismatch");
+  const allowedPlans = Array.isArray(expect.planId) ? expect.planId : [expect.planId];
+  if (!allowedPlans.includes(sub.plan_id)) throw new BillingError("plan_mismatch");
   const status = paypalStatus(sub.status);
   if (!status) throw new BillingError("provider_error", 502);
   const payments: PaymentPatch[] = [];
@@ -167,8 +174,14 @@ export function paypalStateToBilling(
   const paid = payments.some((p) => p.status === "captured" || p.status === "partially_refunded" || p.status === "refunded");
   const last = [...payments].filter((p) => p.paid_at).sort((a, b) => String(b.paid_at).localeCompare(String(a.paid_at)))[0];
   const next = sub.billing_info?.next_billing_time ?? null;
-  // ACTIVE needs both a recorded payment and a renewal date; otherwise the plan is not granted.
-  const granted = status === "active" && paid && next !== null;
+  // A free trial: the trial plan is ACTIVE, still inside its free cycle, and the first charge is no further away than the
+  // advertised trial. Nothing has been paid yet, and none is expected until then.
+  const inTrial =
+    status === "active" && !paid && (expect.trialPlanIds ?? []).includes(sub.plan_id) && next !== null &&
+    new Date(next).getTime() > now.getTime() && new Date(next).getTime() - now.getTime() <= ((expect.trialDays ?? TRIAL_DAYS) + 1) * 86_400_000 &&
+    (sub.billing_info?.cycle_executions ?? []).some((c) => c.tenure_type === "TRIAL" && (c.cycles_remaining ?? 0) > 0);
+  // ACTIVE needs both a recorded payment and a renewal date (or a valid trial); otherwise the plan is not granted.
+  const granted = status === "active" && next !== null && (paid || inTrial);
   return {
     provider: "paypal",
     eventId: ids.eventId,
@@ -179,7 +192,7 @@ export function paypalStateToBilling(
       provider_subscription_id: sub.id,
       provider_customer_id: sub.subscriber?.payer_id ?? null,
       status: status === "active" && !granted ? "pending" : status,
-      current_period_start: last?.paid_at ?? null,
+      current_period_start: last?.paid_at ?? (inTrial ? now.toISOString() : null),
       current_period_end: next,
       started_at: sub.start_time ?? null,
       ...(status === "canceled" ? { canceled_at: now.toISOString() } : {}),
@@ -191,19 +204,21 @@ export function paypalStateToBilling(
 /** Reads the subscription and its payments from PayPal and returns the state to record. One place, used by every caller. */
 export async function syncPaypalSubscription(
   cfg: PaypalConfig,
-  row: { provider_subscription_id: string; user_id: string | null; interval: Interval; amount_minor: number; currency: string; created_at: string },
+  row: { provider_subscription_id: string; user_id: string | null; interval: Interval; amount_minor: number; currency: string; created_at: string; trial_days?: number | null; plan_ref?: string | null },
   ids: { eventId: string; eventType: string },
   fetcher: typeof fetch = fetch,
   now: Date = new Date(),
 ): Promise<BillingEvent> {
-  const planId = cfg.planIds[row.interval];
-  if (!planId) throw new BillingError("interval_unavailable");
+  // The plan this subscription was created on is on record (plan_ref) when a coupon chose it; otherwise the configured ones.
+  const trialPlans = [cfg.trialPlanIds?.[row.interval], row.plan_ref ?? undefined].filter((p): p is string => !!p);
+  const plans = [cfg.planIds[row.interval], ...trialPlans].filter((p): p is string => !!p);
+  if (plans.length === 0) throw new BillingError("interval_unavailable");
   if (!row.user_id) throw new BillingError("owner_mismatch", 403);
   // From a day before the checkout began; if the stored date is unreadable, look back a bounded 400 days instead.
   const created = new Date(row.created_at).getTime();
   const since = new Date((Number.isFinite(created) ? Math.min(created, now.getTime()) : now.getTime() - 400 * 86_400_000) - 86_400_000).toISOString();
   const [sub, transactions] = await Promise.all([getPaypalSubscription(cfg, row.provider_subscription_id, fetcher), listPaypalTransactions(cfg, row.provider_subscription_id, since, now, fetcher)]);
-  return paypalStateToBilling(sub, { userId: row.user_id, planId, amountMinor: row.amount_minor, currency: row.currency }, ids, now, transactions);
+  return paypalStateToBilling(sub, { userId: row.user_id, planId: plans, amountMinor: row.amount_minor, currency: row.currency, trialPlanIds: trialPlans, trialDays: row.trial_days ?? TRIAL_DAYS }, ids, now, transactions);
 }
 
 /** The PayPal verification call: PayPal itself checks the signature of the webhook delivery. */

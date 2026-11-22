@@ -26,8 +26,10 @@ export async function POST(request: NextRequest) {
     if (row.provider === "razorpay") {
       const cfg = razorpayConfig();
       if (!cfg) throw new BillingError("not_configured", 503);
-      await cancelRazorpaySubscription(cfg, row.provider_subscription_id);
-      await applyBillingEvent(admin, { ...base, provider: "razorpay", subscription: { provider_subscription_id: row.provider_subscription_id, status: row.status, cancel_at_period_end: true, canceled_at: now.toISOString() } });
+      // A one-time order (order_…) never renews, so there is nothing to stop at Razorpay; only the record is marked.
+      const stopped = row.provider_subscription_id.startsWith("order_") ? { immediate: false } : await cancelRazorpaySubscription(cfg, row.provider_subscription_id);
+      // Cancelled during a free trial (never charged): nothing will renew, so the record is `canceled` and access runs to the trial end already stored.
+      await applyBillingEvent(admin, { ...base, provider: "razorpay", subscription: { provider_subscription_id: row.provider_subscription_id, status: stopped.immediate ? "canceled" : row.status, cancel_at_period_end: true, canceled_at: now.toISOString() } });
     } else {
       const cfg = paypalConfig();
       if (!cfg) throw new BillingError("not_configured", 503);

@@ -4,6 +4,9 @@
  * Amounts are minor units. Launch prices are illustrative and subject to
  * market validation (spec 11.1); change them here only.
  */
+/** Free days before the first charge of FinTrack One. The yearly plan is then charged automatically unless the person cancels first. */
+export const TRIAL_DAYS = 5;
+
 /**
  * `PlanId` values are stored in the database (entitlements.plan) and must not change with the brand;
  * only `name` below is shown to people. "pro" is the stored id of FinTrack One.
@@ -55,6 +58,9 @@ export const PLANS: Plan[] = [
     prices: [
       { currency: "INR", interval: "month", amountMinor: 14900 },
       { currency: "INR", interval: "year", amountMinor: 119900 },
+      // International (PayPal) prices.
+      { currency: "USD", interval: "month", amountMinor: 299 },
+      { currency: "USD", interval: "year", amountMinor: 2399 },
     ],
   },
 ];

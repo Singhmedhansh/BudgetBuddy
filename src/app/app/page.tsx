@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { LoadSampleButton } from "@/components/app/sample-data-forms";
 import { ProfileBanner } from "@/components/app/ProfileBanner";
-import { EmptyState, formatDate, formatDay, Money, PageHeader } from "@/components/app/ui";
+import { EmptyState, formatDate, formatDay, Money, Notice, PageHeader } from "@/components/app/ui";
+import { TRIAL_DAYS } from "@/config/plans";
+import { checkoutProviders } from "@/server/payments/config";
+import { resolveEntitlement, type EntitlementRow } from "@/server/payments/entitlements";
 import { TrendChart } from "@/components/app/TrendChart";
 import { monthsBack, shares } from "@/domain/analytics";
 import { displayAmount } from "@/domain/display";
@@ -18,6 +22,28 @@ import { isLiability } from "@/server/types";
 export const metadata: Metadata = { title: "Dashboard" };
 
 const SWATCH = ["var(--primary)", "var(--info)", "var(--warn)", "var(--neg)", "var(--line-strong)"];
+
+/**
+ * Invites a person on the Free plan who has never had a subscription to start the free trial. Shown only when a payment
+ * provider is configured and the person can still take the trial; renders nothing otherwise, and never blocks the page.
+ */
+async function TrialPrompt({ supabase }: { supabase: Awaited<ReturnType<typeof requireSpace>>["supabase"] }) {
+  const providers = checkoutProviders();
+  if (providers.razorpay.length === 0 && providers.paypal.length === 0) return null;
+  const [{ data: ent }, { count }] = await Promise.all([
+    supabase.from("entitlements").select("plan,status,current_period_end").maybeSingle(),
+    supabase.from("billing_subscriptions").select("id", { count: "exact", head: true }).not("started_at", "is", null),
+  ]);
+  if (resolveEntitlement(ent as EntitlementRow | null, new Date()).plan === "pro" || (count ?? 0) > 0) return null;
+  return (
+    <Notice kind="success">
+      Try FinTrack One free for {TRIAL_DAYS} days.{" "}
+      <Link href="/app/settings/billing" className="font-semibold underline underline-offset-2">
+        Start your free trial
+      </Link>
+    </Notice>
+  );
+}
 
 export default async function DashboardPage() {
   const ctx = await requireSpace();
@@ -53,6 +79,9 @@ export default async function DashboardPage() {
       <>
         <PageHeader title="Dashboard" description="Your overview will fill in as you add accounts and transactions." />
         <ProfileBanner profile={profile} />
+        <Suspense fallback={null}>
+          <TrialPrompt supabase={ctx.supabase} />
+        </Suspense>
         <EmptyState
           title="Start with an account"
           body="Add a bank account, wallet or card so FinTrack has somewhere to record your money. Then add a transaction or create a budget."
@@ -91,6 +120,9 @@ export default async function DashboardPage() {
     <>
       <PageHeader title="Dashboard" description={`${monthLabel}. Figures come from the transactions you have recorded.`} action={{ href: "/app/transactions/new", label: "Add transaction" }} help={{ slug: "how-totals-work", label: "how these figures are worked out" }} />
       <ProfileBanner profile={profile} />
+      <Suspense fallback={null}>
+        <TrialPrompt supabase={ctx.supabase} />
+      </Suspense>
 
       <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
         {/* Net worth: the one dark, high-contrast card on the page */}

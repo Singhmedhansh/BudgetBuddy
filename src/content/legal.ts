@@ -1,8 +1,10 @@
-import { PLANS, formatPrice, planName, priceFor } from "@/config/plans";
+import { PLANS, TRIAL_DAYS, formatPrice, planName, priceFor } from "@/config/plans";
 import type { Block } from "./help/articles";
 
 const ONE = PLANS.find((x) => x.id === "pro")!;
-const oneMonthly = formatPrice(priceFor(ONE, "month")!);
+const oneUsd = formatPrice(priceFor(ONE, "year", "USD")!);
+const oneMonthlyInr = formatPrice(priceFor(ONE, "month")!);
+const oneMonthlyUsd = formatPrice(priceFor(ONE, "month", "USD")!);
 const oneYearly = formatPrice(priceFor(ONE, "year")!);
 
 /**
@@ -102,7 +104,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       },
       {
         heading: "Plans and payment",
-        blocks: [p("The free plan has no charge. Paid plans are not available yet. When they are, prices, billing periods and cancellation will be shown before you pay and are described in [Pricing and billing](/legal/billing). Refunds are covered by the [Refund policy](/legal/refunds).")],
+        blocks: [p(`The free plan has no charge. ${planName("pro")} starts with a ${TRIAL_DAYS}-day free trial and then renews monthly or yearly, as you chose. Prices, the trial, renewal and cancellation are shown before you pay and are described in [Pricing and billing](/legal/billing). Refunds are covered by the [Refund policy](/legal/refunds).`)],
       },
       {
         heading: "Availability and changes",
@@ -130,14 +132,14 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Paid plans",
         blocks: [
-          p("Paid plans are not available yet. When they launch, this is how refunds will work:"),
+          p(`${planName("pro")} starts with a ${TRIAL_DAYS}-day free trial. If you cancel before the trial ends you are not charged. This is how refunds work after a charge:`),
           list(
             "Refund requests are reviewed under these terms and the law that applies to you. Where consumer law gives you a right, that right comes first.",
             "A duplicate charge, where you were billed twice for the same period, is investigated and refunded once verified.",
             "If you see a charge you did not authorise, tell us through [Contact us](/contact) and we will investigate.",
             "Cancelling stops future renewals. It does not automatically refund a billing period that has already been charged.",
           ),
-          p("How long a refund takes to reach you depends on your bank and the payment provider. We will state expected timelines here once they are confirmed with our payment providers."),
+          p("How long a refund takes to reach you depends on your bank and the payment provider."),
         ],
       },
     ],
@@ -176,11 +178,32 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Plans",
         blocks: [
-          p(`${planName("free")} costs nothing. ${planName("pro")} is ${oneMonthly} a month, or ${oneYearly} a year. Prices are shown on the [home page](/#pricing) in the currency they are charged in, and you will see the final amount before you pay. Paid plans are not available yet.`),
+          p(`${planName("free")} costs nothing. ${planName("pro")} is billed monthly (${oneMonthlyInr} in India, or ${oneMonthlyUsd} elsewhere) or yearly (${oneYearly} in India, or ${oneUsd} elsewhere), as you choose. Prices are shown on the [home page](/#pricing) in the currency they are charged in, and you will see the final amount before you pay.`),
         ],
       },
       {
-        heading: "How billing will work",
+        heading: "The free trial and renewal",
+        blocks: [
+          list(
+            `${planName("pro")} starts with a ${TRIAL_DAYS}-day free trial. Nothing is charged when you start it.`,
+            `When the ${TRIAL_DAYS} days end, the price of the plan you chose (monthly or yearly) is charged automatically to the payment method you added, and then every month or year until you cancel.`,
+            "Cancel any time in Settings, Plan and billing. Cancel before the trial ends and you are not charged. After a charge, you keep access until the end of the year you paid for.",
+            "In India, setting up a card or UPI autopay may involve a small authorisation charge of up to ₹5, which is refunded. It is not a purchase.",
+            "One free trial per person.",
+          ),
+        ],
+      },
+      {
+        heading: "Promotion codes",
+        blocks: [
+          list(
+            "A promotion code can give a longer free trial. It applies only to new subscribers, only once per person, and only to the plans and dates stated with the code.",
+            "A code has no cash value, cannot be combined with another, and is applied when you start the trial. We may withdraw a code that is abused.",
+          ),
+        ],
+      },
+      {
+        heading: "How billing works",
         blocks: [
           list(
             "Customers in India are billed in INR through Razorpay. International customers are billed through PayPal in a supported currency.",

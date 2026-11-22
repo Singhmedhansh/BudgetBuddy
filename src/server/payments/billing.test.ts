@@ -1,9 +1,10 @@
 import { createHmac } from "node:crypto";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { checkoutProviders, paypalConfig, razorpayConfig, type PaypalConfig, type RazorpayConfig } from "./config";
+import { checkoutProviders, isRazorpayOrderMode, paypalConfig, razorpayConfig, type PaypalConfig, type RazorpayConfig } from "./config";
 import { createPaypalSubscription, listPaypalTransactions, paypalEventSaleId, paypalEventSubscriptionId, paypalStateToBilling, paypalStatus, readPlanPrice, syncPaypalSubscription, verifyPaypalWebhook, type PpSubscription, type PpTransaction } from "./paypal";
-import { assertPlan, confirmRazorpayCheckout, createRazorpaySubscription, expectedRazorpayPrice, razorpayEventToBilling, reconcileRazorpaySubscription, subscriptionStatus, verifyCheckoutSignature } from "./razorpay";
+import { assertPlan, confirmRazorpayCheckout, confirmRazorpayOrderPayment, createRazorpayOrder, periodEnd, syncRazorpayOrder, verifyOrderSignature, createRazorpaySubscription, expectedRazorpayPrice, razorpayEventToBilling, reconcileRazorpaySubscription, subscriptionStatus, verifyCheckoutSignature } from "./razorpay";
+import { buildInvoice, invoiceNumber, invoiceSeller } from "./invoice";
 import { BillingError, type BillingEvent } from "./types";
 
 /** The first (or only) payment of an event, whichever shape it carries. */
@@ -33,9 +34,9 @@ const router = (routes: Record<string, unknown | (() => Response)>) => {
 const code = (p: Promise<unknown>) => p.then(() => "ok", (e) => (e instanceof BillingError ? e.code : "other"));
 
 describe("payment configuration", () => {
-  it("never accepts live credentials while live payments are disallowed in code", () => {
-    expect(razorpayConfig({ RAZORPAY_KEY_ID: "rzp_live_abc", RAZORPAY_KEY_SECRET: "s" })).toBeNull();
-    expect(paypalConfig({ PAYPAL_CLIENT_ID: "c", PAYPAL_CLIENT_SECRET: "s", PAYPAL_ENVIRONMENT: "live" })).toBeNull();
+  it("refuses live credentials whenever live payments are switched off", () => {
+    expect(razorpayConfig({ RAZORPAY_KEY_ID: "rzp_live_abc", RAZORPAY_KEY_SECRET: "s" }, false)).toBeNull();
+    expect(paypalConfig({ PAYPAL_CLIENT_ID: "c", PAYPAL_CLIENT_SECRET: "s", PAYPAL_ENVIRONMENT: "live" }, false)).toBeNull();
   });
   it("accepts sandbox credentials and keeps the environments apart", () => {
     expect(razorpayConfig({ RAZORPAY_KEY_ID: "rzp_test_abc", RAZORPAY_KEY_SECRET: "s" })?.mode).toBe("sandbox");
@@ -49,7 +50,7 @@ describe("payment configuration", () => {
   });
   it("tells the UI only which providers and periods are available, never ids or secrets", () => {
     const s = checkoutProviders({ RAZORPAY_KEY_ID: "rzp_test_abc", RAZORPAY_KEY_SECRET: "SECRETVALUE", RAZORPAY_PLAN_ID_ONE_MONTHLY: "plan_M", PAYPAL_CLIENT_ID: "c", PAYPAL_CLIENT_SECRET: "s" });
-    expect(s).toEqual({ razorpay: ["month"], paypal: [], testMode: true });
+    expect(s).toEqual({ razorpay: ["month"], paypal: [], paypalTrial: [], testMode: true });
     expect(JSON.stringify(s)).not.toMatch(/SECRETVALUE|plan_M|rzp_/);
   });
 });
@@ -77,7 +78,7 @@ describe("Razorpay: price and plan", () => {
   it("creating a subscription sends the server-chosen plan and the user in notes, and no price", async () => {
     const f = router({ "/plans/plan_M": plan(), "/subscriptions": { id: "sub_NEW", plan_id: "plan_M", status: "created" } });
     const r = await createRazorpaySubscription(rz, "month", UID, f);
-    expect(r).toEqual({ id: "sub_NEW", amountMinor: 14900, currency: "INR" });
+    expect(r).toEqual({ id: "sub_NEW", amountMinor: 14900, currency: "INR", trialEndsAt: null });
     const body = JSON.parse(String(f.calls.find((c) => c.url.endsWith("/subscriptions"))!.init!.body));
     expect(body).toMatchObject({ plan_id: "plan_M", total_count: 120, notes: { user_id: UID } });
     expect(JSON.stringify(body)).not.toMatch(/amount/);
@@ -137,6 +138,95 @@ describe("Razorpay: checkout signature and verification", () => {
     const ev = await confirmRazorpayCheckout(rz, input(), expectOk, f(sub({ status: "created", current_end: null }), pay({ status: "failed" })));
     expect(firstPayment(ev.payment)?.status).toBe("failed");
     expect(ev.subscription?.status).toBe("pending");
+  });
+});
+
+describe("Razorpay: one-time Standard Checkout (order mode)", () => {
+  const rzOrder: RazorpayConfig = { ...rz, planIds: {} };
+  const signOrder = (order: string, payId: string, secret = SECRET) => createHmac("sha256", secret).update(`${order}|${payId}`).digest("hex");
+  const order = (over: Record<string, unknown> = {}) => ({ id: "order_1", amount: 14900, currency: "INR", status: "paid", notes: { user_id: UID }, ...over });
+  const pay = (over: Record<string, unknown> = {}) => ({ id: "pay_1", order_id: "order_1", amount: 14900, currency: "INR", status: "captured", ...over });
+  const input = (over: Partial<{ paymentId: string; orderId: string; signature: string }> = {}) => ({ paymentId: "pay_1", orderId: "order_1", signature: signOrder("order_1", "pay_1"), ...over });
+  const expectOk = { userId: UID, interval: "month" as const, amountMinor: 14900, currency: "INR" };
+  const f = (o = order(), p = pay(), cap = pay({ status: "captured" })) => router({ "/orders/order_1": o, "/payments/pay_1/capture": cap, "/payments/pay_1": p });
+  const now = new Date("2026-11-22T10:00:00Z");
+
+  it("is order mode only when no plan id is configured", () => {
+    expect(isRazorpayOrderMode(rzOrder)).toBe(true);
+    expect(isRazorpayOrderMode(rz)).toBe(false);
+    expect(checkoutProviders({ RAZORPAY_KEY_ID: "rzp_test_abc", RAZORPAY_KEY_SECRET: "s" }).razorpay).toEqual(["month", "year"]);
+  });
+  it("creates an order for exactly the price-list amount, never one from the caller", async () => {
+    const fx = router({ "/orders": { id: "order_9" } });
+    const o = await createRazorpayOrder(rzOrder, "year", UID, fx);
+    expect(o).toEqual({ id: "order_9", amountMinor: 119900, currency: "INR" });
+    const sent = JSON.parse(String(fx.calls[0].init?.body));
+    expect(sent).toMatchObject({ amount: 119900, currency: "INR", notes: { user_id: UID, interval: "year" } });
+  });
+  it("verifies order_id|payment_id signatures", () => {
+    expect(verifyOrderSignature("order_1", "pay_1", signOrder("order_1", "pay_1"), SECRET)).toBe(true);
+    expect(verifyOrderSignature("order_1", "pay_1", signOrder("order_1", "pay_1", "wrong"), SECRET)).toBe(false);
+    expect(verifyOrderSignature("order_2", "pay_1", signOrder("order_1", "pay_1"), SECRET)).toBe(false);
+    expect(verifyOrderSignature("", "pay_1", "x", SECRET)).toBe(false);
+  });
+  it("a verified captured payment grants one month from now", async () => {
+    const ev = await confirmRazorpayOrderPayment(rzOrder, input(), expectOk, f(), now);
+    expect(ev.subscription).toMatchObject({ provider_subscription_id: "order_1", status: "active", current_period_end: periodEnd(now, "month").toISOString() });
+    expect(periodEnd(now, "month").toISOString()).toBe("2026-12-22T10:00:00.000Z");
+    expect(periodEnd(now, "year").toISOString()).toBe("2027-11-22T10:00:00.000Z");
+    expect(firstPayment(ev.payment)).toMatchObject({ provider_payment_id: "pay_1", status: "captured", amount_minor: 14900 });
+  });
+  it("a bad signature is refused before anything is read", async () => {
+    const fx = f();
+    expect(await code(confirmRazorpayOrderPayment(rzOrder, input({ signature: "0".repeat(64) }), expectOk, fx, now))).toBe("invalid_signature");
+    expect(fx.calls).toHaveLength(0);
+  });
+  it("wrong owner, wrong order, or wrong amount is refused", async () => {
+    expect(await code(confirmRazorpayOrderPayment(rzOrder, input(), expectOk, f(order({ notes: { user_id: OTHER } }))))).toBe("owner_mismatch");
+    expect(await code(confirmRazorpayOrderPayment(rzOrder, input(), expectOk, f(order(), pay({ order_id: "order_2" }))))).toBe("plan_mismatch");
+    expect(await code(confirmRazorpayOrderPayment(rzOrder, input(), expectOk, f(order({ amount: 100 }))))).toBe("amount_mismatch");
+    expect(await code(confirmRazorpayOrderPayment(rzOrder, input(), expectOk, f(order(), pay({ amount: 100 }))))).toBe("amount_mismatch");
+  });
+  it("captures an authorised payment, and a failed one grants nothing", async () => {
+    const fx = f(order(), pay({ status: "authorized" }));
+    expect((await confirmRazorpayOrderPayment(rzOrder, input(), expectOk, fx, now)).subscription?.status).toBe("active");
+    expect(fx.calls.some((c) => c.url.endsWith("/capture"))).toBe(true);
+    const failed = await confirmRazorpayOrderPayment(rzOrder, input(), expectOk, f(order(), pay({ status: "failed" })), now);
+    expect(failed.subscription?.status).toBe("pending");
+    expect(firstPayment(failed.payment)?.status).toBe("failed");
+  });
+  it("syncRazorpayOrder finds a paid order without the browser, and reports nothing for an unpaid one", async () => {
+    const row = { provider_subscription_id: "order_1", user_id: UID, interval: "month" as const, amount_minor: 14900, currency: "INR" };
+    const paid = router({ "/orders/order_1/payments": { items: [pay({ status: "failed" }), pay()] }, "/orders/order_1": order() });
+    const ev = await syncRazorpayOrder(rzOrder, row, paid, now);
+    expect(ev?.subscription).toMatchObject({ status: "active", provider_subscription_id: "order_1" });
+    expect(ev?.eventId).toBe("verify:pay_1"); // the same id the checkout step uses, so it is applied once
+    expect(await syncRazorpayOrder(rzOrder, row, router({ "/orders/order_1/payments": { items: [pay({ status: "failed" })] }, "/orders/order_1": order() }), now)).toBeNull();
+    expect(await syncRazorpayOrder(rzOrder, row, router({ "/orders/order_1/payments": { items: [pay({ amount: 100 })] }, "/orders/order_1": order() }), now)).toBeNull();
+    expect(await syncRazorpayOrder(rzOrder, row, router({ "/orders/order_1/payments": { items: [pay()] }, "/orders/order_1": order({ notes: { user_id: OTHER } }) }), now)).toBeNull();
+    expect(await syncRazorpayOrder(rzOrder, { ...row, user_id: null }, paid, now)).toBeNull();
+  });
+  it("the daily reconcile leaves one-time orders alone", async () => {
+    expect(await reconcileRazorpaySubscription(rzOrder, { provider_subscription_id: "order_1", user_id: UID }, "reconcile:x", router({}))).toBeNull();
+  });
+});
+
+describe("invoices", () => {
+  const payment = { id: "1a2b3c4d-0000-4000-8000-000000000000", provider: "razorpay" as const, provider_payment_id: "pay_1", amount_minor: 14900, currency: "INR", status: "captured", paid_at: "2026-11-22T10:00:00Z", created_at: "2026-11-22T09:59:00Z" };
+  const seller = { name: "FinTrack", addressLines: [], gstin: null, email: null };
+  const buyer = { name: "Asha", email: "a@example.com" };
+  it("numbers an invoice from the payment month and ledger id", () => {
+    expect(invoiceNumber(payment)).toBe("FT-202611-1A2B3C4D");
+  });
+  it("builds an invoice only for a payment that really went through", () => {
+    const inv = buildInvoice(payment, { interval: "month", current_period_start: "2026-11-22T10:00:00Z", current_period_end: "2026-12-22T10:00:00Z" }, buyer, seller);
+    expect(inv).toMatchObject({ number: "FT-202611-1A2B3C4D", status: "paid", amountMinor: 14900, currency: "INR", provider: "Razorpay", description: "FinTrack One (1 month)" });
+    for (const status of ["created", "authorized", "failed"]) expect(buildInvoice({ ...payment, status }, null, buyer, seller)).toBeNull();
+    expect(buildInvoice({ ...payment, status: "refunded" }, null, buyer, seller)?.status).toBe("refunded");
+  });
+  it("reads seller details from the environment and invents none", () => {
+    expect(invoiceSeller({})).toEqual({ name: "FinTrack", addressLines: [], gstin: null, email: null });
+    expect(invoiceSeller({ INVOICE_SELLER_NAME: "Acme", INVOICE_SELLER_ADDRESS: "1 Road| Pune ", INVOICE_GSTIN: "G1", SUPPORT_EMAIL: "s@x.in" })).toEqual({ name: "Acme", addressLines: ["1 Road", "Pune"], gstin: "G1", email: "s@x.in" });
   });
 });
 
@@ -324,6 +414,7 @@ describe("PayPal: plan, state and verification", () => {
 describe("webhook and checkout routes", () => {
   const st = vi.hoisted(() => ({
     rpc: [] as { fn: string; args: Record<string, unknown> }[],
+    redeem: [] as Record<string, unknown>[],
     rpcResult: "applied" as string,
     rpcError: false,
     adminOn: true,
@@ -335,12 +426,12 @@ describe("webhook and checkout routes", () => {
     const query = (table: string) => {
       const chain: Record<string, unknown> = {};
       const self = () => chain;
-      for (const m of ["select", "eq", "in", "lt", "gte", "neq", "not", "order", "limit", "update", "insert"]) chain[m] = self;
+      for (const m of ["select", "eq", "in", "like", "lt", "gte", "neq", "not", "order", "limit", "update", "insert"]) chain[m] = self;
       chain.maybeSingle = async () => ({ data: st.tables[table] ?? null });
       chain.then = (res: (v: unknown) => unknown) => res(table === "billing_audit" ? { count: st.recentCheckouts, data: [] } : { data: (st.tables[table + ":list"] as unknown[]) ?? [], error: null });
       return chain;
     };
-    return { createAdminClient: () => (st.adminOn ? { rpc: async (fn: string, args: Record<string, unknown>) => (st.rpc.push({ fn, args }), st.rpcError ? { data: null, error: { message: "db" } } : { data: fn === "billing_sweep_expired" ? 2 : st.rpcResult, error: null }), from: query } : null) };
+    return { createAdminClient: () => (st.adminOn ? { rpc: async (fn: string, args: Record<string, unknown>) => (fn === "billing_redeem_for_subscription" ? st.redeem.push(args) : st.rpc.push({ fn, args }), st.rpcError ? { data: null, error: { message: "db" } } : { data: fn === "billing_sweep_expired" ? 2 : st.rpcResult, error: null }), from: query } : null) };
   });
   vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth: { getUser: async () => ({ data: { user: st.user } }) } }) }));
   vi.mock("@/server/site-url", () => ({ siteUrl: async () => "http://127.0.0.1:3100" }));
@@ -351,6 +442,7 @@ describe("webhook and checkout routes", () => {
 
   beforeEach(() => {
     st.rpc.length = 0;
+    st.redeem.length = 0;
     st.rpcResult = "applied";
     st.rpcError = false;
     st.adminOn = true;

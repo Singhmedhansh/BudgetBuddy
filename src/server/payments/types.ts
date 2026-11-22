@@ -44,7 +44,7 @@ export type ApplyOutcome = "applied" | "duplicate" | "unmatched" | "stale";
 /** Why a checkout could not start or finish. Each maps to a plain sentence for the person; none carries provider detail. */
 export class BillingError extends Error {
   constructor(
-    public readonly code: "not_configured" | "interval_unavailable" | "rate_limited" | "already_subscribed" | "plan_mismatch" | "amount_mismatch" | "owner_mismatch" | "not_found" | "provider_error" | "invalid_signature" | "invalid_request",
+    public readonly code: "not_configured" | "interval_unavailable" | "rate_limited" | "already_subscribed" | "plan_mismatch" | "amount_mismatch" | "owner_mismatch" | "not_found" | "provider_error" | "invalid_signature" | "invalid_request" | "coupon_invalid" | "coupon_expired" | "coupon_used" | "coupon_not_eligible",
     public readonly status = 400,
   ) {
     super(`Billing error: ${code}`);
@@ -63,6 +63,10 @@ export const BILLING_MESSAGES: Record<BillingError["code"], string> = {
   provider_error: "The payment provider did not respond. Please try again in a moment.",
   invalid_signature: "We could not verify this payment.",
   invalid_request: "That request was not valid.",
+  coupon_invalid: "That code is not valid for this plan.",
+  coupon_expired: "That code has expired.",
+  coupon_used: "You have already used that code.",
+  coupon_not_eligible: "That code is for new subscribers only.",
 };
 
 export type { Interval };

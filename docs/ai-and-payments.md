@@ -208,3 +208,62 @@ Subscriptions), not a one-off payment presented as one.
 - The refund-ends-access rule is a chosen policy awaiting owner confirmation.
 - No sandbox or live credentials were available, so provider calls are covered by mocked-response tests only. Run the sandbox
   checkout end to end before going live.
+
+## Update 22 Nov 2026: one-time Razorpay, invoices, payment check, live switch
+
+- **Razorpay one-time mode.** With no `RAZORPAY_PLAN_ID_*` set, Razorpay runs as Standard Checkout on the Orders API: ₹149 buys 1 month,
+  ₹1,199 buys 1 year, no auto-renew. The order row is stored in `billing_subscriptions` with the `order_…` id as its provider id.
+  Signature is `order_id|payment_id`; an authorised-only payment is captured by the server. Set plan ids later to return to recurring.
+- **Did the payment happen?** `POST /api/billing/razorpay/status` (the "Already paid? Check my payment" button) and the daily cron
+  ask Razorpay about open orders and apply a paid one with the same event id as the checkout step, so it is applied once.
+- **Invoices.** `/app/settings/billing/invoices/<payment id>` for any captured or refunded payment (print or save as PDF). Numbers look like
+  `FT-202611-1A2B3C4D`. Seller details come from `INVOICE_SELLER_NAME`, `INVOICE_SELLER_ADDRESS` (`|` between lines), `INVOICE_GSTIN`,
+  `INVOICE_SUPPORT_EMAIL`. No tax is computed: prices are shown as tax-inclusive. Have an accountant confirm GST treatment and numbering.
+- **USD prices** for PayPal: $2.99 monthly, $23.99 yearly (`src/config/plans.ts`).
+- **Live switch.** `LIVE_PAYMENTS_ALLOWED` is now `true`. A live key (`rzp_live_…`) or `PAYPAL_ENVIRONMENT=live` is accepted; nothing is live until those
+  keys are set. Razorpay live keys need account activation (KYC). PayPal live needs a live REST app and live plans.
+- **Still required before real money:** apply migrations 11 and 12 (not applied; payment records cannot be written without them), set
+  `SUPABASE_SERVICE_ROLE_KEY` and `CRON_SECRET`, register webhooks, and create PayPal plans in the live environment.
+
+### Go-live status, 22 Nov 2026 (read before switching to live)
+- Migrations 11 and 12 are applied (billing tables, RLS and functions verified). No billing rows exist yet.
+- **Razorpay live** is not switched on. The only live key on the Razorpay account (`rzp_live_Tf65…`) is shared with ai-compass and Manila; its secret
+  cannot be re-read and regenerating it (OTP to the owner's phone) would invalidate theirs. Decision: share that key. Still needed: the live
+  secret (owner), `getfintrack.online` registered as a website on that account (Razorpay says extra sites must share the first site's business
+  model, otherwise a separate account is required: owner's call), the live webhook and `RAZORPAY_WEBHOOK_SECRET`.
+- **PayPal live** has no FinTrack app yet (existing live apps belong to AI Compass). Create a dedicated live REST app, live plans ($2.99 / $23.99)
+  and a webhook, then set `PAYPAL_ENVIRONMENT=live`.
+- Keep live keys in the Vercel Production environment, not `.env.local`: local runs stay in test mode.
+- `SUPABASE_SERVICE_ROLE_KEY` is not yet in any environment.
+- One small real payment on each provider (refunded afterwards) is the only proof that live works.
+
+### Provider setup completed, 22 Nov 2026 (no secrets here)
+- **Razorpay:** dedicated FinTrack account (separate from Manila and ai-compass), `getfintrack.online` approved, live key `rzp_live_U3HU8Ye6B7P2IG` generated, live webhook
+  `https://getfintrack.online/api/webhooks/razorpay` enabled (payment.captured, payment.failed, refund.created, refund.processed). The Subscriptions API responds on this account.
+- **PayPal:** dedicated live REST app "FinTrack", live plans $2.99 monthly / $23.99 yearly, live webhook `https://getfintrack.online/api/webhooks/paypal`.
+- Secrets live only in the Vercel Production environment (set by the owner). Not yet done: deploy this code, `SUPABASE_SERVICE_ROLE_KEY`, `CRON_SECRET`, one real small payment per provider.
+
+## Billing system, 22 Nov 2026 (trial, monthly/yearly, coupons)
+
+**What a customer sees.** Landing page and signup: "Start your 5-day free trial". In the app: a pill "Free trial · ends in 3 days" in the header (links to Plan and billing),
+a prompt on the dashboard for people who can still take the trial, and on Plan and billing: provider (Razorpay in India, PayPal elsewhere), monthly or yearly with
+the yearly saving, an optional promo code, and the exact terms (what is charged, when, how to cancel). Cancelling during the trial stops the first charge at the provider
+and keeps access to the trial end.
+
+**How it works.**
+- A trial is a real subscription whose first charge is deferred: Razorpay `start_at` = now + trial days (the ₹5 authentication charge is never recorded as a purchase and its
+  refund never ends access); PayPal uses a plan that begins with a free cycle. Access during the trial runs to the first-charge date; the first successful charge extends it
+  by a month or year through the usual webhooks. One trial per person (a person whose subscription ever started pays from day one).
+- Plans: `RAZORPAY_PLAN_ID_ONE_MONTHLY/YEARLY`; PayPal `PAYPAL_PLAN_ID_ONE_MONTHLY/YEARLY` (no trial, for returning customers) and `..._MONTHLY_TRIAL/_YEARLY_TRIAL` (5-day trial).
+  Every plan is read back from the provider before a customer is sent to it and must match the advertised trial length and be priced per period.
+- **Coupons** (migration 13): `trial_days` codes, e.g. a code on an Instagram ad that gives 30 days free instead of 5. Rules: new subscribers only, once per person, optional
+  limit and start/end dates, per-period, 20 attempts per person per hour, and a code is used up only when the subscription that used it actually starts. Create and manage
+  them with `node scripts/billing/coupon.mjs create --code INSTA30 --days 30 --campaign instagram --max 500 --until 2026-12-31 --paypal --live`
+  (also `list`, `disable --code X`). `--paypal` creates the matching PayPal plans (sandbox unless `--live`); without it the code works on Razorpay only.
+  Needs `SUPABASE_SERVICE_ROLE_KEY`. A percentage-off code type needs per-provider discount objects (Razorpay offers, PayPal discount plans) and is not built yet.
+- Razorpay webhook events: payment.captured/failed, refund.created/processed and all `subscription.*`.
+
+**Not built / limits.** Switching an active subscription between monthly and yearly (cancel at the period end and subscribe again for now); percentage-off codes; an admin
+screen for coupons (use the script; platform admins can read the tables); automatic emails (Razorpay and PayPal send their own payment emails).
+
+**Apply order.** Migrations 11, 12, then 13 (`supabase/migrations/20261122000013_billing_coupons.sql`; rollback in `supabase/rollback`, roll back 13 first).

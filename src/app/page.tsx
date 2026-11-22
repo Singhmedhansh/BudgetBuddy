@@ -11,7 +11,7 @@ import { JsonLd } from "@/components/seo/JsonLd";
 import { BRAND } from "@/config/brand";
 import { staticPageMetadata } from "@/config/seo";
 import { homeStructuredData } from "@/config/structured-data";
-import { PLANS, priceFor, type Plan } from "@/config/plans";
+import { formatPrice, PLANS, priceFor, TRIAL_DAYS, type Plan } from "@/config/plans";
 import { formatMoney } from "@/domain/money";
 
 const FEATURES = [
@@ -36,10 +36,19 @@ const AUDIENCES = [
   { who: "Couples and families", body: "Share household bills and goals, see who contributed, and keep personal spending personal.", example: "Groceries, school fees, a holiday pot" },
 ];
 
+// The trial terms in one place, from the plan config, so the page can never disagree with what is charged.
+const ONE = PLANS.find((p) => p.id === "pro")!;
+const YEARLY_INR = formatPrice(priceFor(ONE, "year")!);
+const YEARLY_USD = formatPrice(priceFor(ONE, "year", "USD")!);
+const MONTHLY_INR = formatPrice(priceFor(ONE, "month")!);
+const MONTHLY_USD = formatPrice(priceFor(ONE, "month", "USD")!);
+const TRIAL_CTA = `Start your ${TRIAL_DAYS}-day free trial`;
+
 const FAQ = [
   { q: "Does FinTrack connect to my bank?", a: "Not today. You add transactions yourself or import a statement file. Any bank connection in future will use a regulated provider and ask for your consent first." },
   { q: "Can FinTrack move money or pay bills?", a: "No. It records and explains your finances. It never makes payments or transfers for you." },
   { q: "Is the free plan enough to start?", a: "Yes. Transactions, accounts, budgets, goals, CSV import and the core dashboard are free. You can always export or delete your data." },
+  { q: `How does the ${TRIAL_DAYS}-day free trial work?`, a: `FinTrack One is free for ${TRIAL_DAYS} days. You add a payment method (card, UPI or PayPal) so it can continue, and nothing is charged today. When the ${TRIAL_DAYS} days end you are charged automatically for the plan you chose, monthly (${MONTHLY_INR} in India, ${MONTHLY_USD} elsewhere) or yearly (${YEARLY_INR} in India, ${YEARLY_USD} elsewhere). A promo code can give a longer trial. Cancel any time before then in Settings, Plan and billing, and you are not charged. In India a small authorisation of up to ₹5 may appear while the payment method is set up; it is refunded.` },
   { q: "Who can see my data?", a: "You, and the people you add to a shared space with the role you choose. Personal accounts stay private even inside a shared space." },
   { q: "Is the AI assistant making up numbers?", a: "Amounts it quotes come from calculations on your recorded data, not from the model. It asks before it changes anything." },
 ];
@@ -53,6 +62,7 @@ const SECURITY = [
 
 const rupees = (minor: number) => formatMoney(minor, "INR", "en-IN").replace(/\.00$/, "");
 const h2 = "font-display text-3xl leading-[1.1] sm:text-4xl";
+
 
 export const metadata: Metadata = staticPageMetadata("home");
 
@@ -74,7 +84,7 @@ export default function Home() {
               </p>
               <div className="anim-rise mt-8 flex flex-wrap items-center gap-3" style={{ animationDelay: "180ms" }}>
                 <Link href="/signup" className="group inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3.5 text-sm font-semibold text-primary-fg shadow-card transition-all hover:-translate-y-0.5 hover:bg-primary-hover hover:shadow-float">
-                  Get started for free
+                  {TRIAL_CTA}
                   <ArrowRight size={16} aria-hidden className="transition-transform group-hover:translate-x-0.5" />
                 </Link>
                 <Link href="/#showcase" className="rounded-full border border-line-strong bg-surface/70 px-6 py-3.5 text-sm font-semibold backdrop-blur transition-colors hover:border-primary">
@@ -82,7 +92,7 @@ export default function Home() {
                 </Link>
               </div>
               <p className="anim-rise mt-6 text-sm text-muted" style={{ animationDelay: "260ms" }}>
-                Free to start. No bank login needed. Export your data any time.
+                {TRIAL_DAYS} days of FinTrack One free, then {MONTHLY_INR} a month or {YEARLY_INR} a year ({MONTHLY_USD} or {YEARLY_USD} outside India). Cancel before it ends and you pay nothing. The free plan stays free.
               </p>
             </div>
             <HeroVisual />
@@ -207,7 +217,7 @@ export default function Home() {
           <div className="mx-auto max-w-6xl px-5">
             <Reveal>
               <h2 className={h2}>Pricing</h2>
-              <p className="mt-4 max-w-[56ch] text-muted">Start with FinTrack Free. Move to FinTrack One when you want forecasting and deeper reports.</p>
+              <p className="mt-4 max-w-[56ch] text-muted">Start with FinTrack Free, or try FinTrack One free for {TRIAL_DAYS} days. If you do nothing, FinTrack One continues on the plan you chose when the trial ends. Cancel before then and you pay nothing.</p>
             </Reveal>
             <div className="mt-12 grid gap-6 md:grid-cols-2">
               {PLANS.map((p, i) => (
@@ -245,7 +255,7 @@ export default function Home() {
               <h2 className="font-display relative mx-auto max-w-[18ch] text-4xl leading-[1.05] sm:text-5xl">Start with one account and one budget.</h2>
               <p className="relative mx-auto mt-4 max-w-[44ch] text-white/65">It takes a few minutes, and you can change anything later.</p>
               <Link href="/signup" className="relative mt-8 inline-flex items-center gap-2 rounded-full bg-white px-7 py-3.5 text-sm font-semibold text-ink transition-all hover:-translate-y-0.5 hover:shadow-float">
-                Get started for free <ArrowRight size={16} aria-hidden />
+                {TRIAL_CTA} <ArrowRight size={16} aria-hidden />
               </Link>
             </div>
           </Reveal>
@@ -259,17 +269,30 @@ export default function Home() {
 
 function PlanCard({ plan, featured }: { plan: Plan; featured?: boolean }) {
   const monthly = priceFor(plan, "month");
-  const yearly = priceFor(plan, "year");
+  const trial = plan.id === "pro";
   return (
     <div className={`relative h-full rounded-2xl border bg-surface p-7 transition-shadow hover:shadow-card ${featured ? "border-primary shadow-card ring-1 ring-primary" : "border-line-strong"}`}>
       {featured ? <span className="absolute -top-3 left-7 rounded-full bg-primary px-3 py-0.5 text-xs font-semibold text-primary-fg">Most capable</span> : null}
       <h3 className="text-lg font-semibold">{plan.name}</h3>
       <p className="mt-1 text-sm text-muted">{plan.summary}</p>
-      <p className="num mt-6 text-4xl font-semibold tracking-tight">
-        {rupees(monthly?.amountMinor ?? 0)}
-        <span className="text-sm font-normal text-muted"> / month</span>
-      </p>
-      {yearly ? <p className="num mt-1 text-sm text-muted">or {rupees(yearly.amountMinor)} billed yearly</p> : <p className="mt-1 text-sm text-muted">No card needed</p>}
+      {trial ? (
+        <>
+          <p className="num mt-6 text-4xl font-semibold tracking-tight">
+            {TRIAL_DAYS} days free
+          </p>
+          <p className="num mt-1 text-sm text-muted">
+            then {MONTHLY_INR} a month or {YEARLY_INR} a year ({MONTHLY_USD} or {YEARLY_USD} outside India), billed automatically unless you cancel first
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="num mt-6 text-4xl font-semibold tracking-tight">
+            {rupees(monthly?.amountMinor ?? 0)}
+            <span className="text-sm font-normal text-muted"> / month</span>
+          </p>
+          <p className="mt-1 text-sm text-muted">No card needed</p>
+        </>
+      )}
       <ul className="mt-6 space-y-2.5 border-t border-line pt-6 text-sm">
         {plan.features.map((f) => (
           <li key={f} className="flex gap-3">
@@ -279,7 +302,7 @@ function PlanCard({ plan, featured }: { plan: Plan; featured?: boolean }) {
         ))}
       </ul>
       <Link href="/signup" className={`mt-7 grid min-h-11 place-items-center rounded-full text-sm font-semibold transition-colors ${featured ? "bg-primary text-primary-fg hover:bg-primary-hover" : "border border-line-strong hover:border-primary"}`}>
-        {featured ? "Get started" : "Start free"}
+        {trial ? TRIAL_CTA : "Start free"}
       </Link>
     </div>
   );

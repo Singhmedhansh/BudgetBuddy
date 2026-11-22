@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/server/admin";
 import { paypalConfig, razorpayConfig } from "@/server/payments/config";
 import { syncPaypalSubscription } from "@/server/payments/paypal";
-import { reconcileRazorpaySubscription } from "@/server/payments/razorpay";
+import { reconcileRazorpaySubscription, syncRazorpayOrder } from "@/server/payments/razorpay";
 import { applyBillingEvent, type SubscriptionRow } from "@/server/payments/store";
 
 /**
@@ -44,6 +44,20 @@ export async function GET(request: NextRequest) {
       if ((await applyBillingEvent(admin, ev)) === "applied") out.updated++;
     } catch {
       out.failed++;
+    }
+  }
+  // One-time Razorpay orders still waiting for a confirmation (closed tab, lost connection): ask Razorpay if they were paid.
+  if (rz) {
+    const { data: open } = await admin.from("billing_subscriptions").select("*").in("status", ["pending", "expired"]).eq("provider", "razorpay").like("provider_subscription_id", "order_%").not("user_id", "is", null).gte("created_at", new Date(Date.now() - 48 * 3_600_000).toISOString()).limit(200);
+    for (const row of (open ?? []) as SubscriptionRow[]) {
+      try {
+        const ev = await syncRazorpayOrder(rz, row);
+        if (!ev) continue;
+        out.checked++;
+        if ((await applyBillingEvent(admin, ev)) === "applied") out.updated++;
+      } catch {
+        out.failed++;
+      }
     }
   }
   return NextResponse.json(out);

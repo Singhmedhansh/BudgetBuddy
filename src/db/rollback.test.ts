@@ -1,6 +1,6 @@
 /**
- * Rollback and recovery for migrations 11 and 12. Applies everything, puts data in, runs the down scripts in the
- * documented order (12 then 11), checks the previous behaviour is back, then re-applies both forward.
+ * Rollback and recovery for migrations 11, 12 and 13. Applies everything, puts data in, runs the down scripts in the
+ * documented order (13, then 12, then 11), checks the previous behaviour is back, then re-applies them forward.
  */
 import { randomUUID } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
@@ -13,6 +13,7 @@ const read = (rel: string) => readFileSync(join(root, rel), "utf8");
 const MIGRATIONS = readdirSync(join(root, "supabase/migrations")).sort();
 const M11 = MIGRATIONS.find((f) => f.startsWith("20261118000011"))!;
 const M12 = MIGRATIONS.find((f) => f.startsWith("20261118000012"))!;
+const M13 = MIGRATIONS.find((f) => f.startsWith("20261122000013"))!;
 const USER = randomUUID();
 let db: PGlite;
 
@@ -45,12 +46,15 @@ beforeAll(async () => {
 });
 
 describe("rollback and recovery of migrations 11 and 12", () => {
-  it("applies cleanly on top of migrations 1 to 10, and 11 and 12 are the last two", () => {
-    expect(MIGRATIONS.slice(-2)).toEqual([M11, M12]);
+  it("applies cleanly on top of migrations 1 to 10, and 11, 12 and 13 are the last three", () => {
+    expect(MIGRATIONS.slice(-3)).toEqual([M11, M12, M13]);
   });
 
   it("rolls back 12, then 11, leaving the earlier schema as it was", async () => {
     await db.exec(`insert into budgetbuddy.billing_subscriptions (user_id, provider, provider_subscription_id, interval, amount_minor, currency) values ('${USER}','razorpay','sub_rb','month',14900,'INR')`);
+    await db.exec(read("supabase/rollback/20261122000013_billing_coupons_down.sql"));
+    expect(await exists(`select 1 from pg_class where relname in ('billing_coupons','billing_coupon_redemptions')`)).toBe(false);
+    expect(await exists(`select 1 from information_schema.columns where table_name='billing_subscriptions' and column_name in ('trial_days','plan_ref','coupon_id')`)).toBe(false);
     await db.exec(read("supabase/rollback/20261118000012_unified_billing_down.sql"));
     for (const t of ["billing_subscriptions", "billing_payments", "billing_audit"]) expect(await exists(`select 1 from pg_class where relname='${t}'`)).toBe(false);
     for (const f of ["billing_apply_event", "billing_sweep_expired", "billing_current_plan", "billing_project_entitlement"]) expect(await exists(`select 1 from pg_proc where proname='${f}'`)).toBe(false);
@@ -76,6 +80,7 @@ describe("rollback and recovery of migrations 11 and 12", () => {
   it("recovers: re-applying 11 then 12 works on the rolled-back database, and billing works again", async () => {
     await db.exec(read(`supabase/migrations/${M11}`));
     await db.exec(read(`supabase/migrations/${M12}`));
+    await db.exec(read(`supabase/migrations/${M13}`));
     await db.exec(`grant usage on schema budgetbuddy to service_role;`);
     await db.exec(`insert into budgetbuddy.billing_subscriptions (user_id, provider, provider_subscription_id, interval, amount_minor, currency) values ('${USER}','razorpay','sub_again','month',14900,'INR')`);
     await db.exec(`set role service_role`);

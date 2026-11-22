@@ -21,6 +21,11 @@ export async function applyBillingEvent(admin: Admin, ev: BillingEvent): Promise
     p_payment: ev.payment,
   });
   if (error) throw new BillingError("provider_error", 500);
+  // A code is used up only when the subscription that used it has really started. Idempotent and best-effort: it must never
+  // fail a payment event (and does nothing until migration 13 exists).
+  if (ev.subscription && (ev.subscription.status === "active" || ev.subscription.status === "past_due" || ev.subscription.status === "canceled")) {
+    await Promise.resolve(admin.rpc("billing_redeem_for_subscription", { p_provider: ev.provider, p_sub: ev.subscription.provider_subscription_id })).catch(() => undefined);
+  }
   return data as ApplyOutcome;
 }
 
@@ -37,6 +42,10 @@ export interface SubscriptionRow {
   current_period_end: string | null;
   cancel_at_period_end: boolean;
   created_at: string;
+  /** Set when migration 13 is applied. The trial this checkout promised, the provider plan it used, and the code it used. */
+  trial_days?: number | null;
+  plan_ref?: string | null;
+  coupon_id?: string | null;
 }
 
 export async function findSubscription(admin: Admin, provider: string, providerSubscriptionId: string): Promise<SubscriptionRow | null> {
@@ -48,6 +57,15 @@ export async function findSubscription(admin: Admin, provider: string, providerS
 export async function hasLiveSubscription(admin: Admin, userId: string, now = new Date()): Promise<boolean> {
   const { data } = await admin.from("billing_subscriptions").select("status,current_period_end").eq("user_id", userId).in("status", ["active", "past_due", "canceled"]);
   return (data ?? []).some((s: { status: string; current_period_end: string | null }) => s.status !== "canceled" ? true : s.current_period_end !== null && new Date(s.current_period_end) > now);
+}
+
+/**
+ * One free trial per person. A person who has ever had a subscription start (started_at is set the moment a mandate or
+ * payment is confirmed) pays from day one if they come back; an abandoned checkout does not count.
+ */
+export async function trialEligible(admin: Admin, userId: string): Promise<boolean> {
+  const { count } = await admin.from("billing_subscriptions").select("id", { count: "exact", head: true }).eq("user_id", userId).not("started_at", "is", null);
+  return (count ?? 0) === 0;
 }
 
 export async function checkoutsInLastHour(admin: Admin, userId: string, now = new Date()): Promise<number> {
@@ -85,7 +103,7 @@ export async function reservePending(
 
 export async function insertPending(
   admin: Admin,
-  row: { userId: string; provider: "razorpay" | "paypal"; providerSubscriptionId: string; interval: Interval; amountMinor: number; currency: string },
+  row: { userId: string; provider: "razorpay" | "paypal"; providerSubscriptionId: string; interval: Interval; amountMinor: number; currency: string; trialDays?: number; planRef?: string; couponId?: string },
 ): Promise<void> {
   const { error } = await admin.from("billing_subscriptions").insert({
     user_id: row.userId,
@@ -95,6 +113,8 @@ export async function insertPending(
     amount_minor: row.amountMinor,
     currency: row.currency,
     status: "pending",
+    // Only written when a coupon chose the trial or the plan, so ordinary checkouts do not depend on migration 13.
+    ...(row.couponId ? { coupon_id: row.couponId, trial_days: row.trialDays, plan_ref: row.planRef ?? null } : {}),
   });
   if (error) throw new BillingError("provider_error", 500);
   await audit(admin, { userId: row.userId, provider: row.provider, actor: "checkout", action: "checkout_created", detail: { interval: row.interval, subscription: row.providerSubscriptionId } });

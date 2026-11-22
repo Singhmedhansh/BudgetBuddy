@@ -15,6 +15,7 @@ import { setFormatPrefs } from "@/lib/format-prefs";
 import { avatarUrl } from "@/server/account";
 import { isSampleSpace } from "@/server/sample-data";
 import { getContext } from "@/server/context";
+import { loadTrialStatus, trialCountdown } from "@/server/payments/trial-status";
 import { privatePageMetadata } from "@/config/seo";
 
 /** The whole signed-in app is private: never indexed, whatever a page inside sets for its title. */
@@ -25,6 +26,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <Suspense fallback={<ShellSkeleton />}>
       <Shell>{children}</Shell>
     </Suspense>
+  );
+}
+
+/**
+ * "Free trial · ends in 3 days", linking to Plan and billing. Shown only while a person is inside the free days of
+ * FinTrack One (a subscription is running and nothing has been charged yet); renders nothing otherwise and never blocks the shell.
+ */
+async function TrialPill({ supabase }: { supabase: Awaited<ReturnType<typeof getContext>>["supabase"] }) {
+  const t = await loadTrialStatus(supabase);
+  if (!t.trialing || !t.endsAt) return null;
+  return (
+    <Link href="/app/settings/billing" className="rounded-full bg-pos/15 px-2.5 py-1 text-xs font-medium text-pos-text transition-colors hover:bg-pos/25">
+      Free trial · {trialCountdown(t.endsAt, new Date()).label.toLowerCase()}
+    </Link>
   );
 }
 
@@ -64,6 +79,9 @@ async function Shell({ children }: { children: React.ReactNode }) {
           </Link>
           <p className="hidden truncate text-sm text-muted md:block">{space?.name ?? "Set up your finances"}{role === "viewer" ? " · view only" : ""}</p>
           {isSampleSpace(space) ? <span className="rounded-full bg-warn/15 px-2.5 py-1 text-xs font-medium text-warn-text">Sample data · fictional</span> : null}
+          <Suspense fallback={null}>
+            <TrialPill supabase={supabase} />
+          </Suspense>
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <ThemeToggle onChoose={saveThemeAction} />
             <AccountMenu name={name} email={user.email ?? ""} avatarUrl={avatar} profile={{ percent: completion.percent, status: completion.status }}>
