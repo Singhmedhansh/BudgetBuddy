@@ -38,7 +38,7 @@ async function TrialPrompt({ supabase }: { supabase: Awaited<ReturnType<typeof r
   return (
     <Notice kind="success">
       Try FinTrack One free for {TRIAL_DAYS} days.{" "}
-      <Link href="/app/settings/billing" className="font-semibold underline underline-offset-2">
+      <Link href="/app/checkout" className="font-semibold underline underline-offset-2">
         Start your free trial
       </Link>
     </Notice>

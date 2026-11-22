@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       await admin.from("billing_subscriptions").update({ status: "expired" }).eq("id", existing.id);
     }
     const origin = await siteUrl();
-    const created = await createPaypalSubscription(cfg, interval, session.user.id, { returnUrl: `${origin}/api/billing/paypal/return`, cancelUrl: `${origin}/app/settings/billing?checkout=cancelled`, brand: BRAND.name }, undefined, trialOpts);
+    const created = await createPaypalSubscription(cfg, interval, session.user.id, { returnUrl: `${origin}/api/billing/paypal/return`, cancelUrl: `${origin}/app/checkout?checkout=cancelled`, brand: BRAND.name }, undefined, trialOpts);
     await insertPending(admin, { userId: session.user.id, provider: "paypal", providerSubscriptionId: created.id, interval, amountMinor: created.amountMinor, currency: created.currency, ...(coupon ? { couponId: coupon.id, trialDays, planRef: created.planId } : {}) });
     return NextResponse.json({ approveUrl: created.approveUrl, trial: trialDays > 0, trialDays, testMode: cfg.mode === "sandbox" });
   } catch (e) {

@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CancelButton, CheckoutPanel } from "@/components/app/BillingActions";
+import { CancelButton } from "@/components/app/BillingActions";
 import { formatDate, Money, Notice } from "@/components/app/ui";
 import { formatPrice, planById, planName, priceFor, TRIAL_DAYS, type Interval } from "@/config/plans";
 import { getContext } from "@/server/context";
-import { checkoutProviders, isRazorpayOrderMode, razorpayConfig } from "@/server/payments/config";
+import { checkoutProviders } from "@/server/payments/config";
 import { resolveEntitlement, type EntitlementRow } from "@/server/payments/entitlements";
 import { loadTrialStatus, trialCountdown } from "@/server/payments/trial-status";
 
@@ -45,8 +45,6 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
   const one = planById("pro");
   const inrPrices = { month: formatPrice(priceFor(one, "month")!), year: formatPrice(priceFor(one, "year")!) };
   const usdPrices = { month: formatPrice(priceFor(one, "month", "USD")!), year: formatPrice(priceFor(one, "year", "USD")!) };
-  // How much the yearly plan saves against twelve months of the monthly one, per currency.
-  const saving = (cur: "INR" | "USD") => Math.max(0, Math.round((1 - priceFor(one, "year", cur)!.amountMinor / (12 * priceFor(one, "month", cur)!.amountMinor)) * 100));
   // One free trial per person: a person whose subscription has ever started pays from day one.
   const trialEligible = (startedBefore ?? 0) === 0;
   // In the free days: an active subscription with no payment on record yet. The first charge is on the date shown.
@@ -100,24 +98,18 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       </section>
 
       {!paid || entitlement.reason === "lapsed" ? (
-        <section aria-labelledby="upgrade">
+        <section aria-labelledby="upgrade" className="rounded-xl border border-line bg-surface p-5">
           <h2 id="upgrade" className="mb-2 font-semibold">
             {trialEligible ? `Try ${one.name} free for ${TRIAL_DAYS} days` : `Upgrade to ${one.name}`}
           </h2>
           <p className="mb-4 text-sm leading-relaxed text-muted">
-            {one.summary} {trialEligible ? `Free for ${TRIAL_DAYS} days, then charged automatically unless you cancel first. Choose monthly (${inrPrices.month}, or ${usdPrices.month} outside India) or yearly (${inrPrices.year}, or ${usdPrices.year}).` : `Choose monthly (${inrPrices.month}, or ${usdPrices.month} outside India) or yearly (${inrPrices.year}, or ${usdPrices.year}). Cancel any time.`}
+            {trialEligible
+              ? `Free for ${TRIAL_DAYS} days, then ${inrPrices.year} a year (${usdPrices.year} outside India) or ${inrPrices.month} a month. Cancel before the trial ends and you pay nothing.`
+              : `From ${inrPrices.month} a month, or ${inrPrices.year} a year (${usdPrices.month} and ${usdPrices.year} outside India). Cancel any time.`}
           </p>
-          <ul className="mb-5 space-y-1.5 text-sm">
-            {one.features.map((f) => (
-              <li key={f} className="flex gap-2">
-                <span aria-hidden className="text-primary">
-                  ✓
-                </span>
-                {f}
-              </li>
-            ))}
-          </ul>
-          <CheckoutPanel razorpay={providers.razorpay} paypal={providers.paypal} paypalTrial={providers.paypalTrial} defaultProvider={profile.country === "IN" ? "razorpay" : "paypal"} prices={{ razorpay: inrPrices, paypal: usdPrices }} savings={{ razorpay: saving("INR"), paypal: saving("USD") }} trial={trialEligible} trialDays={TRIAL_DAYS} razorpayOneTime={(() => { const rz = razorpayConfig(); return !!rz && isRazorpayOrderMode(rz); })()} />
+          <Link href="/app/checkout" className="inline-block rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-primary-fg transition-all hover:-translate-y-px hover:bg-primary-hover">
+            {trialEligible ? "Choose a plan and start your trial" : "Choose a plan"}
+          </Link>
         </section>
       ) : null}
 

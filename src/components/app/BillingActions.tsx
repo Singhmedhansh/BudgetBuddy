@@ -66,18 +66,22 @@ export interface CheckoutProps {
   trialDays?: number;
   /** Razorpay sells one-time prepaid periods (no auto-renew) rather than a recurring subscription. */
   razorpayOneTime?: boolean;
+  /** What the order summary names and lists. */
+  planName: string;
+  features: string[];
 }
 
 const PROVIDER_NAME: Record<Provider, string> = { razorpay: "Razorpay", paypal: "PayPal" };
 const pill = (on: boolean) => `cursor-pointer rounded-full border px-4 py-1.5 text-sm transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary ${on ? "border-primary bg-sage font-medium" : "border-line-strong hover:border-primary"}`;
 
-export function CheckoutPanel({ razorpay, paypal, paypalTrial, defaultProvider, prices, savings, trial = false, trialDays = 0, razorpayOneTime = false }: CheckoutProps) {
+export function CheckoutPanel({ razorpay, paypal, paypalTrial, defaultProvider, prices, savings, trial = false, trialDays = 0, razorpayOneTime = false, planName, features }: CheckoutProps) {
   const router = useRouter();
   const available: Provider[] = [...(razorpay.length ? (["razorpay"] as const) : []), ...(paypal.length ? (["paypal"] as const) : [])];
   const [provider, setProvider] = useState<Provider>(available.includes(defaultProvider) ? defaultProvider : available[0]);
   const periods = provider === "razorpay" ? razorpay : paypal;
   const [interval, setInterval] = useState<Interval>("year");
   const chosen: Interval = periods.includes(interval) ? interval : periods[0];
+  const [openedAt] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ kind: "error" | "info"; text: string } | null>(null);
   // A promotion code. It counts only for the provider and period it was checked for.
@@ -116,7 +120,8 @@ export function CheckoutPanel({ razorpay, paypal, paypalTrial, defaultProvider, 
     setBusy(false);
     if (!r.ok) return setNote({ kind: "error", text: r.data.message ?? "Could not check right now. Please try again." });
     setNote(r.data.paid ? { kind: "info", text: "Payment confirmed. FinTrack One is active." } : r.data.status === "processing" ? { kind: "info", text: "Payment found. Your plan will switch on shortly." } : { kind: "info", text: "No completed payment found. If money left your account, contact support and we will sort it out." });
-    router.refresh();
+    if (r.data.paid) router.push("/app/settings/billing?checkout=success");
+    else router.refresh();
   }
 
   async function pay() {
@@ -151,7 +156,8 @@ export function CheckoutPanel({ razorpay, paypal, paypalTrial, defaultProvider, 
           const v = await post<{ status?: string }>("/api/billing/razorpay/verify", resp);
           setNote(v.ok ? { kind: "info", text: v.data.status === "active" ? (r.data.trial ? "You are all set. Your free trial has started." : "Payment confirmed. FinTrack One is active.") : "Payment received. Your plan will switch on as soon as the bank confirms it." } : { kind: "error", text: v.data.message ?? "We could not verify this payment." });
           setBusy(false);
-          router.refresh();
+          if (v.ok && v.data.status === "active") router.push("/app/settings/billing?checkout=success");
+          else router.refresh();
         },
       });
       rz.on("payment.failed", (f: { error?: { description?: string } }) => {
@@ -166,106 +172,152 @@ export function CheckoutPanel({ razorpay, paypal, paypalTrial, defaultProvider, 
   }
 
   if (available.length === 0) return <p className="text-sm text-muted">Payments are not switched on yet. Your Free plan keeps working in the meantime.</p>;
+  const firstCharge = new Date(openedAt + days * 86_400_000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  const dueToday = trialHere ? "Free" : price;
   return (
-    <div className="space-y-5">
-      {available.length > 1 ? (
-        <fieldset>
-          <legend className="mb-2 text-sm font-medium">Where are you paying from?</legend>
-          <div className="flex flex-wrap gap-2">
-            {available.map((p) => (
-              <label key={p} className={pill(provider === p)}>
-                <input type="radio" name="provider" value={p} checked={provider === p} onChange={() => setProvider(p)} className="sr-only" />
-                {p === "razorpay" ? "India (UPI, cards, netbanking)" : "International (PayPal)"}
-              </label>
-            ))}
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
+      <div className="space-y-7">
+        {available.length > 1 ? (
+          <fieldset>
+            <legend className="mb-2 font-semibold">1. Where are you paying from?</legend>
+            <div className="flex flex-wrap gap-2">
+              {available.map((p) => (
+                <label key={p} className={pill(provider === p)}>
+                  <input type="radio" name="provider" value={p} checked={provider === p} onChange={() => setProvider(p)} className="sr-only" />
+                  {p === "razorpay" ? "India (UPI, cards, netbanking)" : "International (PayPal)"}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
+        {periods.length > 1 ? (
+          <fieldset>
+            <legend className="mb-2 font-semibold">{available.length > 1 ? "2. " : "1. "}Choose how often you pay</legend>
+            <div className="flex flex-wrap gap-2">
+              {periods.map((i) => (
+                <label key={i} className={pill(chosen === i)}>
+                  <input type="radio" name="interval" value={i} checked={chosen === i} onChange={() => setInterval(i)} className="sr-only" />
+                  {i === "month" ? "Monthly" : "Yearly"}
+                  <span className="num ml-2 text-muted">{prices[provider][i]}</span>
+                  {i === "year" && savings[provider] > 0 ? <span className="ml-2 rounded-full bg-pos/15 px-2 py-0.5 text-xs font-medium text-pos-text">Save {savings[provider]}%</span> : null}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ) : null}
+        {trialHere ? (
+          <div>
+            <label htmlFor="promo" className="mb-2 block font-semibold">
+              Promo code <span className="font-normal text-muted">(optional)</span>
+            </label>
+            <div className="flex flex-wrap items-start gap-2">
+              <input
+                id="promo"
+                value={code}
+                onChange={(e) => {
+                  setCode(e.target.value);
+                  setCodeNote(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void applyCode();
+                  }
+                }}
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                maxLength={40}
+                aria-describedby="promo-note"
+                className="num w-48 rounded-md border border-line-strong bg-surface px-3 py-2 text-sm uppercase outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+              />
+              <button type="button" onClick={() => void applyCode()} disabled={busy || !code.trim()} className="rounded-full border border-line-strong px-4 py-2 text-sm font-medium transition-colors hover:border-primary disabled:opacity-60">
+                Apply
+              </button>
+            </div>
+            <p id="promo-note" role="status" className={`mt-2 text-sm ${codeNote?.kind === "error" ? "text-neg-text" : "text-pos-text"}`}>
+              {codeNote?.text}
+            </p>
           </div>
-        </fieldset>
-      ) : null}
-      {periods.length > 1 ? (
-        <fieldset>
-          <legend className="mb-2 text-sm font-medium">Billing period</legend>
-          <div className="flex flex-wrap gap-2">
-            {periods.map((i) => (
-              <label key={i} className={pill(chosen === i)}>
-                <input type="radio" name="interval" value={i} checked={chosen === i} onChange={() => setInterval(i)} className="sr-only" />
-                {i === "month" ? "Monthly" : "Yearly"}
-                <span className="num ml-2 text-muted">{prices[provider][i]}</span>
-                {i === "year" && savings[provider] > 0 ? <span className="ml-2 rounded-full bg-pos/15 px-2 py-0.5 text-xs font-medium text-pos-text">Save {savings[provider]}%</span> : null}
-              </label>
-            ))}
+        ) : null}
+        <ul className="space-y-1.5 text-sm">
+          {features.map((f) => (
+            <li key={f} className="flex gap-2">
+              <span aria-hidden className="text-primary">
+                ✓
+              </span>
+              {f}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <aside aria-labelledby="summary" className="space-y-4 rounded-xl border border-line bg-surface p-5 lg:sticky lg:top-6">
+        <h2 id="summary" className="font-semibold">
+          Order summary
+        </h2>
+        <div className="flex items-start justify-between gap-3 text-sm">
+          <div>
+            <p className="font-medium">{planName}</p>
+            <p className="text-muted">
+              {chosen === "month" ? "Monthly" : "Yearly"} · {PROVIDER_NAME[provider]}
+            </p>
           </div>
-        </fieldset>
-      ) : null}
-      {trialHere ? (
-        <div>
-          <label htmlFor="promo" className="mb-2 block text-sm font-medium">
-            Promo code <span className="font-normal text-muted">(optional)</span>
-          </label>
-          <div className="flex flex-wrap items-start gap-2">
-            <input
-              id="promo"
-              value={code}
-              onChange={(e) => {
-                setCode(e.target.value);
-                setCodeNote(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void applyCode();
-                }
-              }}
-              autoComplete="off"
-              autoCapitalize="characters"
-              spellCheck={false}
-              maxLength={40}
-              aria-describedby="promo-note"
-              className="num w-48 rounded-md border border-line-strong bg-surface px-3 py-2 text-sm uppercase outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
-            />
-            <button type="button" onClick={() => void applyCode()} disabled={busy || !code.trim()} className="rounded-full border border-line-strong px-4 py-2 text-sm font-medium transition-colors hover:border-primary disabled:opacity-60">
-              Apply
+          <p className="num font-medium">{price}</p>
+        </div>
+        {trialHere ? (
+          <div className="flex items-center justify-between gap-3 border-t border-line pt-3 text-sm">
+            <p>
+              {coupon ? `${coupon.code}: ` : ""}
+              {days}-day free trial
+            </p>
+            <p className="num text-pos-text">Free</p>
+          </div>
+        ) : null}
+        <div className="flex items-center justify-between gap-3 border-t border-line pt-3">
+          <p className="font-semibold">Due today</p>
+          <p className="num font-display text-xl">{dueToday}</p>
+        </div>
+        {trialHere ? (
+          <p className="text-sm text-muted">
+            Then {price} on <span suppressHydrationWarning>{firstCharge}</span>, and every {per} after that. Cancel before then and you pay nothing.
+          </p>
+        ) : null}
+        <button type="button" onClick={pay} disabled={busy} className="w-full rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-primary-fg transition-all hover:-translate-y-px hover:bg-primary-hover disabled:opacity-60">
+          {busy
+            ? "Working…"
+            : razorpayOneTime && provider === "razorpay"
+              ? `Pay ${price} for 1 ${per}`
+              : trialHere
+                ? `Start your ${days}-day free trial`
+                : provider === "razorpay"
+                  ? `Subscribe for ${price} a ${per}`
+                  : "Continue to PayPal"}
+        </button>
+        {provider === "razorpay" && razorpayOneTime ? (
+          <div className="space-y-2">
+            <p className="text-sm text-muted">One payment, no automatic renewal. Pay again when your period ends to keep FinTrack One.</p>
+            <button type="button" onClick={checkStatus} disabled={busy} className="text-sm font-medium text-primary underline-offset-2 hover:underline disabled:opacity-60">
+              Already paid? Check my payment
             </button>
           </div>
-          <p id="promo-note" role="status" className={`mt-2 text-sm ${codeNote?.kind === "error" ? "text-neg-text" : "text-pos-text"}`}>
-            {codeNote?.text}
+        ) : null}
+        {trialHere ? (
+          <p className="text-sm leading-relaxed text-muted">
+            You will be charged automatically unless you cancel in Plan and billing before the trial ends.
+            {provider === "razorpay" ? " In India a small authorisation of up to ₹5 may appear while your payment method is set up; it is refunded." : ""}
           </p>
-        </div>
-      ) : null}
-      <button type="button" onClick={pay} disabled={busy} className="rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-primary-fg transition-all hover:-translate-y-px hover:bg-primary-hover disabled:opacity-60">
-        {busy
-          ? "Working…"
-          : razorpayOneTime && provider === "razorpay"
-            ? `Pay ${price} for 1 ${per}`
-            : trialHere
-              ? `Start your ${days}-day free trial${provider === "paypal" ? " with PayPal" : ""}`
-              : provider === "razorpay"
-                ? `Subscribe for ${price} a ${per}`
-                : "Continue to PayPal"}
-      </button>
-      {provider === "razorpay" && razorpayOneTime ? (
-        <div className="space-y-2">
-          <p className="text-sm text-muted">One payment, no automatic renewal. Pay again when your period ends to keep FinTrack One.</p>
-          <button type="button" onClick={checkStatus} disabled={busy} className="text-sm font-medium text-primary underline-offset-2 hover:underline disabled:opacity-60">
-            Already paid? Check my payment
-          </button>
-        </div>
-      ) : null}
-      {trialHere ? (
-        <p className="text-sm leading-relaxed text-muted">
-          Nothing is charged today. After {days} days you are charged {price} for the first {per}, automatically, and then every {per}, unless you cancel in Plan and billing before the trial ends.
-          {provider === "razorpay" ? " In India a small authorisation of up to ₹5 may appear while your payment method is set up; it is refunded." : ""}
-        </p>
-      ) : subscription ? (
-        <p className="text-sm leading-relaxed text-muted">
-          You are charged {price} now and then every {per} until you cancel. Cancel any time in Plan and billing; you keep access to the end of the period you paid for.
-        </p>
-      ) : null}
-      {provider === "paypal" ? <p className="text-sm text-muted">{PROVIDER_NAME.paypal} shows the exact price and currency before you approve anything.</p> : null}
-      {note ? (
-        <p role={note.kind === "error" ? "alert" : "status"} className={`rounded-md border px-3 py-2.5 text-sm ${note.kind === "error" ? "border-neg/50 bg-neg/10 text-neg-text" : "border-pos/50 bg-pos/10 text-pos-text"}`}>
-          {note.text}
-        </p>
-      ) : null}
+        ) : subscription ? (
+          <p className="text-sm leading-relaxed text-muted">
+            You are charged {price} now and then every {per} until you cancel. Cancel any time in Plan and billing; you keep access to the end of the period you paid for.
+          </p>
+        ) : null}
+        {provider === "paypal" ? <p className="text-sm text-muted">{PROVIDER_NAME.paypal} shows the exact price and currency before you approve anything.</p> : null}
+        {note ? (
+          <p role={note.kind === "error" ? "alert" : "status"} className={`rounded-md border px-3 py-2.5 text-sm ${note.kind === "error" ? "border-neg/50 bg-neg/10 text-neg-text" : "border-pos/50 bg-pos/10 text-pos-text"}`}>
+            {note.text}
+          </p>
+        ) : null}
+      </aside>
     </div>
   );
 }
