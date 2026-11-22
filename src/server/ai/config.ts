@@ -94,9 +94,9 @@ export function readAiConfig(env: Record<string, string | undefined> = process.e
       .filter((p) => p.keys.length > 0),
     independentKeyQuota: env.AI_KEYS_INDEPENDENT_QUOTA === "true",
     limits: {
-      perHour: int(env.AI_REQUESTS_PER_HOUR, 20, 1, 500),
-      tokensPerDay: int(env.AI_TOKENS_PER_DAY, 60_000, 1_000, 5_000_000),
-      maxOutputTokens: int(env.AI_MAX_OUTPUT_TOKENS, 700, 50, 4000),
+      perHour: int(env.AI_REQUESTS_PER_HOUR, 30, 1, 500),
+      tokensPerDay: int(env.AI_TOKENS_PER_DAY, 150_000, 1_000, 5_000_000),
+      maxOutputTokens: int(env.AI_MAX_OUTPUT_TOKENS, 500, 50, 4000),
       maxQuestionChars: int(env.AI_MAX_QUESTION_CHARS, 600, 20, 4000),
       timeoutMs: int(env.AI_TIMEOUT_MS, 20_000, 2_000, 60_000),
     },

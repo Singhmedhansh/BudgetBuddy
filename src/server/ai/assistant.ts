@@ -1,5 +1,5 @@
 import { aiStatus, readAiConfig, type AiConfig } from "./config";
-import { factsSummary, savingsPlan, systemPrompt, unverifiedFigures, type Facts } from "./grounding";
+import { dropUnverified, factsSummary, savingsPlan, systemPrompt, unverifiedFigures, type Facts } from "./grounding";
 import { AiUnavailableError, generate, type RouterResult } from "./router";
 import type { ChatMessage, CompletionRequest } from "./types";
 
@@ -110,6 +110,11 @@ export async function ask(question: string, deps: AssistantDeps, history: ChatMe
 
   // Every amount in the answer must come from the facts. Otherwise the person gets the verified figures instead.
   const bad = unverifiedFigures(out.text, facts);
-  if (bad.length > 0) return { ok: true, answer: factsSummary(facts), verified: true, source: "figures" };
+  if (bad.length > 0) {
+    // Keep what is verified; only fall back to the plain summary when nothing useful survives.
+    const safe = dropUnverified(out.text, facts);
+    if (safe.length >= 30) return { ok: true, answer: safe, verified: true, source: "model" };
+    return { ok: true, answer: factsSummary(facts), verified: true, source: "figures" };
+  }
   return { ok: true, answer: out.text, verified: true, source: "model" };
 }
