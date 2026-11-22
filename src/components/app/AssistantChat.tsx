@@ -29,6 +29,7 @@ import {
   type Turn,
 } from "@/app/app/assistant-actions";
 import { AssistantMark } from "@/components/app/AssistantMark";
+import { FinnVisuals } from "@/components/app/FinnVisuals";
 import { RichText } from "@/components/app/RichText";
 import { BRAND } from "@/config/brand";
 import {
@@ -247,6 +248,7 @@ function Chat({
                   <Avatar />
                   <div className="min-w-0 max-w-[92%] flex-1">
                     <RichText text={t.content} />
+                    {t.visuals?.length ? <FinnVisuals visuals={t.visuals} /> : null}
                     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                       <span className="inline-flex items-center gap-1.5">
                         <Check size={12} aria-hidden className="text-pos" />

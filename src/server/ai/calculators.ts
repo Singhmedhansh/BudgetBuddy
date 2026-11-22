@@ -73,3 +73,35 @@ export function detectCalculation(question: string): Calculation | null {
   }
   return null;
 }
+
+/** The loan still owed at the start and after each year of an EMI loan, for charts. */
+export function emiBalanceByYear(principal: number, annualPercent: number, months: number): number[] {
+  const r = annualPercent / 12 / 100;
+  const payment = emi(principal, annualPercent, months).payment;
+  const out = [principal];
+  let balance = principal;
+  for (let m = 1; m <= months; m++) {
+    balance = balance * (1 + r) - payment;
+    if (m % 12 === 0 || m === months) out.push(Math.max(0, Math.round(balance * 100) / 100));
+  }
+  return out;
+}
+
+/** Value and amount put in at the start and after each year, for a SIP or a lump sum. */
+export function growthByYear(input: { kind: "sip"; monthly: number; ratePercent: number; years: number } | { kind: "lumpsum"; amount: number; ratePercent: number; years: number }): { value: number[]; invested: number[] } {
+  const whole = Math.max(1, Math.ceil(input.years));
+  const value: number[] = [];
+  const invested: number[] = [];
+  for (let y = 0; y <= whole; y++) {
+    const t = Math.min(y, input.years);
+    if (input.kind === "sip") {
+      const s = sip(input.monthly, input.ratePercent, t);
+      value.push(Math.round(s.value * 100) / 100);
+      invested.push(Math.round(s.invested * 100) / 100);
+    } else {
+      value.push(Math.round(lumpsum(input.amount, input.ratePercent, t) * 100) / 100);
+      invested.push(input.amount);
+    }
+  }
+  return { value, invested };
+}

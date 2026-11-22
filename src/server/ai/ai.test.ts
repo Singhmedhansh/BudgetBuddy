@@ -302,7 +302,7 @@ describe("assistant", () => {
   it("returns a verified model answer and records the usage once", async () => {
     const x = deps();
     const r = await ask("How much did I spend?", x.d);
-    expect(r).toEqual({ ok: true, answer: "You spent 32500.50 this month.", verified: true, source: "model" });
+    expect(r).toMatchObject({ ok: true, answer: "You spent 32500.50 this month.", verified: true, source: "model" });
     expect(x.settle).toHaveBeenCalledTimes(1);
     expect(x.settle).toHaveBeenCalledWith(7, expect.objectContaining({ status: "ok", provider: "groq", promptTokens: 100, completionTokens: 20 }));
   });

@@ -221,3 +221,18 @@ body {
 .scroll-on-ink {
   scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
 }
+
+/* ---------- Finn's charts: gentle entrances, switched off for people who prefer less motion ---------- */
+@keyframes finn-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes finn-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes finn-col { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes finn-draw { from { stroke-dasharray: 1; stroke-dashoffset: 1; } to { stroke-dasharray: 1; stroke-dashoffset: 0; } }
+@keyframes finn-fade { from { opacity: 0; } to { opacity: 1; } }
+.finn-rise { animation: finn-rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.finn-bar { transform-origin: left; animation: finn-grow 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.finn-col { transform-box: fill-box; transform-origin: bottom; animation: finn-col 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.finn-draw { animation: finn-draw 1.1s ease-out both; }
+.finn-donut { animation: finn-fade 0.6s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .finn-rise, .finn-bar, .finn-col, .finn-draw, .finn-donut { animation: none; }
+}

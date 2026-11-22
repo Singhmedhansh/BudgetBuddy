@@ -1,11 +1,12 @@
 import { aiStatus, readAiConfig, type AiConfig } from "./config";
 import { detectCalculation } from "./calculators";
+import { buildVisuals, type Visual } from "./visuals";
 import { enforceFigures, factsSummary, savingsPlan, splitTag, systemPrompt, type Facts } from "./grounding";
 import { AiUnavailableError, generate, type RouterResult } from "./router";
 import type { ChatMessage, CompletionRequest } from "./types";
 
 export type AssistantOutcome =
-  | { ok: true; answer: string; verified: true; source: "model" | "figures" | "general" }
+  | { ok: true; answer: string; verified: true; source: "model" | "figures" | "general"; visuals?: Visual[] }
   | { ok: false; reason: "disabled" | "no_providers" | "too_long" | "empty" | "hourly" | "daily" | "unavailable" | "not_ready"; message: string };
 
 /** Sentences shown to people. None names a provider, a key, a model or an internal error. */
@@ -115,5 +116,12 @@ export async function ask(question: string, deps: AssistantDeps, history: ChatMe
   const { tag, body } = splitTag(out.text);
   const checked = enforceFigures(body, tag, facts);
   if (!checked) return { ok: true, answer: factsSummary(facts), verified: true, source: "figures" };
-  return { ok: true, answer: checked.text, verified: true, source: tag === "G" ? "general" : "model" };
+  // Pictures come from the verified facts, never from the model. A general answer gets one only for a what-if with numbers.
+  let visuals: Visual[] = [];
+  try {
+    visuals = tag === "G" && !facts.calculation ? [] : buildVisuals(q, facts);
+  } catch {
+    visuals = [];
+  }
+  return { ok: true, answer: checked.text, verified: true, source: tag === "G" ? "general" : "model", visuals };
 }
