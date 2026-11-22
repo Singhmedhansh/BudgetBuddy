@@ -29,14 +29,32 @@ code), and answer any general money question from its own knowledge, tagged so t
 | Voice | A microphone button in the composer where the browser supports speech recognition |
 | Saved question set | 70 questions in src/server/ai/eval run on every change; a live guardrail set runs against the real model on demand |
 
-## Still to build, in priority order
+## Also built (24 Nov 2026)
 
-1. **True streaming.** Today the answer is checked before it is shown, then revealed word by word. Real streaming needs the figure check to run per sentence as text arrives.
-2. **Weekly recap by email and alerts.** The "Finn noticed" logic exists; it needs a scheduled job and an email provider.
-3. **Documents.** Ask about an uploaded statement, salary slip or loan sheet (the Import page already reads statements).
-4. **WhatsApp.** Log expenses and ask questions by message; needs a WhatsApp Business account.
-5. **Review queue.** A private list of thumbs-down answers for improving prompts.
-6. **Refreshing reference data.** A monthly check of the dated figures against their sources.
+| Area | What exists |
+| --- | --- |
+| Streaming | The answer appears while it is being written. Each sentence is checked against the person's records before it is released; the finished answer replaces the preview, so the stream can never show more than the check allows (src/server/ai/stream.ts, /api/finn/ask) |
+| Documents | A paperclip in the composer: attach a PDF (text-based), CSV or text file up to 3 MB. Finn answers from it for that one question; nothing is stored, and figures in the file are verified against the file |
+| Weekly recap | Opt-in on the Finn page. A daily job emails everyone who is due (at most once every 6 days) a recap built from their verified figures (src/server/ai/recap.ts, /api/cron/finn). Needs RESEND_API_KEY and FINN_FROM_EMAIL |
+| WhatsApp | Link a number with a 6-digit code, then ask questions or say "add 450 for groceries" and reply YES. Same allowance, same checks, same confirm step as the app (/api/webhooks/whatsapp). Needs the five WHATSAPP_* values and a Meta business number |
+| Review queue | /app/finn-review for the addresses in FINN_REVIEWERS: thumbs-down answers with the question that led to each, mark as reviewed. The thumbs-down control tells people it is reviewed |
+| Reference data | The weekly job emails the reviewers a monthly reminder, with every figure and its source, when the list has not been checked for 35 days. Updating the figures is still a human check against the official source |
+
+## Setup for the new pieces
+
+| Piece | Needs |
+| --- | --- |
+| Everything below | Migration 16 (supabase/migrations/20261124000016_finn_recap_whatsapp_review.sql) and SUPABASE_SERVICE_ROLE_KEY |
+| Recap email | RESEND_API_KEY, FINN_FROM_EMAIL (an address on a domain verified in Resend) |
+| WhatsApp | WHATSAPP_VERIFY_TOKEN, WHATSAPP_APP_SECRET, WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_NUMBER; webhook URL https://getfintrack.online/api/webhooks/whatsapp |
+| Review queue and reminders | FINN_REVIEWERS (comma-separated emails) |
+
+## Still to build
+
+1. **Image and photo documents.** Scans and photos of slips and statements need OCR; today they are refused with a clear message.
+2. **WhatsApp voice notes and images.** Only text messages are read.
+3. **Automatic reference-data refresh.** Official sources publish rates in notices and press releases, not a feed, so the job reminds and lists sources rather than scraping.
+4. **Per-user recap time and day.** Everyone gets the recap about every 6 days, early morning India time.
 
 ## Rules Finn keeps
 

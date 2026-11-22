@@ -147,12 +147,75 @@ export interface GatewayHooks {
   random?: () => number;
 }
 
+type Invoke = (
+  client: ProviderClient,
+  key: string,
+  model: string,
+  call: CompletionRequest,
+) => Promise<CompletionResult>;
+
 export async function generate(
   config: AiConfig,
   req: CompletionRequest,
   clients: Record<string, ProviderClient> = PROVIDERS,
   pool: (id: string, keys: string[]) => KeyPool = poolFor,
   hooks: GatewayHooks = {},
+): Promise<RouterResult> {
+  return failover(
+    config,
+    req,
+    (c, k, m, call) => c.complete(k, m, call),
+    clients,
+    pool,
+    hooks,
+  );
+}
+
+/**
+ * Like generate, but text is passed to onDelta as it is written. Failover works as before until the first text has
+ * been handed out; after that a failure ends the answer (it cannot be restarted under text the person has already seen).
+ */
+export async function generateStream(
+  config: AiConfig,
+  req: CompletionRequest,
+  onDelta: (text: string) => void,
+  clients: Record<string, ProviderClient> = PROVIDERS,
+  pool: (id: string, keys: string[]) => KeyPool = poolFor,
+  hooks: GatewayHooks = {},
+): Promise<RouterResult> {
+  let started = false;
+  const out = (t: string) => {
+    started = true;
+    onDelta(t);
+  };
+  return failover(
+    config,
+    req,
+    async (c, k, m, call) => {
+      try {
+        if (c.stream) return await c.stream(k, m, call, out);
+        const r = await c.complete(k, m, call);
+        out(r.text);
+        return r;
+      } catch (e) {
+        // Half an answer cannot be retried elsewhere, so it must not look like a failover-worthy error.
+        if (started) throw new ProviderError("bad_request");
+        throw e;
+      }
+    },
+    clients,
+    pool,
+    hooks,
+  );
+}
+
+async function failover(
+  config: AiConfig,
+  req: CompletionRequest,
+  invoke: Invoke,
+  clients: Record<string, ProviderClient>,
+  pool: (id: string, keys: string[]) => KeyPool,
+  hooks: GatewayHooks,
 ): Promise<RouterResult> {
   if (config.providers.length === 0)
     throw new AiUnavailableError("no_providers");
@@ -178,7 +241,7 @@ export async function generate(
           if (attempts >= MAX_UPSTREAM_ATTEMPTS) throw fail();
           attempts++;
           try {
-            const out = await client.complete(key, model, call);
+            const out = await invoke(client, key, model, call);
             keys.markOk(key);
             return {
               ...out,

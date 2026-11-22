@@ -76,6 +76,65 @@ async function send(
 }
 
 const TIMEOUT = 20_000;
+const STREAM_TIMEOUT = 45_000;
+
+/** Reads a server-sent-events response and hands each JSON payload to onEvent. Errors map to the same kinds as send. */
+async function sendStream(
+  url: string,
+  init: RequestInit,
+  req: CompletionRequest,
+  onEvent: (json: unknown) => void,
+): Promise<void> {
+  const timeout = AbortSignal.timeout(
+    req.timeoutMs ? req.timeoutMs * 2 : STREAM_TIMEOUT,
+  );
+  const signal = req.signal ? AbortSignal.any([req.signal, timeout]) : timeout;
+  let res: Response;
+  try {
+    res = await fetch(url, { ...init, signal });
+  } catch (e) {
+    throw new ProviderError(
+      (e as Error)?.name === "TimeoutError" ||
+        (e as Error)?.name === "AbortError"
+        ? "timeout"
+        : "network",
+    );
+  }
+  if (!res.ok || !res.body) {
+    const body = await res.text().catch(() => "");
+    throw new ProviderError(
+      kindFromStatus(res.status || 502, body),
+      retryAfterMs(res.headers.get("retry-after")),
+    );
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let nl: number;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).replace(/\r$/, "");
+        buf = buf.slice(nl + 1);
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (!data || data === "[DONE]") continue;
+        try {
+          onEvent(JSON.parse(data));
+        } catch {
+          /* a malformed event is skipped */
+        }
+      }
+    }
+  } catch (e) {
+    throw new ProviderError(
+      (e as Error)?.name === "TimeoutError" ? "timeout" : "network",
+    );
+  }
+}
 
 /** Google Gemini via the REST API. The key travels in a header, never in the URL, so it cannot end up in logs. */
 export const gemini: ProviderClient = {
@@ -124,6 +183,58 @@ export const gemini: ProviderClient = {
   },
 };
 
+gemini.stream = async (apiKey, model, req, onDelta) => {
+  const body = {
+    systemInstruction: { parts: [{ text: req.system }] },
+    contents: req.messages.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    })),
+    generationConfig: {
+      maxOutputTokens: req.maxOutputTokens,
+      temperature: 0.2,
+    },
+  };
+  let text = "";
+  let promptTokens = 0;
+  let completionTokens = 0;
+  await sendStream(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify(body),
+    },
+    req,
+    (j) => {
+      const e = j as {
+        candidates?: { content?: { parts?: { text?: string }[] } }[];
+        usageMetadata?: {
+          promptTokenCount?: number;
+          candidatesTokenCount?: number;
+        };
+      };
+      const t = (e.candidates?.[0]?.content?.parts ?? [])
+        .map((p) => p.text ?? "")
+        .join("");
+      if (t) {
+        text += t;
+        onDelta(t);
+      }
+      if (e.usageMetadata) {
+        promptTokens = e.usageMetadata.promptTokenCount ?? promptTokens;
+        completionTokens =
+          e.usageMetadata.candidatesTokenCount ?? completionTokens;
+      }
+    },
+  );
+  if (!text.trim()) throw new ProviderError("empty");
+  return { text: text.trim(), promptTokens, completionTokens };
+};
+
 /** Groq's OpenAI-compatible chat endpoint. */
 export const groq: ProviderClient = {
   id: "groq",
@@ -163,6 +274,54 @@ export const groq: ProviderClient = {
       completionTokens: json.usage?.completion_tokens ?? 0,
     };
   },
+};
+
+groq.stream = async (apiKey, model, req, onDelta) => {
+  const body = {
+    model,
+    messages: [{ role: "system", content: req.system }, ...req.messages],
+    max_tokens: req.maxOutputTokens,
+    temperature: 0.2,
+    stream: true,
+    stream_options: { include_usage: true },
+    ...(model.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" } : {}),
+  };
+  let text = "";
+  let promptTokens = 0;
+  let completionTokens = 0;
+  await sendStream(
+    "https://api.groq.com/openai/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    },
+    req,
+    (j) => {
+      const e = j as {
+        choices?: { delta?: { content?: string } }[];
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
+        x_groq?: {
+          usage?: { prompt_tokens?: number; completion_tokens?: number };
+        };
+      };
+      const t = e.choices?.[0]?.delta?.content ?? "";
+      if (t) {
+        text += t;
+        onDelta(t);
+      }
+      const u = e.usage ?? e.x_groq?.usage;
+      if (u) {
+        promptTokens = u.prompt_tokens ?? promptTokens;
+        completionTokens = u.completion_tokens ?? completionTokens;
+      }
+    },
+  );
+  if (!text.trim()) throw new ProviderError("empty");
+  return { text: text.trim(), promptTokens, completionTokens };
 };
 
 export const PROVIDERS = { gemini, groq } as const;

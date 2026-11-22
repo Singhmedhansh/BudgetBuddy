@@ -7,6 +7,8 @@ import { MESSAGES } from "@/server/ai/assistant";
 import { listChats, loadChat, loadQuota } from "@/server/ai/chats";
 import { aiStatus } from "@/server/ai/config";
 import { loadFacts } from "@/server/ai/facts";
+import { loadFinnSettings } from "@/server/ai/finn-settings";
+import { isReviewer } from "@/server/ai/reviewers";
 import { insightsFrom } from "@/server/ai/insights";
 import { starters } from "@/server/ai/suggestions";
 import { requireSpace } from "@/server/context";
@@ -42,7 +44,8 @@ export default async function AssistantPage({
     ent as EntitlementRow | null,
     now,
   ).plan;
-  const [chats, active, quota] = await Promise.all([
+  const [settings, chats, active, quota] = await Promise.all([
+    loadFinnSettings(ctx),
     listChats(ctx.supabase),
     sp.c ? loadChat(ctx.supabase, sp.c) : Promise.resolve(null),
     loadQuota(ctx.supabase, plan, now, ctx.profile.timezone),
@@ -84,6 +87,11 @@ export default async function AssistantPage({
       <PageHeader
         title={`Ask ${BRAND.assistantName}`}
         description={`${BRAND.assistantName} answers questions about your own recorded money and any money question you have. Every figure about you is checked against your records.`}
+        action={
+          isReviewer(ctx.user.email)
+            ? { href: "/app/finn-review", label: "Review queue" }
+            : undefined
+        }
       />
       <FinnWorkspace
         chats={chats}
@@ -97,6 +105,7 @@ export default async function AssistantPage({
         starters={starters(facts)}
         snapshot={snapshot}
         insights={facts ? insightsFrom(facts) : []}
+        settings={settings}
         historyReady={quota !== null}
       />
     </>

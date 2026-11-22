@@ -89,3 +89,26 @@ export function referenceFor(
     .slice(0, 3)
     .map(({ label, value, asOf, source }) => ({ label, value, asOf, source }));
 }
+
+/** The day the figures above were last checked against their sources. Move it forward whenever the list is reviewed. */
+export const REFERENCE_REVIEWED_ON = "2026-11-22";
+/** Rates are announced quarterly and tax rules yearly; a monthly look is enough to catch a change. */
+export const REFERENCE_REVIEW_EVERY_DAYS = 35;
+
+/** Whether the list is due for another look, and which sources to check. Pure; the weekly job emails the reviewers. */
+export function referenceReviewStatus(now: Date = new Date()) {
+  const ageDays = Math.floor(
+    (now.getTime() - new Date(`${REFERENCE_REVIEWED_ON}T00:00:00Z`).getTime()) /
+      86_400_000,
+  );
+  return {
+    due: ageDays >= REFERENCE_REVIEW_EVERY_DAYS,
+    ageDays,
+    reviewedOn: REFERENCE_REVIEWED_ON,
+    items: REFERENCE_DATA.map((r) => ({
+      label: r.label,
+      value: r.value,
+      source: r.source,
+    })),
+  };
+}

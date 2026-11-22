@@ -28,6 +28,8 @@ import {
   type ChatSummary,
   type Quota,
 } from "@/server/ai/chats";
+import { FinnSettings } from "@/components/app/FinnSettings";
+import type { FinnSettings as FinnSettingsData } from "@/server/ai/finn-settings";
 import type { Insight } from "@/server/ai/insights";
 import type { Starter } from "@/server/ai/suggestions";
 
@@ -43,6 +45,7 @@ interface Props {
   starters: Starter[];
   snapshot: Snapshot[];
   insights: Insight[];
+  settings: FinnSettingsData;
   /** False until migration 14 is applied: chats then work as before but are not saved. */
   historyReady: boolean;
 }
@@ -277,6 +280,7 @@ export function FinnWorkspace(p: Props) {
           </section>
         ))
       )}
+      <FinnSettings settings={p.settings} />
     </nav>
   );
 

@@ -47,4 +47,11 @@ export interface ProviderClient {
     model: string,
     req: CompletionRequest,
   ): Promise<CompletionResult>;
+  /** Same call, but text is handed over as it is written. Optional: a provider without it is called once and shown whole. */
+  stream?(
+    apiKey: string,
+    model: string,
+    req: CompletionRequest,
+    onDelta: (text: string) => void,
+  ): Promise<CompletionResult>;
 }

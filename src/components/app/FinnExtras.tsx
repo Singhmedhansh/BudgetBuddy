@@ -22,7 +22,7 @@ export function TypedText({
   text: string;
   animate: boolean;
 }) {
-  const words = text.split(/(s+)/);
+  const words = text.split(/(\s+)/);
   const [count, setCount] = useState(() =>
     animate &&
     typeof window !== "undefined" &&
@@ -114,7 +114,7 @@ export function Thumbs({
         type="button"
         aria-pressed={value === "down"}
         aria-label="Wrong or unhelpful"
-        title="Wrong or unhelpful"
+        title="Wrong or unhelpful. The question and answer are then reviewed to improve Finn."
         onClick={() => set("down")}
         className={`${base} ${value === "down" ? "text-neg-text" : "text-muted hover:text-fg"}`}
       >

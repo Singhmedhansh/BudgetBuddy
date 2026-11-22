@@ -7,27 +7,20 @@ import {
   Check,
   Gauge,
   Landmark,
+  Paperclip,
   PiggyBank,
   Plus,
   Repeat,
   Tags,
   Target,
   Wallet,
+  X,
 } from "lucide-react";
-import {
-  useActionState,
-  useEffect,
-  useOptimistic,
-  useRef,
-  useMemo,
-  useState,
-  useTransition,
-} from "react";
-import {
-  askAssistantAction,
-  type AssistantState,
-  type Turn,
-} from "@/app/app/assistant-actions";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import type { Turn } from "@/app/app/assistant-actions";
+import { RichText } from "@/components/app/RichText";
+import type { PlanId } from "@/config/plans";
 import { AssistantMark } from "@/components/app/AssistantMark";
 import { FinnVisuals } from "@/components/app/FinnVisuals";
 import {
@@ -93,21 +86,29 @@ function Chat({
   starters: Starter[];
   snapshot: Snapshot[];
 }) {
-  const [state, dispatch] = useActionState<
-    AssistantState | undefined,
-    FormData
-  >(askAssistantAction, { turns: initialTurns, chatId: initialChatId });
-  const [, startTransition] = useTransition();
-  const turns = useMemo(() => state?.turns ?? [], [state?.turns]);
-  // The person's message appears the moment they send it; it settles into the real list when the answer arrives.
-  const [shown, addOptimistic] = useOptimistic(
-    turns,
-    (cur: Turn[], q: string) => [...cur, { role: "user" as const, content: q }],
-  );
-  const pending = shown.length > turns.length;
+  const router = useRouter();
+  const [turns, setTurns] = useState<Turn[]>(initialTurns);
+  const [chatId, setChatId] = useState<string | null>(initialChatId);
+  const [error, setError] = useState<string | undefined>();
+  const [limit, setLimit] = useState<
+    { kind: "day" | "month"; plan: PlanId } | undefined
+  >();
+  // While an answer is on its way: the person's question, what Finn is doing, and the sentences released so far.
+  const [pendingQ, setPendingQ] = useState<string | null>(null);
+  const [status, setStatus] = useState("");
+  const [live, setLive] = useState("");
+  // The answer that should reveal itself word by word (only when it was not already streamed in).
+  const [typedIndex, setTypedIndex] = useState<number | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
+  const shown: Turn[] =
+    pendingQ !== null
+      ? [...turns, { role: "user" as const, content: pendingQ }]
+      : turns;
+  const pending = pendingQ !== null;
 
-  // Which saved chat this is, and how much of the plan's allowance is left (counted here as answers arrive).
-  const chatId = state?.chatId ?? initialChatId;
+  // How much of the plan's allowance is left (counted here as answers arrive).
   const answered =
     turns.filter((t) => t.role === "assistant").length -
     initialTurns.filter((t) => t.role === "assistant").length;
@@ -116,9 +117,9 @@ function Chat({
     Boolean(quota) &&
     (used >= quota!.questionsPerDay ||
       quota!.tokensMonth >= quota!.tokensPerMonth ||
-      state?.limit !== undefined);
+      limit !== undefined);
   const limitKind: "day" | "month" =
-    state?.limit?.kind ??
+    limit?.kind ??
     (quota && quota.tokensMonth >= quota.tokensPerMonth ? "month" : "day");
   const lastSaved = useRef<string>("");
   useEffect(() => {
@@ -133,13 +134,6 @@ function Chat({
   }, [chatId, turns, initialChatId, initialTurns.length, onSaved]);
 
   const [text, setText] = useState("");
-  // When an answer fails, hand the question back so nothing has to be retyped.
-  const [seen, setSeen] = useState(state);
-  if (state !== seen) {
-    setSeen(state);
-    if (state?.error && state.question) setText(state.question);
-  }
-
   const box = useRef<HTMLTextAreaElement>(null);
   const end = useRef<HTMLDivElement>(null);
 
@@ -161,20 +155,121 @@ function Chat({
           ? "auto"
           : "smooth",
       });
-  }, [shown.length, state?.error]);
+  }, [shown.length, error, live]);
 
-  function send(raw: string) {
+  async function send(raw: string) {
     const q = raw.trim();
     if (!q || pending || !available || exhausted) return;
+    const attached = file;
     setText("");
+    setFile(null);
+    setFileError("");
+    setError(undefined);
+    setLimit(undefined);
+    setLive("");
+    setStatus("");
+    setTypedIndex(null);
+    const shownQuestion = attached ? `Attached: ${attached.name}\n${q}` : q;
+    setPendingQ(shownQuestion);
     const fd = new FormData();
     fd.set("question", q);
     fd.set("history", JSON.stringify(turns));
     if (chatId) fd.set("chat", chatId);
-    startTransition(() => {
-      addOptimistic(q);
-      dispatch(fd);
-    });
+    if (attached) fd.set("file", attached);
+    const fail = (message: string, lim?: typeof limit) => {
+      setError(message);
+      setLimit(lim);
+      setText(q);
+      setPendingQ(null);
+      setLive("");
+    };
+    let streamed = false;
+    try {
+      const res = await fetch("/api/finn/ask", { method: "POST", body: fd });
+      if (res.status === 401) {
+        router.push("/login");
+        return;
+      }
+      if (!res.ok || !res.body)
+        return fail(
+          "Finn could not answer right now. Please try again in a moment.",
+        );
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let finished = false;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let nl: number;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line) continue;
+          let ev: {
+            t: string;
+            v?: string;
+            message?: string;
+            limit?: { kind: "day" | "month"; plan: PlanId };
+            answer?: string;
+            source?: Turn["source"];
+            visuals?: Turn["visuals"];
+            id?: number | null;
+            chatId?: string | null;
+          };
+          try {
+            ev = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (ev.t === "status") setStatus(ev.v ?? "");
+          else if (ev.t === "delta") {
+            streamed = true;
+            setLive((l) => l + (ev.v ?? ""));
+          } else if (ev.t === "error") {
+            finished = true;
+            fail(ev.message ?? "Finn could not answer right now.", ev.limit);
+          } else if (ev.t === "done") {
+            finished = true;
+            const next: Turn[] = [
+              ...turns,
+              { role: "user" as const, content: shownQuestion },
+              {
+                role: "assistant" as const,
+                content: ev.answer ?? "",
+                source: ev.source,
+                visuals: ev.visuals,
+                id: ev.id ?? undefined,
+              },
+            ].slice(-40);
+            setTurns(next);
+            if (!streamed) setTypedIndex(next.length - 1);
+            if (ev.chatId) setChatId(ev.chatId);
+            setPendingQ(null);
+            setLive("");
+          }
+        }
+      }
+      if (!finished)
+        fail("Finn could not answer right now. Please try again in a moment.");
+    } catch {
+      fail("Finn could not answer right now. Please try again in a moment.");
+    }
+  }
+
+  function pickFile(f: File | null) {
+    setFileError("");
+    if (!f) return setFile(null);
+    if (f.size > 3 * 1024 * 1024) {
+      setFileError("That file is over 3 MB.");
+      return setFile(null);
+    }
+    if (!/\.(pdf|csv|tsv|txt|md)$/i.test(f.name)) {
+      setFileError("Attach a PDF, CSV or text file.");
+      return setFile(null);
+    }
+    setFile(f);
   }
 
   const empty = shown.length === 0;
@@ -307,14 +402,7 @@ function Chat({
                 <li key={i} className="flex gap-3">
                   <Avatar />
                   <div className="min-w-0 max-w-[92%] flex-1">
-                    <TypedText
-                      text={t.content}
-                      animate={
-                        i === shown.length - 1 &&
-                        i >= initialTurns.length &&
-                        !state?.error
-                      }
-                    />
+                    <TypedText text={t.content} animate={i === typedIndex} />
                     {t.visuals?.length ? (
                       <FinnVisuals visuals={t.visuals} />
                     ) : null}
@@ -339,7 +427,7 @@ function Chat({
           available &&
           shown.length > 0 &&
           shown[shown.length - 1].role === "assistant" &&
-          !state?.error ? (
+          !error ? (
             <ul
               aria-label="Suggested follow-up questions"
               className="mt-4 flex flex-wrap gap-2 pl-10"
@@ -360,40 +448,54 @@ function Chat({
           {pending ? (
             <div
               role="status"
-              aria-label={`${BRAND.assistantName} is thinking`}
+              aria-label={`${BRAND.assistantName} is answering`}
               className="mt-6 flex gap-3"
             >
               <Avatar />
-              <span className="flex items-center gap-1 pt-2.5" aria-hidden>
-                {[0, 150, 300].map((d) => (
+              {live ? (
+                <div className="min-w-0 max-w-[92%] flex-1">
+                  <RichText text={live} />
                   <span
-                    key={d}
-                    style={{ animationDelay: `${d}ms` }}
-                    className="h-1.5 w-1.5 rounded-full bg-muted motion-safe:animate-pulse"
+                    aria-hidden
+                    className="ml-0.5 inline-block h-4 w-[3px] translate-y-0.5 rounded-sm bg-primary motion-safe:animate-pulse"
                   />
-                ))}
-              </span>
-              <span className="sr-only">Thinking</span>
+                </div>
+              ) : (
+                <>
+                  <span className="flex items-center gap-1 pt-2.5" aria-hidden>
+                    {[0, 150, 300].map((d) => (
+                      <span
+                        key={d}
+                        style={{ animationDelay: `${d}ms` }}
+                        className="h-1.5 w-1.5 rounded-full bg-muted motion-safe:animate-pulse"
+                      />
+                    ))}
+                  </span>
+                  <span className="pt-1.5 text-sm text-muted">
+                    {status ? status + "\u2026" : "Thinking"}
+                  </span>
+                </>
+              )}
             </div>
           ) : null}
-          {state?.error && !pending ? (
+          {error && !pending ? (
             <p
               role="alert"
               className="mt-6 rounded-xl border border-neg/30 bg-neg/10 px-4 py-3 text-sm text-neg-text"
             >
-              {state.error}
+              {error}
             </p>
           ) : null}
           <div ref={end} className="h-2" />
         </div>
       )}
 
-      {empty && state?.error && !pending ? (
+      {empty && error && !pending ? (
         <p
           role="alert"
           className="mb-3 rounded-xl border border-neg/30 bg-neg/10 px-4 py-3 text-sm text-neg-text"
         >
-          {state.error}
+          {error}
         </p>
       ) : null}
 
@@ -439,6 +541,29 @@ function Chat({
             placeholder={`Ask ${BRAND.assistantName} about your money`}
             className="block max-h-[200px] w-full resize-none bg-transparent shadow-none focus-visible:shadow-none px-4 pb-1 pt-3.5 text-[15px] leading-relaxed !outline-none placeholder:text-muted/70 disabled:cursor-not-allowed disabled:opacity-60"
           />
+          {file || fileError ? (
+            <div className="flex flex-wrap items-center gap-2 px-3 pb-1">
+              {file ? (
+                <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-line bg-sunken px-2.5 py-1 text-xs">
+                  <Paperclip size={12} aria-hidden />
+                  <span className="truncate">{file.name}</span>
+                  <button
+                    type="button"
+                    aria-label="Remove attachment"
+                    onClick={() => pickFile(null)}
+                    className="text-muted hover:text-fg"
+                  >
+                    <X size={12} aria-hidden />
+                  </button>
+                </span>
+              ) : null}
+              {fileError ? (
+                <span role="alert" className="text-xs text-neg-text">
+                  {fileError}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
           <div className="flex items-center justify-between gap-3 px-3 pb-2.5 pt-1">
             <p className="text-xs text-muted">
               <kbd className="font-sans">Enter</kbd> to send ·{" "}
@@ -451,6 +576,26 @@ function Chat({
             </p>
             {available ? (
               <span className="flex items-center gap-2">
+                <input
+                  ref={fileInput}
+                  type="file"
+                  hidden
+                  accept=".pdf,.csv,.tsv,.txt,.md,application/pdf,text/*"
+                  onChange={(e) => {
+                    pickFile(e.target.files?.[0] ?? null);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  aria-label="Attach a statement, slip or loan sheet"
+                  title="Attach a PDF, CSV or text file"
+                  disabled={exhausted || pending}
+                  onClick={() => fileInput.current?.click()}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-line text-muted transition-colors hover:border-line-strong hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Paperclip size={16} aria-hidden />
+                </button>
                 <MicButton
                   disabled={exhausted || pending}
                   onText={(v) => setText((cur) => (cur ? cur + " " : "") + v)}

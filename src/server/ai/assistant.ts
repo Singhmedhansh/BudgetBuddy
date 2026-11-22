@@ -4,6 +4,7 @@ import { detectCalculation } from "./calculators";
 import { detectScenario } from "./scenario";
 import { buildVisuals, type Visual } from "./visuals";
 import {
+  clean,
   enforceFigures,
   factsSummary,
   savingsPlan,
@@ -11,7 +12,13 @@ import {
   systemPrompt,
   type Facts,
 } from "./grounding";
-import { AiUnavailableError, generate, type RouterResult } from "./router";
+import {
+  AiUnavailableError,
+  generate,
+  generateStream,
+  type RouterResult,
+} from "./router";
+import { SentenceVerifier } from "./stream";
 import type { ChatMessage, CompletionRequest } from "./types";
 
 export type AssistantOutcome =
@@ -104,6 +111,18 @@ export interface AssistantDeps {
     monthStart: string;
   };
   loadFacts: () => Promise<Facts>;
+  /** A file the person attached to this question (text already extracted). Used for this question only, never stored. */
+  document?: { name: string; text: string };
+  /** When set, the answer is released sentence by sentence as it is written, each checked first. */
+  stream?: {
+    status?: (text: string) => void;
+    delta: (text: string) => void;
+  };
+  generateStream?: (
+    config: AiConfig,
+    req: CompletionRequest,
+    onDelta: (text: string) => void,
+  ) => Promise<RouterResult>;
   generate?: (
     config: AiConfig,
     req: CompletionRequest,
@@ -172,6 +191,7 @@ export async function ask(
       .catch(() => undefined);
 
   let facts: Facts;
+  deps.stream?.status?.("Reading your records");
   try {
     facts = await deps.loadFacts();
   } catch {
@@ -191,6 +211,16 @@ export async function ask(
   if (scenario) facts = { ...facts, scenario };
   const reference = referenceFor(q);
   if (reference.length) facts = { ...facts, reference };
+  if (deps.document)
+    facts = {
+      ...facts,
+      document: {
+        name: clean(deps.document.name, 80),
+        text: deps.document.text
+          .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]+/g, " ")
+          .slice(0, 12_000),
+      },
+    };
 
   // Only the last few turns are sent, capped in length, so a long conversation cannot inflate cost.
   const turns = history
@@ -202,8 +232,19 @@ export async function ask(
     maxOutputTokens: config.limits.maxOutputTokens,
   };
   let out: RouterResult;
+  const verifier = deps.stream
+    ? new SentenceVerifier(facts, deps.stream.delta)
+    : null;
+  deps.stream?.status?.("Working it out");
   try {
-    out = await (deps.generate ?? generate)(config, req);
+    out = verifier
+      ? await (deps.generateStream ?? generateStreamed(deps.generate))(
+          config,
+          req,
+          (t) => verifier.push(t),
+        )
+      : await (deps.generate ?? generate)(config, req);
+    verifier?.finish();
   } catch (e) {
     const trail = e instanceof AiUnavailableError ? e.trail : [];
     const kind =
@@ -234,7 +275,10 @@ export async function ask(
   // Pictures come from the verified facts, never from the model. A general answer gets one only for a what-if with numbers.
   let visuals: Visual[] = [];
   try {
-    visuals = tag === "G" && !facts.calculation ? [] : buildVisuals(q, facts);
+    visuals =
+      facts.document || (tag === "G" && !facts.calculation)
+        ? []
+        : buildVisuals(q, facts);
   } catch {
     visuals = [];
   }
@@ -244,5 +288,17 @@ export async function ask(
     verified: true,
     source: tag === "G" ? "general" : "model",
     visuals,
+  };
+}
+
+/** Streams through the gateway, or, when a test supplies its own generate, calls it once and passes the whole text on. */
+function generateStreamed(
+  custom?: AssistantDeps["generate"],
+): NonNullable<AssistantDeps["generateStream"]> {
+  if (!custom) return generateStream;
+  return async (config, req, onDelta) => {
+    const r = await custom(config, req);
+    onDelta(r.text);
+    return r;
   };
 }

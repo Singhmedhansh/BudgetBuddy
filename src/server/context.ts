@@ -26,25 +26,38 @@ export const getContext = cache(async () => {
   if (!data.user) redirect("/login");
   const tAuth = Date.now() - t0;
 
+  const wanted = (await cookies()).get(ACTIVE_SPACE_COOKIE)?.value;
+  const { profile, spaces: list, space, role } = await buildContext(supabase, data.user.id, wanted);
+  // Opt-in timing (PERF_LOG=1): durations only, never identifiers or data. Shows up in the host's function logs.
+  if (process.env.PERF_LOG === "1") console.log(`[perf] getContext auth=${tAuth}ms total=${Date.now() - t0}ms`);
+  return { supabase, user: data.user, profile, spaces: list, space, role };
+});
+
+
+type Db = NonNullable<Awaited<ReturnType<typeof createClient>>>;
+
+/**
+ * The person's profile, spaces and active space, read with a client that acts as them (so row-level security still
+ * scopes every row). Used by the request context above and by background work that signs in as the person without a
+ * browser (the weekly recap, WhatsApp).
+ */
+export async function buildContext(supabase: Db, userId: string, wantedSpaceId?: string) {
   // Three independent reads: run them together instead of one after another (each is a network round trip).
   // Membership rows are fetched for every space the person belongs to and the active one is picked locally,
   // which removes a fourth, dependent round trip. RLS still scopes every row to this user.
   const [profileRes, spacesRes, membersRes] = await Promise.all([
     supabase.rpc("ensure_profile"),
     supabase.from("financial_spaces").select("*").order("created_at"),
-    supabase.from("financial_space_members").select("space_id,role").eq("user_id", data.user.id),
+    supabase.from("financial_space_members").select("space_id,role").eq("user_id", userId),
   ]);
   const profileData = profileRes.data;
   const profile = (Array.isArray(profileData) ? profileData[0] : profileData) as Profile;
-  const list = (spacesRes.data ?? []) as Space[];
+  const spaces = (spacesRes.data ?? []) as Space[];
   // The active space is the one the person chose, if they still belong to it; otherwise the first.
-  const wanted = (await cookies()).get(ACTIVE_SPACE_COOKIE)?.value;
-  const space = list.find((s) => s.id === wanted) ?? list[0] ?? null;
+  const space = spaces.find((s) => s.id === wantedSpaceId) ?? spaces[0] ?? null;
   const role = space ? ((membersRes.data ?? []).find((m) => m.space_id === space.id)?.role as SpaceRole | undefined) ?? null : null;
-  // Opt-in timing (PERF_LOG=1): durations only, never identifiers or data. Shows up in the host's function logs.
-  if (process.env.PERF_LOG === "1") console.log(`[perf] getContext auth=${tAuth}ms total=${Date.now() - t0}ms`);
-  return { supabase, user: data.user, profile, spaces: list, space, role };
-});
+  return { profile, spaces, space, role };
+}
 
 /** For pages that need a space; sends users who have not finished setup to onboarding. */
 export async function requireSpace() {

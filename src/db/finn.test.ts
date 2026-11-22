@@ -103,3 +103,52 @@ describe("plan allowances", () => {
     expect(r.tokens_month).toBe(1100);
   });
 });
+
+describe("weekly recap opt-in", () => {
+  it("a person turns their own recap on and off, and cannot touch the send time", async () => {
+    await q(ALICE, `insert into budgetbuddy.finn_prefs (user_id, weekly_recap) values ('${ALICE}', true)`);
+    expect((await q<{ w: boolean }>(ALICE, `select weekly_recap w from budgetbuddy.finn_prefs`))[0].w).toBe(true);
+    await q(ALICE, `update budgetbuddy.finn_prefs set weekly_recap = false, updated_at = now() where user_id = '${ALICE}'`);
+    expect((await q<{ w: boolean }>(ALICE, `select weekly_recap w from budgetbuddy.finn_prefs`))[0].w).toBe(false);
+    expect(await denied(q(ALICE, `update budgetbuddy.finn_prefs set recap_sent_at = now() where user_id = '${ALICE}'`))).toBe(true);
+  });
+  it("nobody else can read or change it, or opt someone else in", async () => {
+    expect((await q<{ n: number }>(BOB, `select count(*)::int n from budgetbuddy.finn_prefs`))[0].n).toBe(0);
+    expect(await denied(q(BOB, `insert into budgetbuddy.finn_prefs (user_id, weekly_recap) values ('${ALICE}', true)`))).toBe(true);
+  });
+});
+
+describe("WhatsApp linking", () => {
+  it("starting a link returns a six-digit code and stores the number unverified", async () => {
+    const [{ r }] = await q<{ r: { code: string } }>(ALICE, `select budgetbuddy.finn_whatsapp_start('+919876543210') as r`);
+    expect(r.code).toMatch(/^[0-9]{6}$/);
+    const row = (await q<{ phone: string; verified_at: string | null }>(ALICE, `select phone, verified_at from budgetbuddy.whatsapp_links`))[0];
+    expect(row.phone).toBe("+919876543210");
+    expect(row.verified_at).toBeNull();
+  });
+  it("rejects a number without a country code", async () => {
+    expect(await denied(q(BOB, `select budgetbuddy.finn_whatsapp_start('9876543210')`))).toBe(true);
+  });
+  it("a person cannot write the table directly, read the code, or see someone else's link", async () => {
+    expect(await denied(q(ALICE, `update budgetbuddy.whatsapp_links set verified_at = now()`))).toBe(true);
+    expect(await denied(q(ALICE, `select code from budgetbuddy.whatsapp_links`))).toBe(true);
+    expect((await q<{ n: number }>(BOB, `select count(*)::int n from budgetbuddy.whatsapp_links`))[0].n).toBe(0);
+  });
+  it("a number the server has verified cannot be claimed by someone else", async () => {
+    await db.exec(`update budgetbuddy.whatsapp_links set verified_at = now(), code = null where user_id = '${ALICE}'`);
+    expect(await denied(q(BOB, `select budgetbuddy.finn_whatsapp_start('+919876543210')`))).toBe(true);
+  });
+  it("a person can unlink their own number", async () => {
+    await q(ALICE, `delete from budgetbuddy.whatsapp_links`);
+    expect((await q<{ n: number }>(ALICE, `select count(*)::int n from budgetbuddy.whatsapp_links`))[0].n).toBe(0);
+  });
+  it("the handled-message list is not open to people at all", async () => {
+    expect(await denied(q(ALICE, `select * from budgetbuddy.whatsapp_seen`))).toBe(true);
+  });
+});
+
+describe("review marks", () => {
+  it("a person cannot mark their own answer as reviewed", async () => {
+    expect(await denied(q(ALICE, `update budgetbuddy.finn_messages set reviewed_at = now()`))).toBe(true);
+  });
+});
