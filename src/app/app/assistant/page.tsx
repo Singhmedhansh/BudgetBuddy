@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BRAND } from "@/config/brand";
 import { PageHeader } from "@/components/app/ui";
 import { AssistantChat } from "@/components/app/AssistantChat";
 import { MESSAGES } from "@/server/ai/assistant";
@@ -12,7 +13,7 @@ export default async function AssistantPage() {
   const status = aiStatus();
   return (
     <>
-      <PageHeader title="Assistant" description="Ask questions about your own recorded money. It never invents figures." />
+      <PageHeader title={`Ask ${BRAND.assistantName}`} description={`${BRAND.assistantName} answers questions about your own recorded money and works out savings goals. Every figure is checked against your records.`} />
       <div className="mx-auto max-w-3xl">
         <AssistantChat available={status.available} unavailableMessage={MESSAGES.disabled} />
       </div>

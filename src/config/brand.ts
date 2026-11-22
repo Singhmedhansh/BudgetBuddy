@@ -7,5 +7,7 @@ export const BRAND = {
   name: "FinTrack",
   tagline: "Your finances. In focus.",
   description: "Track expenses, plan budgets, manage subscriptions and understand your finances in one place.",
+  /** The assistant's name, shown on the Assistant page and in the chat. */
+  assistantName: "Finn",
   supportAnchor: "FinTrack support",
 } as const;

@@ -1,7 +1,7 @@
 import { shares } from "@/domain/analytics";
 import { periodTotals, spendingByCategory, type LedgerAccount } from "@/domain/ledger";
 import { toDecimalString } from "@/domain/money";
-import { localDate } from "@/domain/period";
+import { localDate, monthRange } from "@/domain/period";
 import type { requireSpace } from "@/server/context";
 import { currentMonth, listAccounts, listBudgets, listCategories, postingsInRange } from "@/server/queries";
 import { ACCOUNT_TYPE_LABEL, isLiability } from "@/server/types";
@@ -28,6 +28,24 @@ export async function loadFacts(ctx: Ctx): Promise<Facts> {
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5);
 
+  // The last three full months, for "how long to save for X": income minus spending, averaged by code.
+  let monthlyNet: Facts["monthlyNet"];
+  {
+    const nets: number[] = [];
+    const ranges = [1, 2, 3].map((back) => {
+      const d = new Date(Date.UTC(month.year, month.month - 1 - back, 1));
+      return monthRange(d.getUTCFullYear(), d.getUTCMonth() + 1, profile.timezone);
+    });
+    const earlier = await postingsInRange(ctx, ranges[2].from, ranges[0].to);
+    const earlierLedger: LedgerAccount[] = [...earlier.kinds].map(([id, kind]) => ({ id, kind, currency: cur }));
+    for (const r of ranges) {
+      const t = periodTotals(earlierLedger, earlier.postings, r.from, r.to);
+      if (t.income > 0 || t.expenses > 0) nets.push(t.income - t.expenses);
+    }
+    if (nets.length) monthlyNet = { amount: dec(Math.round(nets.reduce((a, b) => a + b, 0) / nets.length)), months: nets.length };
+    else if (totals.income > 0 || totals.expenses > 0) monthlyNet = { amount: dec(totals.income - totals.expenses), months: 1 };
+  }
+
   const held = accounts.filter((a) => !isLiability(a.type)).reduce((s, a) => s + a.balance, 0);
   const owed = accounts.filter((a) => isLiability(a.type)).reduce((s, a) => s + a.balance, 0);
   const today = localDate(new Date(), profile.timezone);
@@ -35,6 +53,7 @@ export async function loadFacts(ctx: Ctx): Promise<Facts> {
     asOf: `${today.year}-${String(today.month).padStart(2, "0")}-${String(today.day).padStart(2, "0")}`,
     space: { name: clean(space.name), currency: cur, sample: Boolean(space.is_sample) },
     netWorth: dec(held - owed),
+    monthlyNet,
     held: dec(held),
     owed: dec(owed),
     accounts: accounts.slice(0, 15).map((a) => ({ name: clean(a.name), type: ACCOUNT_TYPE_LABEL[a.type], balance: dec(a.balance) })),

@@ -1,5 +1,5 @@
 import { aiStatus, readAiConfig, type AiConfig } from "./config";
-import { factsSummary, systemPrompt, unverifiedFigures, type Facts } from "./grounding";
+import { factsSummary, savingsPlan, systemPrompt, unverifiedFigures, type Facts } from "./grounding";
 import { AiUnavailableError, generate, type RouterResult } from "./router";
 import type { ChatMessage, CompletionRequest } from "./types";
 
@@ -90,6 +90,9 @@ export async function ask(question: string, deps: AssistantDeps, history: ChatMe
     await settle("error", undefined, { kind: "facts", attempts: 0, rateLimited: 0 });
     return fail("unavailable");
   }
+
+  const plan = savingsPlan(q, facts);
+  if (plan) facts = { ...facts, savingsPlan: plan };
 
   // Only the last few turns are sent, capped in length, so a long conversation cannot inflate cost.
   const turns = history.slice(-4).map((m) => ({ role: m.role, content: m.content.slice(0, 800) }));

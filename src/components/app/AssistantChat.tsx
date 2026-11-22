@@ -1,8 +1,10 @@
 "use client";
 
-import { ArrowUp, Check, Copy, Gauge, Landmark, Plus, Sparkles, Tags, Wallet } from "lucide-react";
+import { ArrowUp, Check, Copy, Gauge, Landmark, PiggyBank, Plus, Tags, Wallet } from "lucide-react";
 import { useActionState, useEffect, useOptimistic, useRef, useState, useTransition } from "react";
 import { askAssistantAction, type AssistantState, type Turn } from "@/app/app/assistant-actions";
+import { AssistantMark } from "@/components/app/AssistantMark";
+import { BRAND } from "@/config/brand";
 
 const MAX = 600;
 const EXAMPLES = [
@@ -10,13 +12,12 @@ const EXAMPLES = [
   { text: "Which budget is closest to its limit?", Icon: Gauge },
   { text: "What is my net worth right now?", Icon: Landmark },
   { text: "What were my biggest spending categories?", Icon: Tags },
+  { text: "How many months to save for a 7K purchase?", Icon: PiggyBank },
 ] as const;
 
 function Avatar() {
   return (
-    <span aria-hidden className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-sage text-primary">
-      <Sparkles size={14} />
-    </span>
+    <AssistantMark size={28} className="mt-0.5 shrink-0" />
   );
 }
 
@@ -100,10 +101,9 @@ function Chat({ available, unavailableMessage, onNew }: { available: boolean; un
 
       {empty ? (
         <div className="flex flex-1 flex-col items-center justify-center py-8 text-center">
-          <span aria-hidden className="grid h-12 w-12 place-items-center rounded-full bg-sage text-primary">
-            <Sparkles size={22} />
-          </span>
-          <h2 className="mt-4 font-display text-2xl leading-tight sm:text-3xl">What would you like to know about your money?</h2>
+          <AssistantMark size={56} />
+          <p className="mt-3 font-display text-lg">{BRAND.assistantName}</p>
+          <h2 className="mt-1 font-display text-2xl leading-tight sm:text-3xl">What would you like to know about your money?</h2>
           <p className="mt-2 max-w-[46ch] text-sm leading-relaxed text-muted">Ask in plain words. Every figure in an answer is checked against your own records before you see it.</p>
           {available ? (
             <ul className="mt-8 grid w-full max-w-xl gap-2.5 sm:grid-cols-2">
@@ -150,7 +150,7 @@ function Chat({ available, unavailableMessage, onNew }: { available: boolean; un
             )}
           </ol>
           {pending ? (
-            <div role="status" aria-label="The assistant is thinking" className="mt-6 flex gap-3">
+            <div role="status" aria-label={`${BRAND.assistantName} is thinking`} className="mt-6 flex gap-3">
               <Avatar />
               <span className="flex items-center gap-1 pt-2.5" aria-hidden>
                 {[0, 150, 300].map((d) => (
@@ -202,7 +202,7 @@ function Chat({ available, unavailableMessage, onNew }: { available: boolean; un
             }}
             disabled={!available}
             placeholder="Ask about your own money"
-            className="block max-h-[200px] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[15px] leading-relaxed !outline-none placeholder:text-muted/70 disabled:cursor-not-allowed disabled:opacity-60"
+            className="block max-h-[200px] w-full resize-none bg-transparent shadow-none focus-visible:shadow-none px-4 pb-1 pt-3.5 text-[15px] leading-relaxed !outline-none placeholder:text-muted/70 disabled:cursor-not-allowed disabled:opacity-60"
           />
           <div className="flex items-center justify-between gap-3 px-3 pb-2.5 pt-1">
             <p className="text-xs text-muted">
@@ -216,7 +216,7 @@ function Chat({ available, unavailableMessage, onNew }: { available: boolean; un
             ) : null}
           </div>
         </form>
-        <p className="mt-2 px-1 text-center text-xs text-muted">Answers use only figures from your recorded transactions. It cannot see individual transactions.</p>
+        <p className="mt-2 px-1 text-center text-xs text-muted">{BRAND.assistantName} uses only figures from your recorded transactions and checks every number before showing it. It cannot see individual transactions.</p>
       </div>
     </div>
   );
