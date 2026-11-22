@@ -37,7 +37,7 @@ async function TrialPill({ supabase }: { supabase: Awaited<ReturnType<typeof get
   const t = await loadTrialStatus(supabase);
   if (!t.trialing || !t.endsAt) return null;
   return (
-    <Link href="/app/settings/billing" className="rounded-full bg-pos/15 px-2.5 py-1 text-xs font-medium text-pos-text transition-colors hover:bg-pos/25">
+    <Link href="/app/billing" className="rounded-full bg-pos/15 px-2.5 py-1 text-xs font-medium text-pos-text transition-colors hover:bg-pos/25">
       Free trial · {trialCountdown(t.endsAt, new Date()).label.toLowerCase()}
     </Link>
   );

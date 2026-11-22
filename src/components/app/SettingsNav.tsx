@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, CircleUserRound, CreditCard, Link2, ShieldCheck, SlidersHorizontal, Database } from "lucide-react";
+import { Bell, CircleUserRound, Link2, ShieldCheck, SlidersHorizontal, Database } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -9,7 +9,6 @@ export const SETTINGS_LINKS = [
   { href: "/app/settings/preferences", label: "Preferences", Icon: SlidersHorizontal },
   { href: "/app/settings/security", label: "Security", Icon: ShieldCheck },
   { href: "/app/settings/notifications", label: "Notifications", Icon: Bell },
-  { href: "/app/settings/billing", label: "Plan and billing", Icon: CreditCard },
   { href: "/app/settings/connected", label: "Connected accounts", Icon: Link2 },
   { href: "/app/settings/privacy", label: "Data and privacy", Icon: Database },
 ] as const;

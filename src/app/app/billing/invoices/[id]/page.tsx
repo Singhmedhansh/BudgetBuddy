@@ -28,7 +28,7 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   return (
     <article aria-labelledby="invoice-title" className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <Link href="/app/settings/billing" className="text-sm font-medium text-primary underline-offset-2 hover:underline">
+        <Link href="/app/billing" className="text-sm font-medium text-primary underline-offset-2 hover:underline">
           Back to billing
         </Link>
         <PrintButton />

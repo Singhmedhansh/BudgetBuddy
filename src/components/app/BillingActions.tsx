@@ -120,7 +120,7 @@ export function CheckoutPanel({ razorpay, paypal, paypalTrial, defaultProvider, 
     setBusy(false);
     if (!r.ok) return setNote({ kind: "error", text: r.data.message ?? "Could not check right now. Please try again." });
     setNote(r.data.paid ? { kind: "info", text: "Payment confirmed. FinTrack One is active." } : r.data.status === "processing" ? { kind: "info", text: "Payment found. Your plan will switch on shortly." } : { kind: "info", text: "No completed payment found. If money left your account, contact support and we will sort it out." });
-    if (r.data.paid) router.push("/app/settings/billing?checkout=success");
+    if (r.data.paid) router.push("/app/billing?checkout=success");
     else router.refresh();
   }
 
@@ -156,7 +156,7 @@ export function CheckoutPanel({ razorpay, paypal, paypalTrial, defaultProvider, 
           const v = await post<{ status?: string }>("/api/billing/razorpay/verify", resp);
           setNote(v.ok ? { kind: "info", text: v.data.status === "active" ? (r.data.trial ? "You are all set. Your free trial has started." : "Payment confirmed. FinTrack One is active.") : "Payment received. Your plan will switch on as soon as the bank confirms it." } : { kind: "error", text: v.data.message ?? "We could not verify this payment." });
           setBusy(false);
-          if (v.ok && v.data.status === "active") router.push("/app/settings/billing?checkout=success");
+          if (v.ok && v.data.status === "active") router.push("/app/billing?checkout=success");
           else router.refresh();
         },
       });

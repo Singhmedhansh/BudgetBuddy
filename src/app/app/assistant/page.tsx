@@ -6,7 +6,7 @@ import { MESSAGES } from "@/server/ai/assistant";
 import { aiStatus } from "@/server/ai/config";
 import { requireSpace } from "@/server/context";
 
-export const metadata: Metadata = { title: "Assistant" };
+export const metadata: Metadata = { title: "Finn" };
 
 export default async function AssistantPage() {
   await requireSpace();

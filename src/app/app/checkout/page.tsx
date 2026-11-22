@@ -18,7 +18,7 @@ export default async function CheckoutPage() {
   ]);
   const entitlement = resolveEntitlement(ent as EntitlementRow | null, new Date());
   // Someone already on FinTrack One manages their plan in Plan and billing; a lapsed plan can check out again.
-  if (entitlement.plan === "pro" && entitlement.reason !== "lapsed") redirect("/app/settings/billing");
+  if (entitlement.plan === "pro" && entitlement.reason !== "lapsed") redirect("/app/billing");
 
   const providers = checkoutProviders();
   const one = planById("pro");
@@ -35,7 +35,7 @@ export default async function CheckoutPage() {
       <PageHeader
         title={trialEligible ? `Try ${one.name} free for ${TRIAL_DAYS} days` : `Upgrade to ${one.name}`}
         description={one.summary}
-        back={{ href: "/app/settings/billing", label: "Plan and billing" }}
+        back={{ href: "/app/billing", label: "Plan and billing" }}
       />
       {providers.testMode && (providers.razorpay.length > 0 || providers.paypal.length > 0) ? (
         <p role="note" className="mb-6 rounded-md border border-warn/50 bg-warn/10 px-3 py-2.5 text-sm text-warn-text">

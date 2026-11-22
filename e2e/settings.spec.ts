@@ -20,7 +20,7 @@ async function toggle(page: import("@playwright/test").Page, name: string | RegE
 }
 const needMigration = () => test.skip(!migrated, "migration 9 is not applied to this project yet");
 
-const SETTINGS_PAGES = ["/app/settings", "/app/settings/preferences", "/app/settings/security", "/app/settings/notifications", "/app/settings/billing", "/app/settings/connected", "/app/settings/privacy"];
+const SETTINGS_PAGES = ["/app/settings", "/app/settings/preferences", "/app/settings/security", "/app/settings/notifications", "/app/settings/connected", "/app/settings/privacy"];
 
 async function open(page: Page, path: string) {
   await page.goto(path);
@@ -41,7 +41,7 @@ test.describe("settings area", () => {
 
   test("every settings section can be reached from the navigation", async ({ page }) => {
     await open(page, "/app/settings");
-    for (const label of ["Preferences", "Security", "Notifications", "Plan and billing", "Connected accounts", "Data and privacy", "Profile"]) {
+    for (const label of ["Preferences", "Security", "Notifications", "Connected accounts", "Data and privacy", "Profile"]) {
       await page.getByRole("navigation", { name: "Settings" }).getByRole("link", { name: label }).click();
       await expect(page.getByRole("navigation", { name: "Settings" }).getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
     }
@@ -222,7 +222,7 @@ test.describe("sign-in options that are not configured stay hidden", () => {
 test.describe("assistant", () => {
   test("is visibly not switched on until credentials exist, and sends nothing", async ({ page }) => {
     await open(page, "/app/assistant");
-    await expect(page.getByRole("heading", { name: "Assistant", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Ask Finn", level: 1 })).toBeVisible();
     await expect(page.getByText(/not switched on yet/i)).toBeVisible();
     await expect(page.getByLabel("Your question")).toBeDisabled();
     await expect(page.getByRole("button", { name: "Ask" })).toHaveCount(0);

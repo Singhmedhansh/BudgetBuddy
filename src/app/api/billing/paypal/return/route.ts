@@ -12,11 +12,11 @@ import { BillingError } from "@/server/payments/types";
  * signed-in person and to the plan and price on record, and only then records it.
  */
 export async function GET(request: NextRequest) {
-  const done = (state: string) => NextResponse.redirect(new URL(`/app/settings/billing?checkout=${state}`, request.nextUrl.origin));
+  const done = (state: string) => NextResponse.redirect(new URL(`/app/billing?checkout=${state}`, request.nextUrl.origin));
   const id = request.nextUrl.searchParams.get("subscription_id") ?? "";
   if (!/^I-[A-Z0-9]+$/.test(id)) return done("failed");
   const session = await currentUser();
-  if (!session) return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent("/app/settings/billing")}`, request.nextUrl.origin));
+  if (!session) return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent("/app/billing")}`, request.nextUrl.origin));
   const cfg = paypalConfig();
   const admin = createAdminClient();
   if (!cfg || !admin) return done("failed");
