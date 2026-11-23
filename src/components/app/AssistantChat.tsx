@@ -137,7 +137,7 @@ function Chat({
     if (!initialChatId && !compact)
       window.history.replaceState(null, "", "/app/assistant?c=" + chatId);
     onSaved(chatId, turns.find((t) => t.role === "user")?.content ?? "");
-  }, [chatId, turns, initialChatId, initialTurns.length, onSaved]);
+  }, [chatId, turns, initialChatId, initialTurns.length, onSaved, compact]);
 
   const [text, setText] = useState("");
   const box = useRef<HTMLTextAreaElement>(null);
@@ -157,9 +157,11 @@ function Chat({
     if (shown.length > 0)
       end.current?.scrollIntoView({
         block: "end",
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "auto"
-          : "smooth",
+        // Follow a streaming answer without animation (a smooth scroll on every sentence lags); animate otherwise.
+        behavior:
+          live || window.matchMedia("(prefers-reduced-motion: reduce)").matches
+            ? "auto"
+            : "smooth",
       });
   }, [shown.length, error, live]);
 
@@ -182,6 +184,7 @@ function Chat({
     fd.set("history", JSON.stringify(turns));
     if (chatId) fd.set("chat", chatId);
     if (attached) fd.set("file", attached);
+    if (compact) fd.set("brief", "1");
     const fail = (message: string, lim?: typeof limit) => {
       setError(message);
       setLimit(lim);
@@ -190,6 +193,8 @@ function Chat({
       setLive("");
     };
     let streamed = false;
+    const sentAt = performance.now();
+    let firstDeltaMs = 0;
     try {
       const res = await fetch("/api/finn/ask", { method: "POST", body: fd });
       if (res.status === 401) {
@@ -223,6 +228,7 @@ function Chat({
             visuals?: Turn["visuals"];
             id?: number | null;
             proposal?: boolean;
+            timing?: Record<string, number>;
             chatId?: string | null;
           };
           try {
@@ -232,6 +238,8 @@ function Chat({
           }
           if (ev.t === "status") setStatus(ev.v ?? "");
           else if (ev.t === "delta") {
+            if (!streamed)
+              firstDeltaMs = Math.round(performance.now() - sentAt);
             streamed = true;
             setLive((l) => l + (ev.v ?? ""));
           } else if (ev.t === "error") {
@@ -253,6 +261,12 @@ function Chat({
             setTurns(next);
             if (!streamed) setTypedIndex(next.length - 1);
             if (ev.proposal) setFreeAnswers((n) => n + 1);
+            // Stage timings from the server, kept for support and for measuring speed in the browser console.
+            (window as unknown as { __finnTiming?: unknown }).__finnTiming = {
+              ...ev.timing,
+              firstDeltaClientMs: firstDeltaMs,
+              doneClientMs: Math.round(performance.now() - sentAt),
+            };
             if (ev.chatId) setChatId(ev.chatId);
             setPendingQ(null);
             setLive("");

@@ -11,6 +11,10 @@ import {
 import { AssistantChat } from "@/components/app/AssistantChat";
 import { AssistantMark } from "@/components/app/AssistantMark";
 import { BRAND } from "@/config/brand";
+import {
+  starters as defaultStarters,
+  type Starter,
+} from "@/server/ai/suggestions";
 
 /** Pages where the floating chat would only get in the way: Finn's own page, setup and payment. */
 const HIDDEN_ON = [
@@ -18,6 +22,33 @@ const HIDDEN_ON = [
   "/app/onboarding",
   "/app/checkout",
   "/app/finn-review",
+];
+
+/** Questions that fit the page the person is on, shown first. */
+const PAGE_STARTERS: [string, Starter[]][] = [
+  [
+    "/app/budgets",
+    [{ text: "Am I on track with my budgets this month?", kind: "budget" }],
+  ],
+  ["/app/bills", [{ text: "What bills are coming up?", kind: "bills" }]],
+  [
+    "/app/subscriptions",
+    [{ text: "How much do my subscriptions cost me a year?", kind: "subs" }],
+  ],
+  ["/app/goals", [{ text: "How are my savings goals going?", kind: "goals" }]],
+  [
+    "/app/analytics",
+    [{ text: "Where did most of my money go?", kind: "spend" }],
+  ],
+  [
+    "/app/transactions",
+    [{ text: "Which category is my biggest expense?", kind: "category" }],
+  ],
+  ["/app/debt", [{ text: "How much do I owe in total?", kind: "worth" }]],
+  [
+    "/app/forecast",
+    [{ text: "Am I spending faster than usual this month?", kind: "pace" }],
+  ],
 ];
 
 /**
@@ -34,18 +65,28 @@ export function FinnWidget() {
   const [session, setSession] = useState(0);
   const [chatId, setChatId] = useState<string | null>(null);
 
+  const [loading, setLoading] = useState(false);
   const load = useCallback(() => {
+    if (loading || data) return;
+    setLoading(true);
     setFailed(false);
-    loadFinnWidgetAction().then(setData, () => setFailed(true));
-  }, []);
+    loadFinnWidgetAction().then(
+      (d) => {
+        setData(d);
+        setLoading(false);
+      },
+      () => {
+        setFailed(true);
+        setLoading(false);
+      },
+    );
+  }, [loading, data]);
 
   function toggle() {
     const next = !open;
     setOpen(next);
-    if (next && !everOpened) {
-      setEverOpened(true);
-      load();
-    }
+    if (next && !everOpened) setEverOpened(true);
+    if (next) load();
   }
 
   useEffect(() => {
@@ -58,6 +99,14 @@ export function FinnWidget() {
   }, [open]);
 
   if (HIDDEN_ON.some((p) => path.startsWith(p))) return null;
+
+  // The page's own question first, then the personal ones once they have loaded, then the general ones.
+  const pageQs = PAGE_STARTERS.find(([p]) => path.startsWith(p))?.[1] ?? [];
+  const base = data?.starters ?? defaultStarters(null);
+  const pageStarters = [
+    ...pageQs,
+    ...base.filter((b) => !pageQs.some((q) => q.text === b.text)),
+  ].slice(0, 4);
 
   return (
     <>
@@ -105,47 +154,34 @@ export function FinnWidget() {
               <X size={17} aria-hidden />
             </button>
           </header>
-          <div className="min-h-0 flex-1">
-            {data ? (
-              <AssistantChat
-                key={session}
-                compact
-                available={data.available}
-                unavailableMessage={data.unavailableMessage}
-                name={data.name}
-                starters={data.starters.slice(0, 4)}
-                snapshot={[]}
-                initialTurns={[]}
-                initialChatId={null}
-                quota={data.quota}
-                insights={data.insights}
-                onSaved={(id) => setChatId(id)}
-                onNew={() => {
-                  setChatId(null);
-                  setSession((s) => s + 1);
-                }}
-              />
-            ) : failed ? (
-              <div className="grid h-full place-items-center p-6 text-center text-sm text-muted">
-                <div>
-                  <p>{BRAND.assistantName} could not load just now.</p>
-                  <button
-                    type="button"
-                    onClick={load}
-                    className="mt-3 rounded-full border border-line-strong px-4 py-1.5 font-medium text-fg hover:border-primary"
-                  >
-                    Try again
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3 p-4" aria-busy="true">
-                <div className="h-10 w-10 animate-pulse rounded-xl bg-line" />
-                <div className="h-5 w-40 animate-pulse rounded bg-line" />
-                <div className="h-12 animate-pulse rounded-xl bg-line" />
-                <div className="h-12 animate-pulse rounded-xl bg-line" />
-              </div>
-            )}
+          <div className="relative min-h-0 flex-1">
+            <AssistantChat
+              key={session}
+              compact
+              available={data?.available ?? true}
+              unavailableMessage={data?.unavailableMessage ?? ""}
+              name={data?.name ?? null}
+              starters={pageStarters}
+              snapshot={[]}
+              initialTurns={[]}
+              initialChatId={null}
+              quota={data?.quota ?? null}
+              insights={data?.insights ?? []}
+              onSaved={(id) => setChatId(id)}
+              onNew={() => {
+                setChatId(null);
+                setSession((s) => s + 1);
+              }}
+            />
+            {failed ? (
+              <button
+                type="button"
+                onClick={load}
+                className="absolute right-3 top-14 rounded-full border border-line bg-surface px-3 py-1 text-xs text-muted hover:text-fg"
+              >
+                Could not load your details. Retry
+              </button>
+            ) : null}
           </div>
         </section>
       ) : null}
@@ -153,6 +189,9 @@ export function FinnWidget() {
       <button
         type="button"
         onClick={toggle}
+        onPointerEnter={load}
+        onFocus={load}
+        onTouchStart={load}
         aria-expanded={open}
         aria-label={open ? "Close Finn" : `Ask ${BRAND.assistantName}`}
         className={`group fixed bottom-24 right-4 z-40 items-center gap-2.5 rounded-full bg-primary py-2 pl-2 pr-2 text-primary-fg shadow-float transition-all hover:-translate-y-0.5 hover:bg-primary-hover active:scale-95 md:bottom-7 md:right-7 md:pr-4 ${open ? "hidden md:flex md:pointer-events-none md:opacity-0" : "flex"}`}

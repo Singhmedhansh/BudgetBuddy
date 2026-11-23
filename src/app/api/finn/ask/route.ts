@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
     /* a malformed history field is an empty conversation */
   }
   const file = form.get("file");
+  const brief = form.get("brief") === "1";
 
   const enc = new TextEncoder();
   const body = new ReadableStream({
@@ -65,6 +66,13 @@ export async function POST(request: NextRequest) {
         } catch {
           /* the person closed the tab */
         }
+      };
+      // Say something at once: the person should see Finn react before any database work starts.
+      send({ t: "status", v: "Thinking" });
+      const t0 = performance.now();
+      const marks: Record<string, number> = {};
+      const mark = (k: string) => {
+        marks[k] = Math.round(performance.now() - t0);
       };
       try {
         let doc: { name: string; text: string } | undefined;
@@ -114,13 +122,19 @@ export async function POST(request: NextRequest) {
         }
 
         const usage: UsageStore = usageStoreFor(ctx.supabase);
+        // Start reading their records now: the plan lookup below and the records load run side by side.
+        const factsNow = loadFacts(ctx);
+        factsNow.catch(() => undefined);
         const { plan, limits } = await planLimitsFor(ctx);
+        mark("plan");
         const out = await ask(
           question,
           {
             usage,
             plan: limits,
-            loadFacts: () => loadFacts(ctx),
+            loadFacts: () => factsNow,
+            brief,
+            trace: mark,
             document: doc,
             stream: {
               status: (v) => send({ t: "status", v }),
@@ -162,6 +176,8 @@ export async function POST(request: NextRequest) {
           visuals: out.visuals ?? [],
           id: saved?.answerId ?? null,
           chatId: saved?.chatId ?? chatId,
+          // Stage timings in milliseconds from the start of the request. Names and numbers only.
+          timing: { ...marks, total: Math.round(performance.now() - t0) },
         });
       } catch {
         send({ t: "error", message: MESSAGES.unavailable });

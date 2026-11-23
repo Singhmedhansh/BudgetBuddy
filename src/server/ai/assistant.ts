@@ -111,6 +111,10 @@ export interface AssistantDeps {
     monthStart: string;
   };
   loadFacts: () => Promise<Facts>;
+  /** A smaller chat window: shorter answers, which are also faster. */
+  brief?: boolean;
+  /** Called as each stage finishes, for timing. Receives only a stage name. */
+  trace?: (stage: "reserved" | "facts" | "first_text" | "model_done") => void;
   /** A file the person attached to this question (text already extracted). Used for this question only, never stored. */
   document?: { name: string; text: string };
   /** When set, the answer is released sentence by sentence as it is written, each checked first. */
@@ -166,6 +170,7 @@ export async function ask(
     tokensPerDay: config.limits.tokensPerDay,
     plan: deps.plan,
   });
+  deps.trace?.("reserved");
   if (!slot.allowed) return fail(slot.reason);
 
   const now = deps.now ?? Date.now;
@@ -194,6 +199,7 @@ export async function ask(
   deps.stream?.status?.("Reading your records");
   try {
     facts = await deps.loadFacts();
+    deps.trace?.("facts");
   } catch {
     await settle("error", undefined, {
       kind: "facts",
@@ -227,11 +233,14 @@ export async function ask(
     .slice(-4)
     .map((m) => ({ role: m.role, content: m.content.slice(0, 800) }));
   const req: CompletionRequest = {
-    system: systemPrompt(facts),
+    system: systemPrompt(facts, { brief: deps.brief }),
     messages: [...turns, { role: "user", content: q }],
-    maxOutputTokens: config.limits.maxOutputTokens,
+    maxOutputTokens: deps.brief
+      ? Math.min(config.limits.maxOutputTokens, 280)
+      : config.limits.maxOutputTokens,
   };
   let out: RouterResult;
+  let firstText = false;
   const verifier = deps.stream
     ? new SentenceVerifier(facts, deps.stream.delta)
     : null;
@@ -241,10 +250,17 @@ export async function ask(
       ? await (deps.generateStream ?? generateStreamed(deps.generate))(
           config,
           req,
-          (t) => verifier.push(t),
+          (t) => {
+            if (!firstText) {
+              firstText = true;
+              deps.trace?.("first_text");
+            }
+            verifier.push(t);
+          },
         )
       : await (deps.generate ?? generate)(config, req);
     verifier?.finish();
+    deps.trace?.("model_done");
   } catch (e) {
     const trail = e instanceof AiUnavailableError ? e.trail : [];
     const kind =
