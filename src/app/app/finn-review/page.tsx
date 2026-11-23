@@ -44,7 +44,7 @@ export default async function FinnReviewPage() {
       .limit(50);
     if (error)
       problem =
-        "The review queue needs the latest database update (migration 16).";
+        `The review queue could not load (${error.code ?? "error"}: ${error.message}). It needs migrations 16 and 17.`;
     else {
       const answers = (data ?? []) as Row[];
       const convoIds = [...new Set(answers.map((a) => a.conversation_id))];
