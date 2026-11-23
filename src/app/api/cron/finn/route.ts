@@ -36,6 +36,12 @@ export async function GET(request: NextRequest) {
 
   const origin =
     process.env.NEXT_PUBLIC_SITE_URL ?? "https://getfintrack.online";
+  // Shared answers older than a week are dropped; the table stays small.
+  await admin
+    .from("finn_answer_cache")
+    .delete()
+    .lt("created_at", new Date(Date.now() - 7 * 86_400_000).toISOString());
+
   const out = {
     recap: { due: 0, sent: 0, skipped: 0, failed: 0, email: emailConfigured() },
     reviewers: { notified: 0 },

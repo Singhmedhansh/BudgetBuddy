@@ -688,7 +688,7 @@ function Chat({
 }
 
 export interface AssistantChatProps {
-  /** The small chat inside the floating panel: no page-sized spacing, scrolls on its own, never touches the address bar. */
+  /** The small chat inside the floating panel: tighter spacing, scrolls on its own, never touches the address bar. */
   compact?: boolean;
   available: boolean;
   unavailableMessage: string;

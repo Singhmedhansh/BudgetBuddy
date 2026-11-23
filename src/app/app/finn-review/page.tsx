@@ -6,6 +6,7 @@ import { BRAND } from "@/config/brand";
 import { referenceReviewStatus } from "@/config/reference-data";
 import { createAdminClient } from "@/server/admin";
 import { isReviewer } from "@/server/ai/reviewers";
+import { loadModelUsage } from "@/server/ai/usage-panel";
 import { requireSpace } from "@/server/context";
 
 export const metadata: Metadata = { title: "Finn review queue" };
@@ -29,6 +30,8 @@ export default async function FinnReviewPage() {
   const admin = createAdminClient();
   const ref = referenceReviewStatus();
 
+  const usage = admin ? await loadModelUsage(admin) : null;
+
   let rows: (Row & { question: string | null })[] = [];
   let problem: string | null = null;
   if (!admin)
@@ -43,8 +46,7 @@ export default async function FinnReviewPage() {
       .order("created_at", { ascending: false })
       .limit(50);
     if (error)
-      problem =
-        `The review queue could not load (${error.code ?? "error"}: ${error.message}). It needs migrations 16 and 17.`;
+      problem = `The review queue could not load (${error.code ?? "error"}: ${error.message}). It needs migrations 16 and 17.`;
     else {
       const answers = (data ?? []) as Row[];
       const convoIds = [...new Set(answers.map((a) => a.conversation_id))];
@@ -79,6 +81,51 @@ export default async function FinnReviewPage() {
         description="Answers marked thumbs-down, newest first. Look for a pattern, fix the prompt or the checks, then mark them reviewed."
         back={{ href: "/app/assistant", label: "Back to Finn" }}
       />
+      {usage ? (
+        <section
+          aria-label="Free quota used in the last 24 hours"
+          className="mb-6 rounded-2xl border border-line bg-surface p-4 text-sm"
+        >
+          <h2 className="font-semibold">Model use, last 24 hours</h2>
+          <dl className="mt-2 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Questions sent to a model</dt>
+              <dd className="num">{usage.questions}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Failed tries</dt>
+              <dd className="num">{usage.failed}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">
+                Times a provider asked us to slow down
+              </dt>
+              <dd className="num">{usage.rateLimited}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Shared answers stored</dt>
+              <dd className="num">{usage.cached ?? "not set up yet"}</dd>
+            </div>
+          </dl>
+          {usage.byProvider.length > 0 ? (
+            <ul className="mt-3 space-y-1 border-t border-line pt-3">
+              {usage.byProvider.map((p) => (
+                <li key={p.provider} className="flex justify-between gap-3">
+                  <span className="capitalize">{p.provider}</span>
+                  <span className="num text-muted">
+                    {p.calls} calls · {p.tokens.toLocaleString("en-IN")} tokens
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <p className="mt-3 text-xs text-muted">
+            Compare the tokens with the free daily limit of each provider on its
+            own dashboard. Questions answered from the shared store never reach
+            a model, so they are not counted here.
+          </p>
+        </section>
+      ) : null}
       {ref.due ? (
         <section
           aria-label="Reference figures to re-check"

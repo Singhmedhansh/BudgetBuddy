@@ -4,7 +4,9 @@ import type { Turn } from "@/app/app/assistant-actions";
 import { ask, MESSAGES, type UsageStore } from "@/server/ai/assistant";
 import { readAttachment } from "@/server/ai/attachment";
 import { saveExchange } from "@/server/ai/chats";
+import { databaseAnswerCache } from "@/server/ai/answer-cache";
 import { loadFacts } from "@/server/ai/facts";
+import { earlierText, isGeneralQuestion } from "@/server/ai/scope";
 import { proposeAction } from "@/server/ai/finn-actions";
 import { planLimitsFor } from "@/server/ai/session";
 import { usageStoreFor } from "@/server/ai/usage-store";
@@ -123,8 +125,10 @@ export async function POST(request: NextRequest) {
 
         const usage: UsageStore = usageStoreFor(ctx.supabase);
         // Start reading their records now: the plan lookup below and the records load run side by side.
-        const factsNow = loadFacts(ctx);
-        factsNow.catch(() => undefined);
+        // A general question needs none of their records, so nothing is loaded for it.
+        const general = !doc && isGeneralQuestion(question, earlierText(past));
+        const factsNow = general ? null : loadFacts(ctx);
+        factsNow?.catch(() => undefined);
         const { plan, limits } = await planLimitsFor(ctx);
         mark("plan");
         const out = await ask(
@@ -132,7 +136,12 @@ export async function POST(request: NextRequest) {
           {
             usage,
             plan: limits,
-            loadFacts: () => factsNow,
+            loadFacts: () => factsNow ?? loadFacts(ctx),
+            region: {
+              country: ctx.profile.country ?? null,
+              currency: ctx.space.currency,
+            },
+            answerCache: databaseAnswerCache(),
             brief,
             trace: mark,
             document: doc,

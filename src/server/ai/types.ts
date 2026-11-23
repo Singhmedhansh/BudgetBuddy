@@ -7,6 +7,8 @@ export interface CompletionRequest {
   messages: ChatMessage[];
   maxOutputTokens: number;
   signal?: AbortSignal;
+  /** "light": a simple, general question that a smaller, roomier model can answer. */
+  tier?: "light";
   /** Per-call timeout; the gateway sets it from configuration. */
   timeoutMs?: number;
 }

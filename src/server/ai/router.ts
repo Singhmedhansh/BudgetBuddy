@@ -231,7 +231,16 @@ async function failover(
   for (const p of config.providers) {
     const client = clients[p.id];
     const keys = pool(p.id, p.keys);
-    for (const model of p.models?.length ? p.models : [p.model]) {
+    const normal = p.models?.length ? p.models : [p.model];
+    // A light question tries the provider's small model first, then its usual ones.
+    const list =
+      req.tier === "light" && p.lightModels?.length
+        ? [
+            ...p.lightModels,
+            ...normal.filter((m) => !p.lightModels!.includes(m)),
+          ]
+        : normal;
+    for (const model of list) {
       if (!keys.modelAvailable(model)) continue;
       let nextModel = false;
       let providerRested = false;

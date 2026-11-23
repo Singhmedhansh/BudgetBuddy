@@ -168,3 +168,26 @@ describe("the server's service role", () => {
     }
   });
 });
+
+describe("the shared answer cache", () => {
+  it("is for the server only: people cannot read or write it", async () => {
+    await db.exec(`set role service_role`);
+    try {
+      await db.query(`insert into budgetbuddy.finn_answer_cache (key, answer) values (repeat('a', 64), 'An emergency fund is money set aside for surprises.')`);
+      expect((await db.query<{ n: number }>(`select count(*)::int n from budgetbuddy.finn_answer_cache`)).rows[0].n).toBe(1);
+    } finally {
+      await db.exec(`reset role`);
+    }
+    expect(await denied(q(ALICE, `select * from budgetbuddy.finn_answer_cache`))).toBe(true);
+    expect(await denied(q(ALICE, `insert into budgetbuddy.finn_answer_cache (key, answer) values (repeat('b', 64), 'Something else that is long enough.')`))).toBe(true);
+  });
+  it("refuses a key that is not a hash and an answer that is empty", async () => {
+    await db.exec(`set role service_role`);
+    try {
+      expect(await denied(db.query(`insert into budgetbuddy.finn_answer_cache (key, answer) values ('short', 'An emergency fund is money set aside.')`))).toBe(true);
+      expect(await denied(db.query(`insert into budgetbuddy.finn_answer_cache (key, answer) values (repeat('c', 64), '')`))).toBe(true);
+    } finally {
+      await db.exec(`reset role`);
+    }
+  });
+});

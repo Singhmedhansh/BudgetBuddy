@@ -44,6 +44,16 @@ const MODEL_DEFAULT: Record<ProviderId, string[]> = {
   groq: ["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
 };
 
+/** Smaller models for simple, general questions. Their free allowances are much larger than the big models'. */
+const LIGHT_DEFAULT: Record<ProviderId, string[]> = {
+  gemini: [],
+  groq: ["llama-3.1-8b-instant"],
+};
+const LIGHT_ENV: Record<ProviderId, string> = {
+  gemini: "GEMINI_LIGHT_MODEL",
+  groq: "GROQ_LIGHT_MODEL",
+};
+
 const int = (
   v: string | undefined,
   fallback: number,
@@ -93,6 +103,8 @@ export interface AiProviderConfig {
   model: string;
   /** Ordered candidates: the next is used only if the provider says the previous model is not available. */
   models?: string[];
+  /** Smaller models tried first for simple, general questions. */
+  lightModels?: string[];
   keys: string[];
 }
 
@@ -141,7 +153,17 @@ export function readAiConfig(
     providers: ordered
       .map((id) => {
         const models = modelsFor(id);
-        return { id, model: models[0], models, keys: collectKeys(env, id) };
+        const configuredLight = parseModels(env[LIGHT_ENV[id]]);
+        const lightModels = configuredLight.length
+          ? configuredLight
+          : LIGHT_DEFAULT[id];
+        return {
+          id,
+          model: models[0],
+          models,
+          lightModels,
+          keys: collectKeys(env, id),
+        };
       })
       .filter((p) => p.keys.length > 0),
     independentKeyQuota: env.AI_KEYS_INDEPENDENT_QUOTA === "true",

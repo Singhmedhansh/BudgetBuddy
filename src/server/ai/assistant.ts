@@ -9,6 +9,7 @@ import {
   factsSummary,
   savingsPlan,
   splitTag,
+  generalPrompt,
   systemPrompt,
   type Facts,
 } from "./grounding";
@@ -19,6 +20,13 @@ import {
   type RouterResult,
 } from "./router";
 import { SentenceVerifier } from "./stream";
+import { cacheKey, type AnswerCache } from "./answer-cache";
+import {
+  earlierText,
+  emptyFacts,
+  isGeneralQuestion,
+  pruneFacts,
+} from "./scope";
 import type { ChatMessage, CompletionRequest } from "./types";
 
 export type AssistantOutcome =
@@ -41,6 +49,7 @@ export type AssistantOutcome =
         | "hourly"
         | "daily"
         | "unavailable"
+        | "busy"
         | "not_ready";
       message: string;
     };
@@ -61,6 +70,7 @@ export const MESSAGES = {
     "You have used all of today's questions for your plan. They reset at midnight.",
   plan_month:
     "You have used this month's Finn allowance for your plan. It resets on the 1st.",
+  busy: "Finn is very busy right now and the free service has hit its limit for the moment. Try again in a minute. This did not use up one of your questions.",
   unavailable:
     "The assistant could not answer right now. Nothing was charged to your allowance beyond this try. Please try again in a moment.",
   not_ready:
@@ -114,7 +124,13 @@ export interface AssistantDeps {
   /** A smaller chat window: shorter answers, which are also faster. */
   brief?: boolean;
   /** Called as each stage finishes, for timing. Receives only a stage name. */
-  trace?: (stage: "reserved" | "facts" | "first_text" | "model_done") => void;
+  trace?: (
+    stage: "cache" | "reserved" | "facts" | "first_text" | "model_done",
+  ) => void;
+  /** Their country and currency. Needed to answer a general question without loading any of their records. */
+  region?: { country: string | null; currency: string };
+  /** Shared answers to general questions. Absent means every question goes to a model. */
+  answerCache?: AnswerCache | null;
   /** A file the person attached to this question (text already extracted). Used for this question only, never stored. */
   document?: { name: string; text: string };
   /** When set, the answer is released sentence by sentence as it is written, each checked first. */
@@ -165,6 +181,32 @@ export async function ask(
       message: `Keep the question under ${config.limits.maxQuestionChars} characters.`,
     };
 
+  // A question that needs none of their records is answered without loading any, and may already have an answer.
+  const earlier = earlierText(history);
+  const general =
+    Boolean(deps.region) && !deps.document && isGeneralQuestion(q, earlier);
+  const calc = general ? detectCalculation(q) : null;
+  const cache =
+    general && !calc && history.length === 0 && q.length <= 240
+      ? (deps.answerCache ?? null)
+      : null;
+  const key =
+    cache && deps.region ? cacheKey(q, deps.region, Boolean(deps.brief)) : "";
+  if (cache) {
+    const hit = await cache.get(key);
+    if (hit) {
+      deps.trace?.("cache");
+      deps.stream?.delta(hit);
+      return {
+        ok: true,
+        answer: hit,
+        verified: true,
+        source: "general",
+        visuals: [],
+      };
+    }
+  }
+
   const slot = await deps.usage.reserve({
     perHour: config.limits.perHour,
     tokensPerDay: config.limits.tokensPerDay,
@@ -196,9 +238,12 @@ export async function ask(
       .catch(() => undefined);
 
   let facts: Facts;
-  deps.stream?.status?.("Reading your records");
+  deps.stream?.status?.(general ? "Thinking" : "Reading your records");
   try {
-    facts = await deps.loadFacts();
+    facts =
+      general && deps.region
+        ? emptyFacts(deps.region, new Date(now()).toISOString().slice(0, 10))
+        : await deps.loadFacts();
     deps.trace?.("facts");
   } catch {
     await settle("error", undefined, {
@@ -228,12 +273,20 @@ export async function ask(
       },
     };
 
+  // Pictures are drawn from everything known; the model is shown only what the question needs.
+  const allFacts = facts;
+  const shown = general ? facts : pruneFacts(facts, q, earlier);
+  facts = shown;
+
   // Only the last few turns are sent, capped in length, so a long conversation cannot inflate cost.
   const turns = history
     .slice(-4)
     .map((m) => ({ role: m.role, content: m.content.slice(0, 800) }));
   const req: CompletionRequest = {
-    system: systemPrompt(facts, { brief: deps.brief }),
+    system: general
+      ? generalPrompt(facts, { brief: deps.brief })
+      : systemPrompt(facts, { brief: deps.brief }),
+    ...(general && !facts.calculation ? { tier: "light" as const } : {}),
     messages: [...turns, { role: "user", content: q }],
     maxOutputTokens: deps.brief
       ? Math.min(config.limits.maxOutputTokens, 280)
@@ -274,7 +327,10 @@ export async function ask(
       attempts: trail.length,
       rateLimited: trail.filter((t) => t.kind === "rate_limit").length,
     });
-    return fail("unavailable");
+    // Every provider refused because its free quota is used up: say so, rather than a vague failure.
+    const busy =
+      trail.length > 0 && trail.every((t) => t.kind === "rate_limit");
+    return fail(busy ? "busy" : "unavailable");
   }
   await settle("ok", out);
 
@@ -282,22 +338,34 @@ export async function ask(
   const { tag, body } = splitTag(out.text);
   const checked = enforceFigures(body, tag, facts);
   if (!checked)
-    return {
-      ok: true,
-      answer: factsSummary(facts),
-      verified: true,
-      source: "figures",
-    };
+    return general
+      ? {
+          ok: true,
+          answer:
+            "I could not put together a reliable answer to that one. Try asking it another way.",
+          verified: true,
+          source: "general",
+          visuals: [],
+        }
+      : {
+          ok: true,
+          answer: factsSummary(facts),
+          verified: true,
+          source: "figures",
+        };
   // Pictures come from the verified facts, never from the model. A general answer gets one only for a what-if with numbers.
   let visuals: Visual[] = [];
   try {
     visuals =
       facts.document || (tag === "G" && !facts.calculation)
         ? []
-        : buildVisuals(q, facts);
+        : buildVisuals(q, allFacts);
   } catch {
     visuals = [];
   }
+  // A clean general answer contains nothing about anyone, so it can serve the next person who asks the same thing.
+  if (cache && tag === "G" && checked.clean && checked.text.length >= 20)
+    await cache.set(key, checked.text);
   return {
     ok: true,
     answer: checked.text,

@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/server/admin";
+import { databaseAnswerCache } from "@/server/ai/answer-cache";
 import { ask, MESSAGES } from "@/server/ai/assistant";
 import { loadFacts } from "@/server/ai/facts";
 import { executeFinnAction } from "@/server/ai/finn-execute";
@@ -119,6 +120,8 @@ export async function handleIncoming(msg: Incoming): Promise<void> {
     usage: usageStoreFor(ctx.supabase),
     plan: limits,
     loadFacts: () => loadFacts(ctx),
+    region: { country: ctx.profile.country ?? null, currency: ctx.space.currency },
+    answerCache: databaseAnswerCache(),
   });
   await reply(
     out.ok ? forWhatsApp(out.answer) : (out.message ?? MESSAGES.unavailable),
