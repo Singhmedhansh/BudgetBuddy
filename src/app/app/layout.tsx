@@ -6,6 +6,7 @@ import { Logo } from "@/components/brand/Logo";
 import { BottomNav, SidebarNav } from "@/components/app/AppNav";
 import { SpaceSwitcher } from "@/components/app/SpaceSwitcher";
 import { AccountMenu } from "@/components/app/AccountMenu";
+import { FinnWidget } from "@/components/app/FinnWidget";
 import { BackToTop } from "@/components/motion/BackToTop";
 import { saveThemeAction } from "@/app/app/settings-actions";
 import { ThemeSync } from "@/components/theme/ThemeSync";
@@ -98,6 +99,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
       <ThemeSync theme={profile.theme} />
       <BottomNav />
       <BackToTop />
+      <FinnWidget />
     </div>
   );
 }

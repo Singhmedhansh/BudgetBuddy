@@ -22,7 +22,7 @@ export function BackToTop() {
         const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
       }}
-      className={`glass fixed bottom-5 right-5 z-30 grid h-11 w-11 place-items-center rounded-full text-fg shadow-float transition-all duration-300 hover:bg-surface md:bottom-7 md:right-7 ${show ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0"}`}
+      className={`glass fixed bottom-5 right-5 z-30 grid h-11 w-11 place-items-center rounded-full text-fg shadow-float transition-all duration-300 hover:bg-surface md:bottom-7 md:right-[5.5rem] ${show ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0"}`}
     >
       <ArrowUp size={18} aria-hidden />
     </button>
