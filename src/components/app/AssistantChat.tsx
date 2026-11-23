@@ -150,6 +150,9 @@ function Chat({
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }, [text]);
   useEffect(() => {
+    if (available) fetch("/api/finn/ask").catch(() => undefined);
+  }, [available]);
+  useEffect(() => {
     if (available && window.matchMedia("(pointer: fine)").matches)
       box.current?.focus();
   }, [available]);

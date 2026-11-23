@@ -70,6 +70,8 @@ export function FinnWidget() {
     if (loading || data) return;
     setLoading(true);
     setFailed(false);
+    // Wake the answer route now, so the first question does not wait for a cold start.
+    fetch("/api/finn/ask").catch(() => undefined);
     loadFinnWidgetAction().then(
       (d) => {
         setData(d);

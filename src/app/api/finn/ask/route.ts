@@ -198,3 +198,11 @@ export async function POST(request: NextRequest) {
     },
   });
 }
+
+/** A no-op that wakes this route's server instance, so the first real question does not pay for a cold start. */
+export async function GET() {
+  return new Response(null, {
+    status: 204,
+    headers: { "cache-control": "no-store" },
+  });
+}
