@@ -99,6 +99,8 @@ function Chat({
   const [live, setLive] = useState("");
   // The answer that should reveal itself word by word (only when it was not already streamed in).
   const [typedIndex, setTypedIndex] = useState<number | null>(null);
+  // Confirm cards cost nothing, so they are not counted against the day's allowance.
+  const [freeAnswers, setFreeAnswers] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
@@ -112,7 +114,9 @@ function Chat({
   const answered =
     turns.filter((t) => t.role === "assistant").length -
     initialTurns.filter((t) => t.role === "assistant").length;
-  const used = quota ? quota.questionsToday + Math.max(0, answered) : 0;
+  const used = quota
+    ? quota.questionsToday + Math.max(0, answered - freeAnswers)
+    : 0;
   const exhausted =
     Boolean(quota) &&
     (used >= quota!.questionsPerDay ||
@@ -216,6 +220,7 @@ function Chat({
             source?: Turn["source"];
             visuals?: Turn["visuals"];
             id?: number | null;
+            proposal?: boolean;
             chatId?: string | null;
           };
           try {
@@ -245,6 +250,7 @@ function Chat({
             ].slice(-40);
             setTurns(next);
             if (!streamed) setTypedIndex(next.length - 1);
+            if (ev.proposal) setFreeAnswers((n) => n + 1);
             if (ev.chatId) setChatId(ev.chatId);
             setPendingQ(null);
             setLive("");

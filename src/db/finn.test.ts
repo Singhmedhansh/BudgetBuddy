@@ -152,3 +152,19 @@ describe("review marks", () => {
     expect(await denied(q(ALICE, `update budgetbuddy.finn_messages set reviewed_at = now()`))).toBe(true);
   });
 });
+
+describe("the server's service role", () => {
+  it("can read who wants the recap, handle WhatsApp links and mark reviews, but not delete chats", async () => {
+    await db.exec(`set role service_role`);
+    try {
+      await db.query(`select * from budgetbuddy.finn_prefs`);
+      await db.query(`select * from budgetbuddy.whatsapp_links`);
+      await db.query(`insert into budgetbuddy.whatsapp_seen (msg_id) values ('wamid.test')`);
+      await db.query(`select id, feedback from budgetbuddy.finn_messages where feedback = 'down'`);
+      await db.query(`update budgetbuddy.finn_messages set reviewed_at = now() where feedback = 'down'`);
+      expect(await denied(db.query(`delete from budgetbuddy.finn_messages`))).toBe(true);
+    } finally {
+      await db.exec(`reset role`);
+    }
+  });
+});
