@@ -27,6 +27,29 @@ export async function setWeeklyRecapAction(
   return { ok: true };
 }
 
+/** Quick records ("400 on food") saved at once with an Undo, instead of a card to confirm. */
+export async function setAutoSaveLogsAction(
+  on: boolean,
+): Promise<{ ok: boolean; message?: string }> {
+  const ctx = await requireSpace();
+  const { data, error } = await ctx.supabase
+    .from("finn_prefs")
+    .update({ auto_save_logs: on, updated_at: new Date().toISOString() })
+    .eq("user_id", ctx.user.id)
+    .select("user_id");
+  if (error)
+    return { ok: false, message: "That setting is not available yet." };
+  if (!data?.length) {
+    const ins = await ctx.supabase
+      .from("finn_prefs")
+      .insert({ user_id: ctx.user.id, auto_save_logs: on });
+    if (ins.error)
+      return { ok: false, message: "That setting could not be saved." };
+  }
+  revalidatePath("/app/assistant");
+  return { ok: true };
+}
+
 export async function startWhatsAppLinkAction(
   phone: string,
 ): Promise<

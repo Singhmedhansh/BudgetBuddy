@@ -32,6 +32,8 @@ export type FinnActionInput = z.infer<typeof actionSchema>;
 export interface ConfirmResult {
   ok: boolean;
   message: string;
+  /** The transaction Finn created, so it can be undone. */
+  transactionId?: string;
 }
 
 /**
@@ -125,6 +127,7 @@ export async function executeFinnAction(
       message: res.duplicate
         ? "That was already saved."
         : "Saved. It is now in your transactions.",
+      ...(res.id ? { transactionId: res.id } : {}),
     };
   }
 
@@ -168,4 +171,71 @@ export async function executeFinnAction(
   if (error) return { ok: false, message: friendlyDbError(error.message) };
   revalidatePath("/app", "layout");
   return { ok: true, message: "Budget updated." };
+}
+
+/**
+ * Undoes a transaction Finn just added, by reversing it the same way the Transactions page does, so the ledger stays
+ * balanced and the history shows what happened. Only a transaction Finn created in this space, in the last day, can be
+ * undone this way.
+ */
+export async function undoFinnTransaction(
+  ctx: Ctx,
+  id: unknown,
+): Promise<ConfirmResult> {
+  if (!atLeast(ctx.role, "editor"))
+    return { ok: false, message: "You have view-only access to this space." };
+  const parsed = z.string().uuid().safeParse(id);
+  if (!parsed.success)
+    return { ok: false, message: "That entry could not be found." };
+  const { data: txn } = await ctx.supabase
+    .from("transactions")
+    .select("id,description,created_at")
+    .eq("id", parsed.data)
+    .eq("space_id", ctx.space.id)
+    .maybeSingle();
+  const t = txn as {
+    id: string;
+    description: string | null;
+    created_at: string;
+  } | null;
+  if (
+    !t ||
+    t.description !== "Added by Finn" ||
+    Date.now() - new Date(t.created_at).getTime() > 86_400_000
+  )
+    return {
+      ok: false,
+      message:
+        "That entry can no longer be undone here. Reverse it from Transactions.",
+    };
+  const { error } = await ctx.supabase.rpc("reverse_transaction", {
+    p_txn: t.id,
+  });
+  if (error) return { ok: false, message: friendlyDbError(error.message) };
+  revalidatePath("/app", "layout");
+  return { ok: true, message: "Undone. Nothing was recorded." };
+}
+
+/** The person's accounts and categories, for changing a card before it is saved. Names and ids only. */
+export async function finnEditOptions(ctx: Ctx, type: "expense" | "income") {
+  const [{ data: accounts }, { data: categories }] = await Promise.all([
+    ctx.supabase
+      .from("accounts")
+      .select("id,name")
+      .eq("space_id", ctx.space.id)
+      .is("archived_at", null)
+      .order("name"),
+    ctx.supabase
+      .from("categories")
+      .select("id,name")
+      .eq("space_id", ctx.space.id)
+      .eq("kind", type)
+      .is("archived_at", null)
+      .order("name"),
+  ]);
+  return {
+    currency: ctx.space.currency,
+    accounts: (accounts ?? []) as { id: string; name: string }[],
+    categories: (categories ?? []) as { id: string; name: string }[],
+  };
 }

@@ -23,6 +23,8 @@ export type FinnAction =
       date: string;
       merchant: string | null;
       clientKey: string;
+      /** Save at once without a confirm tap (the person opted in). Set only on the live reply, never stored. */
+      auto?: boolean;
     }
   | {
       kind: "set_budget_limit";

@@ -11,8 +11,47 @@ type Rpc = {
 export function usageStoreFor(supabase: Rpc): UsageStore {
   return {
     async reserve(limits) {
-      type Reason = "hourly" | "daily" | "plan_day" | "plan_month";
-      // The plan's allowance is enforced when migration 14 is applied; before that the older per-day token guard is used.
+      type Reason =
+        | "hourly"
+        | "daily"
+        | "plan_day"
+        | "plan_month"
+        | "plan_window"
+        | "minute";
+      // Rolling-window allowances (migration 19). Before it is applied, the per-day plan allowance (migration 14) is used.
+      const plan = limits.plan;
+      if (plan?.questionsPerWindow && plan.windowHours) {
+        const { data, error } = await supabase.rpc("ai_reserve_window", {
+          p_per_minute: plan.perMinute ?? 10,
+          p_window_hours: plan.windowHours,
+          p_window_max: plan.questionsPerWindow,
+          p_day_max: plan.questionsPerDay,
+          p_day_start: plan.dayStart,
+          p_tokens_per_month: plan.tokensPerMonth,
+          p_month_start: plan.monthStart,
+          p_kind: "chat",
+          p_kind_day_max: null,
+        });
+        if (!error) {
+          const p = data as {
+            allowed: boolean;
+            id?: number;
+            reason?: Reason | "kind_day";
+            retry_at?: string;
+          };
+          if (p.allowed && p.id !== undefined)
+            return { allowed: true, id: p.id };
+          const reason: Reason =
+            p.reason === "kind_day" || !p.reason ? "plan_day" : p.reason;
+          return {
+            allowed: false,
+            reason,
+            ...(p.retry_at
+              ? { retryAt: new Date(p.retry_at).toISOString() }
+              : {}),
+          };
+        }
+      }
       if (limits.plan) {
         const { data, error } = await supabase.rpc("ai_reserve_plan", {
           p_per_hour: limits.perHour,

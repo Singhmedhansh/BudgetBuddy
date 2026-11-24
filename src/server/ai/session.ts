@@ -31,6 +31,9 @@ export async function planLimitsFor(ctx: Pick<Ctx, "supabase" | "profile">) {
     plan,
     limits: {
       questionsPerDay: allowance.questionsPerDay,
+      questionsPerWindow: allowance.questionsPerWindow,
+      windowHours: allowance.windowHours,
+      perMinute: allowance.perMinute,
       tokensPerMonth: allowance.tokensPerMonth,
       dayStart: dayStart.toISOString(),
       monthStart: monthStart.toISOString(),

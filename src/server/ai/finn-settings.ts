@@ -8,6 +8,9 @@ export interface FinnSettings {
   /** False until migration 16 is applied; the settings then say so instead of failing. */
   ready: boolean;
   weeklyRecap: boolean;
+  /** Quick records saved at once with an Undo (migration 19). False, and not offered, before it is applied. */
+  autoSaveLogs: boolean;
+  autoSaveReady: boolean;
   /** Whether the server can send email at all (the recap is saved either way). */
   emailOn: boolean;
   whatsapp: {
@@ -24,6 +27,8 @@ export async function loadFinnSettings(ctx: Ctx): Promise<FinnSettings> {
   const off: FinnSettings = {
     ready: false,
     weeklyRecap: false,
+    autoSaveLogs: false,
+    autoSaveReady: false,
     emailOn: emailConfigured(),
     whatsapp: {
       number: whatsappConfig()?.number ?? null,
@@ -46,9 +51,17 @@ export async function loadFinnSettings(ctx: Ctx): Promise<FinnSettings> {
       verified_at: string | null;
       code_expires_at: string | null;
     } | null;
+    const auto = await ctx.supabase
+      .from("finn_prefs")
+      .select("auto_save_logs")
+      .maybeSingle();
     return {
       ...off,
       ready: true,
+      autoSaveReady: !auto.error,
+      autoSaveLogs: Boolean(
+        (auto.data as { auto_save_logs: boolean } | null)?.auto_save_logs,
+      ),
       weeklyRecap: Boolean(
         (prefs.data as { weekly_recap: boolean } | null)?.weekly_recap,
       ),
@@ -63,4 +76,16 @@ export async function loadFinnSettings(ctx: Ctx): Promise<FinnSettings> {
   } catch {
     return off;
   }
+}
+
+/** Whether the person has chosen to have quick records saved at once. False on any error (before migration 19). */
+export async function autoSaveLogsOn(ctx: Ctx): Promise<boolean> {
+  const { data, error } = await ctx.supabase
+    .from("finn_prefs")
+    .select("auto_save_logs")
+    .maybeSingle();
+  return (
+    !error &&
+    Boolean((data as { auto_save_logs: boolean } | null)?.auto_save_logs)
+  );
 }

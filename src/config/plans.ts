@@ -15,12 +15,22 @@ export type PlanId = "free" | "pro";
 export type Interval = "month" | "year";
 
 /**
- * What Finn, the money assistant, may be asked on each plan. Questions are what people see; the monthly token figure is
- * the cost guard behind it (a question is roughly 4,000 to 6,000 tokens with the person's figures attached).
+ * What Finn, the money assistant, may be asked on each plan, counted over a rolling window the way other assistants
+ * count (20 messages in any 5 hours on Free), with a daily ceiling, a per-minute burst guard and a monthly token backstop
+ * (a question is roughly 3,000 to 3,500 tokens with the person's figures attached). Quick records Finn makes in code
+ * ("400 on food") never count. scansPerDay is for reading photos of bills. See docs/finn-first-plan.md, section 2.
  */
-export const AI_ALLOWANCE: Record<PlanId, { questionsPerDay: number; tokensPerMonth: number }> = {
-  free: { questionsPerDay: 5, tokensPerMonth: 150_000 },
-  pro: { questionsPerDay: 50, tokensPerMonth: 2_000_000 },
+export interface AiAllowance {
+  questionsPerWindow: number;
+  windowHours: number;
+  questionsPerDay: number;
+  perMinute: number;
+  scansPerDay: number;
+  tokensPerMonth: number;
+}
+export const AI_ALLOWANCE: Record<PlanId, AiAllowance> = {
+  free: { questionsPerWindow: 20, windowHours: 5, questionsPerDay: 40, perMinute: 5, scansPerDay: 3, tokensPerMonth: 600_000 },
+  pro: { questionsPerWindow: 50, windowHours: 5, questionsPerDay: 150, perMinute: 10, scansPerDay: 30, tokensPerMonth: 5_000_000 },
 };
 
 export interface Price {
@@ -48,7 +58,8 @@ export const PLANS: Plan[] = [
       "Savings goals",
       "CSV import with preview and duplicate checks",
       "Core dashboard and basic analytics",
-      "Finn, your money assistant: 5 questions a day",
+      "Finn, your money assistant: 20 messages every 5 hours",
+      "Tell Finn what you spent and it is recorded, as often as you like",
       "Export and delete your data any time",
     ],
     prices: [{ currency: "INR", interval: "month", amountMinor: 0 }],
@@ -60,7 +71,7 @@ export const PLANS: Plan[] = [
     features: [
       "Everything in Free",
       "Forecasting and what-if scenarios",
-      "Finn, your money assistant: 50 questions a day, with charts",
+      "Finn, your money assistant: 50 messages every 5 hours, with charts",
       "Advanced analytics and downloadable reports",
       "Smart categorisation and larger imports",
       "Automation rules",

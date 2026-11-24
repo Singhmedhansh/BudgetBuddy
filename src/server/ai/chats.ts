@@ -89,6 +89,14 @@ export interface Quota {
   questionsToday: number;
   tokensPerMonth: number;
   tokensMonth: number;
+  /** The rolling window, once migration 19 is applied. Absent before, and the meter then counts the day. */
+  window?: {
+    per: number;
+    hours: number;
+    used: number;
+    /** When the next message frees up (ISO), or null when nothing in the window is counted yet. */
+    freesAt: string | null;
+  };
 }
 
 /** What has been used today and this month. Null when the database has not been updated yet (then nothing is enforced). */
@@ -99,13 +107,42 @@ export async function loadQuota(
   timeZone: string,
 ): Promise<Quota | null> {
   const { dayStart, monthStart } = periodStarts(now, timeZone);
+  const a = AI_ALLOWANCE[plan];
+  const w = await db.rpc("ai_quota_window", {
+    p_window_hours: a.windowHours,
+    p_window_max: a.questionsPerWindow,
+    p_day_start: dayStart.toISOString(),
+    p_month_start: monthStart.toISOString(),
+  });
+  if (!w.error && w.data) {
+    const r = w.data as {
+      window_used: number;
+      window_frees_at: string | null;
+      questions_today: number;
+      tokens_month: number;
+    };
+    return {
+      plan,
+      questionsPerDay: a.questionsPerDay,
+      questionsToday: Number(r.questions_today),
+      tokensPerMonth: a.tokensPerMonth,
+      tokensMonth: Number(r.tokens_month),
+      window: {
+        per: a.questionsPerWindow,
+        hours: a.windowHours,
+        used: Number(r.window_used),
+        freesAt: r.window_frees_at
+          ? new Date(r.window_frees_at).toISOString()
+          : null,
+      },
+    };
+  }
   const { data, error } = await db.rpc("ai_quota", {
     p_day_start: dayStart.toISOString(),
     p_month_start: monthStart.toISOString(),
   });
   if (error || !data) return null;
   const r = data as { questions_today: number; tokens_month: number };
-  const a = AI_ALLOWANCE[plan];
   return {
     plan,
     questionsPerDay: a.questionsPerDay,

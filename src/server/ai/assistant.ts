@@ -45,6 +45,8 @@ export type AssistantOutcome =
         | "no_providers"
         | "plan_day"
         | "plan_month"
+        | "plan_window"
+        | "minute"
         | "too_long"
         | "empty"
         | "hourly"
@@ -53,6 +55,8 @@ export type AssistantOutcome =
         | "busy"
         | "not_ready";
       message: string;
+      /** When the next message frees up, for a window or burst limit. ISO time. */
+      retryAt?: string;
     };
 
 /** Sentences shown to people. None names a provider, a key, a model or an internal error. */
@@ -69,6 +73,10 @@ export const MESSAGES = {
     "You have used today's assistant allowance. It resets within 24 hours.",
   plan_day:
     "You have used all of today's questions for your plan. They reset at midnight.",
+  plan_window:
+    "You have used the Finn messages for this stretch. More free up in a few hours. Recording what you spent still works.",
+  minute:
+    "That is a lot of messages in a minute. Give Finn a few seconds and try again.",
   plan_month:
     "You have used this month's Finn allowance for your plan. It resets on the 1st.",
   busy: "Finn is very busy right now and the free service has hit its limit for the moment. Try again in a minute. This did not use up one of your questions.",
@@ -99,13 +107,26 @@ export interface UsageStore {
     tokensPerDay: number;
     plan?: {
       questionsPerDay: number;
+      questionsPerWindow?: number;
+      windowHours?: number;
+      perMinute?: number;
       tokensPerMonth: number;
       dayStart: string;
       monthStart: string;
     };
   }): Promise<
     | { allowed: true; id: number }
-    | { allowed: false; reason: "hourly" | "daily" | "plan_day" | "plan_month" }
+    | {
+        allowed: false;
+        reason:
+          | "hourly"
+          | "daily"
+          | "plan_day"
+          | "plan_month"
+          | "plan_window"
+          | "minute";
+        retryAt?: string;
+      }
     | { allowed: false; reason: "not_ready" }
   >;
   settle(id: number, r: UsageResult): Promise<void>;
@@ -117,6 +138,9 @@ export interface AssistantDeps {
   /** The person's plan allowance and the start of their day and month, counted in the database. */
   plan?: {
     questionsPerDay: number;
+    questionsPerWindow?: number;
+    windowHours?: number;
+    perMinute?: number;
     tokensPerMonth: number;
     dayStart: string;
     monthStart: string;
@@ -214,7 +238,11 @@ export async function ask(
     plan: deps.plan,
   });
   deps.trace?.("reserved");
-  if (!slot.allowed) return fail(slot.reason);
+  if (!slot.allowed)
+    return {
+      ...fail(slot.reason),
+      ...("retryAt" in slot && slot.retryAt ? { retryAt: slot.retryAt } : {}),
+    };
 
   const now = deps.now ?? Date.now;
   const started = now();

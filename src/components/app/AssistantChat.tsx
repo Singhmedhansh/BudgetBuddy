@@ -93,7 +93,12 @@ function Chat({
   const [chatId, setChatId] = useState<string | null>(initialChatId);
   const [error, setError] = useState<string | undefined>();
   const [limit, setLimit] = useState<
-    { kind: "day" | "month"; plan: PlanId } | undefined
+    | {
+        kind: "window" | "day" | "month";
+        plan: PlanId;
+        retryAt?: string | null;
+      }
+    | undefined
   >();
   // While an answer is on its way: the person's question, what Finn is doing, and the sentences released so far.
   const [pendingQ, setPendingQ] = useState<string | null>(null);
@@ -119,14 +124,29 @@ function Chat({
   const used = quota
     ? quota.questionsToday + Math.max(0, answered - freeAnswers)
     : 0;
+  // Messages used in the rolling window (migration 19), counted here as answers arrive.
+  const windowUsed = quota?.window
+    ? quota.window.used + Math.max(0, answered - freeAnswers)
+    : null;
+  const windowFull =
+    quota?.window !== undefined &&
+    windowUsed !== null &&
+    windowUsed >= quota.window.per;
+  // Out of questions for now. The composer stays open: recording what was spent ("400 on food") costs nothing.
   const exhausted =
     Boolean(quota) &&
-    (used >= quota!.questionsPerDay ||
+    (windowFull ||
+      used >= quota!.questionsPerDay ||
       quota!.tokensMonth >= quota!.tokensPerMonth ||
       limit !== undefined);
-  const limitKind: "day" | "month" =
+  const limitKind: "window" | "day" | "month" =
     limit?.kind ??
-    (quota && quota.tokensMonth >= quota.tokensPerMonth ? "month" : "day");
+    (quota && quota.tokensMonth >= quota.tokensPerMonth
+      ? "month"
+      : windowFull
+        ? "window"
+        : "day");
+  const retryAt = limit?.retryAt ?? quota?.window?.freesAt ?? null;
   const lastSaved = useRef<string>("");
   useEffect(() => {
     if (!chatId) return;
@@ -170,7 +190,7 @@ function Chat({
 
   async function send(raw: string) {
     const q = raw.trim();
-    if (!q || pending || !available || exhausted) return;
+    if (!q || pending || !available) return;
     const attached = file;
     setText("");
     setFile(null);
@@ -225,7 +245,11 @@ function Chat({
             t: string;
             v?: string;
             message?: string;
-            limit?: { kind: "day" | "month"; plan: PlanId };
+            limit?: {
+              kind: "window" | "day" | "month";
+              plan: PlanId;
+              retryAt?: string | null;
+            };
             answer?: string;
             source?: Turn["source"];
             visuals?: Turn["visuals"];
@@ -298,7 +322,7 @@ function Chat({
   }
 
   const empty = shown.length === 0;
-  const canSend = available && !exhausted && !pending && text.trim().length > 0;
+  const canSend = available && !pending && text.trim().length > 0;
 
   return (
     <div
@@ -552,12 +576,17 @@ function Chat({
           </p>
         ) : null}
 
-        {quota ? <UsageMeter quota={quota} used={used} /> : null}
+        {quota ? (
+          <UsageMeter quota={quota} used={used} windowUsed={windowUsed} />
+        ) : null}
         {exhausted && quota ? (
           <LimitCard
             plan={quota.plan}
             kind={limitKind}
             perDay={quota.questionsPerDay}
+            perWindow={quota.window?.per}
+            windowHours={quota.window?.hours}
+            retryAt={retryAt}
           />
         ) : null}
       </div>
@@ -597,8 +626,12 @@ function Chat({
                 send(text);
               }
             }}
-            disabled={!available || exhausted}
-            placeholder={`Ask ${BRAND.assistantName} about your money`}
+            disabled={!available}
+            placeholder={
+              exhausted
+                ? "Record what you spent, like 400 on food"
+                : `Ask ${BRAND.assistantName} about your money`
+            }
             className="block max-h-[200px] w-full resize-none bg-transparent shadow-none focus-visible:shadow-none px-4 pb-1 pt-3.5 text-[15px] leading-relaxed !outline-none placeholder:text-muted/70 disabled:cursor-not-allowed disabled:opacity-60"
           />
           {file || fileError ? (
@@ -657,7 +690,7 @@ function Chat({
                   <Paperclip size={16} aria-hidden />
                 </button>
                 <MicButton
-                  disabled={exhausted || pending}
+                  disabled={pending}
                   onText={(v) => setText((cur) => (cur ? cur + " " : "") + v)}
                 />
                 <button

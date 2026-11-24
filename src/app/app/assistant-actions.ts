@@ -211,3 +211,19 @@ export async function confirmFinnAction(
   const ctx = await requireSpace();
   return executeFinnAction(ctx, raw);
 }
+
+/** Undoes a transaction Finn just added (it is reversed, as on the Transactions page). */
+export async function undoFinnAction(
+  transactionId: string,
+): Promise<import("@/server/ai/finn-execute").ConfirmResult> {
+  const ctx = await requireSpace();
+  const { undoFinnTransaction } = await import("@/server/ai/finn-execute");
+  return undoFinnTransaction(ctx, transactionId);
+}
+
+/** Accounts and categories for editing a card before it is saved. */
+export async function finnEditOptionsAction(type: "expense" | "income") {
+  const ctx = await requireSpace();
+  const { finnEditOptions } = await import("@/server/ai/finn-execute");
+  return finnEditOptions(ctx, type === "income" ? "income" : "expense");
+}

@@ -8,6 +8,7 @@ import { databaseAnswerCache } from "@/server/ai/answer-cache";
 import { loadFacts } from "@/server/ai/facts";
 import { earlierText, isGeneralQuestion } from "@/server/ai/scope";
 import { proposeAction } from "@/server/ai/finn-actions";
+import { autoSaveLogsOn } from "@/server/ai/finn-settings";
 import { planLimitsFor } from "@/server/ai/session";
 import { usageStoreFor } from "@/server/ai/usage-store";
 import { requireSpace } from "@/server/context";
@@ -94,6 +95,8 @@ export async function POST(request: NextRequest) {
           try {
             const proposal = await proposeAction(question, ctx);
             if (proposal) {
+              // Saved at once, with an Undo, only when the person opted in. The stored copy keeps the confirm card.
+              const auto = proposal.quick && (await autoSaveLogsOn(ctx));
               const reply: Turn = {
                 role: "assistant",
                 content: proposal.text,
@@ -111,7 +114,13 @@ export async function POST(request: NextRequest) {
                 t: "done",
                 answer: reply.content,
                 source: reply.source,
-                visuals: reply.visuals ?? [],
+                visuals: auto
+                  ? (reply.visuals ?? []).map((v) =>
+                      v.type === "action" && v.action.kind === "add_transaction"
+                        ? { ...v, action: { ...v.action, auto: true } }
+                        : v,
+                    )
+                  : (reply.visuals ?? []),
                 id: saved?.answerId ?? null,
                 chatId: saved?.chatId ?? chatId,
                 proposal: true,
@@ -157,11 +166,13 @@ export async function POST(request: NextRequest) {
             t: "error",
             message: out.message ?? MESSAGES.unavailable,
             limit:
-              out.reason === "plan_day"
-                ? { kind: "day", plan }
-                : out.reason === "plan_month"
-                  ? { kind: "month", plan }
-                  : undefined,
+              out.reason === "plan_window"
+                ? { kind: "window", plan, retryAt: out.retryAt ?? null }
+                : out.reason === "plan_day"
+                  ? { kind: "day", plan }
+                  : out.reason === "plan_month"
+                    ? { kind: "month", plan }
+                    : undefined,
           });
           return;
         }

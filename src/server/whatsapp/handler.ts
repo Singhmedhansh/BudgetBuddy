@@ -99,8 +99,14 @@ export async function handleIncoming(msg: Incoming): Promise<void> {
   try {
     const proposal = await proposeAction(msg.text, ctx);
     if (proposal) {
-      const card = proposal.visuals.find((v) => v.type === "action");
-      if (card && card.type === "action") {
+      const cards = proposal.visuals.filter((v) => v.type === "action");
+      const card = cards[0];
+      // One YES confirms one entry on WhatsApp, so several in one message are asked for one at a time.
+      if (cards.length > 1)
+        await reply(
+          `I found ${cards.length} entries. On WhatsApp, send them one at a time (for example: 200 auto), or add them all at once in the app.`,
+        );
+      else if (card && card.type === "action") {
         await admin
           .from("whatsapp_links")
           .update({ pending: { action: card.action } })

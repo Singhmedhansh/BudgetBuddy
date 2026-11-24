@@ -5,7 +5,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { beforeAll, describe, expect, it } from "vitest";
 
 const U = (n: number) => `00000000-0000-0000-0000-0000000000${String(n).padStart(2, "0")}`;
-const [ALICE, BOB] = [U(1), U(2)];
+const [ALICE, BOB, CARA, DEV] = [U(1), U(2), U(3), U(4)];
 let db: PGlite;
 
 async function asUser<T>(uid: string, fn: () => Promise<T>): Promise<T> {
@@ -26,7 +26,7 @@ beforeAll(async () => {
     create schema auth; create table auth.users (id uuid primary key);
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
     grant usage on schema auth to authenticated, service_role; grant execute on function auth.uid() to authenticated, service_role;
-    insert into auth.users values ('${ALICE}'), ('${BOB}');
+    insert into auth.users values ('${ALICE}'), ('${BOB}'), ('${CARA}'), ('${DEV}');
     create schema storage; create table storage.buckets (id text primary key, name text, public boolean default false, file_size_limit bigint, allowed_mime_types text[]);
     create table storage.objects (id uuid default gen_random_uuid() primary key, bucket_id text, name text);
     alter table storage.objects enable row level security;
@@ -189,5 +189,78 @@ describe("the shared answer cache", () => {
     } finally {
       await db.exec(`reset role`);
     }
+  });
+});
+
+describe("rolling-window allowances (migration 19)", () => {
+  const dayStart = "now() - interval '2 hours'";
+  const monthStart = "now() - interval '10 days'";
+  type R = { allowed: boolean; reason?: string; id?: number; retry_at?: string };
+  const reserve = (uid: string, o: { perMinute?: number; windowMax?: number; dayMax?: number; perMonth?: number; kind?: string; kindMax?: number | null } = {}) =>
+    q<{ r: R }>(
+      uid,
+      `select budgetbuddy.ai_reserve_window(${o.perMinute ?? 99}, 5, ${o.windowMax ?? 20}, ${o.dayMax ?? 40}, ${dayStart}, ${o.perMonth ?? 1_000_000}, ${monthStart}, '${o.kind ?? "chat"}', ${o.kindMax ?? "null"}) as r`,
+    ).then((x) => x[0].r);
+  const age = (uid: string, id: number, hours: number) =>
+    db.exec(`update budgetbuddy.ai_usage set created_at = now() - interval '${hours} hours' where id = ${id}`);
+
+  it("stops at the window and says when the next message frees up", async () => {
+    const ids: number[] = [];
+    for (let i = 0; i < 3; i++) ids.push((await reserve(CARA, { windowMax: 3 })).id!);
+    // The oldest use was 4 hours ago, so the window frees up about an hour from now.
+    await age(CARA, ids[0], 4);
+    const r = await reserve(CARA, { windowMax: 3 });
+    expect(r).toMatchObject({ allowed: false, reason: "plan_window" });
+    const mins = (new Date(r.retry_at!).getTime() - Date.now()) / 60_000;
+    expect(mins).toBeGreaterThan(55);
+    expect(mins).toBeLessThan(65);
+  });
+  it("frees up once the oldest use leaves the window, and failed tries never count", async () => {
+    const [{ id }] = await q<{ id: number }>(CARA, `select id from budgetbuddy.ai_usage where user_id = '${CARA}' order by created_at asc limit 1`);
+    await age(CARA, id, 6);
+    const ok = await reserve(CARA, { windowMax: 3 });
+    expect(ok.allowed).toBe(true);
+    await q(CARA, `select budgetbuddy.ai_settle(${ok.id}, 'error', null, null, 0, 0, 10)`);
+    expect((await reserve(CARA, { windowMax: 3 })).allowed).toBe(true);
+  });
+  it("still stops at the daily ceiling", async () => {
+    await reserve(DEV, { dayMax: 2 });
+    await reserve(DEV, { dayMax: 2 });
+    expect(await reserve(DEV, { dayMax: 2 })).toMatchObject({ allowed: false, reason: "plan_day" });
+  });
+  it("has a burst guard per minute that counts every try", async () => {
+    expect(await reserve(DEV, { perMinute: 2 })).toMatchObject({ allowed: false, reason: "minute" });
+  });
+  it("caps one kind per day, such as photo scans", async () => {
+    await db.exec(`delete from budgetbuddy.ai_usage where user_id = '${DEV}'`);
+    expect((await reserve(DEV, { kind: "scan", kindMax: 1 })).allowed).toBe(true);
+    expect(await reserve(DEV, { kind: "scan", kindMax: 1 })).toMatchObject({ allowed: false, reason: "kind_day" });
+    expect((await reserve(DEV, { kind: "chat" })).allowed).toBe(true);
+    expect(await denied(q(DEV, `select budgetbuddy.ai_reserve_window(9, 5, 20, 40, now(), 1000000, now(), 'other', null)`))).toBe(true);
+  });
+  it("reports the window for the meter", async () => {
+    const [{ r }] = await q<{ r: { window_used: number; window_frees_at: string | null; questions_today: number; scans_today: number } }>(
+      DEV,
+      `select budgetbuddy.ai_quota_window(5, 20, ${dayStart}, ${monthStart}) as r`,
+    );
+    expect(r.window_used).toBe(2);
+    expect(r.scans_today).toBe(1);
+    expect(r.window_frees_at).not.toBeNull();
+  });
+  it("is only for signed-in people", async () => {
+    expect(await denied(db.query(`set role anon; select budgetbuddy.ai_reserve_window(9, 5, 20, 40, now(), 1000000, now(), 'chat', null)`))).toBe(true);
+    await db.exec("reset role");
+  });
+});
+
+describe("saving quick records at once (migration 19)", () => {
+  it("is off by default, a person can switch their own on, and nobody else can", async () => {
+    await q(CARA, `insert into budgetbuddy.finn_prefs (user_id) values ('${CARA}')`);
+    expect((await q<{ a: boolean }>(CARA, `select auto_save_logs a from budgetbuddy.finn_prefs`))[0].a).toBe(false);
+    await q(CARA, `update budgetbuddy.finn_prefs set auto_save_logs = true, updated_at = now() where user_id = '${CARA}'`);
+    expect((await q<{ a: boolean }>(CARA, `select auto_save_logs a from budgetbuddy.finn_prefs`))[0].a).toBe(true);
+    await q(DEV, `update budgetbuddy.finn_prefs set auto_save_logs = false where user_id = '${CARA}'`);
+    expect((await q<{ a: boolean }>(CARA, `select auto_save_logs a from budgetbuddy.finn_prefs`))[0].a).toBe(true);
+    expect(await denied(q(DEV, `insert into budgetbuddy.finn_prefs (user_id, auto_save_logs) values ('${CARA}', true)`))).toBe(true);
   });
 });

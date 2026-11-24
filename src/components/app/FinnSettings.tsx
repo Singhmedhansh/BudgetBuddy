@@ -1,8 +1,9 @@
 "use client";
 
-import { Mail, MessageCircle } from "lucide-react";
+import { Mail, MessageCircle, Zap } from "lucide-react";
 import { useState, useTransition } from "react";
 import {
+  setAutoSaveLogsAction,
   setWeeklyRecapAction,
   startWhatsAppLinkAction,
   unlinkWhatsAppAction,
@@ -13,6 +14,7 @@ import type { FinnSettings as Settings } from "@/server/ai/finn-settings";
 /** Weekly recap and WhatsApp, under the chat list. Each section says plainly when it cannot be used yet. */
 export function FinnSettings({ settings }: { settings: Settings }) {
   const [recap, setRecap] = useState(settings.weeklyRecap);
+  const [autoSave, setAutoSave] = useState(settings.autoSaveLogs);
   const [msg, setMsg] = useState("");
   const [phone, setPhone] = useState(settings.whatsapp.phone ?? "");
   const [code, setCode] = useState<string | null>(null);
@@ -72,6 +74,39 @@ export function FinnSettings({ settings }: { settings: Settings }) {
           </p>
         ) : null}
       </div>
+
+      {settings.autoSaveReady ? (
+        <label className="flex cursor-pointer items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={autoSave}
+            disabled={busy}
+            onChange={(e) => {
+              const on = e.target.checked;
+              setAutoSave(on);
+              setMsg("");
+              start(async () => {
+                const r = await setAutoSaveLogsAction(on);
+                if (!r.ok) {
+                  setAutoSave(!on);
+                  setMsg(r.message ?? "That could not be saved.");
+                }
+              });
+            }}
+            className="mt-0.5 h-4 w-4 accent-[var(--primary)]"
+          />
+          <span>
+            <span className="flex items-center gap-1.5 font-medium">
+              <Zap size={13} aria-hidden /> Save quick records without asking
+            </span>
+            <span className="mt-0.5 block text-xs leading-relaxed text-muted">
+              When you tell {BRAND.assistantName} something like &ldquo;400 on
+              food&rdquo;, it is saved straight away, with an Undo. Off: you
+              confirm each one first.
+            </span>
+          </span>
+        </label>
+      ) : null}
 
       <div>
         <p className="flex items-center gap-1.5 font-medium">
