@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Select } from "@/components/ui/Select";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { commitImportAction, type JobRow } from "@/app/app/import/actions";
+import { commitImportAction, matchStatementBalanceAction, type JobRow } from "@/app/app/import/actions";
+import { balanceAsOf, BANK_LIKE } from "@/server/statement-match";
 import { Money, Notice, PageHeader } from "@/components/app/ui";
 import { requireSpace } from "@/server/context";
 import { listCategories } from "@/server/queries";
@@ -15,7 +16,7 @@ const FLAG = {
   possible_duplicate: { label: "Possible duplicate of a recorded transaction", tone: "text-warn-text" },
 } as const;
 
-export default async function ReviewPage({ params, searchParams }: { params: Promise<{ job: string }>; searchParams: Promise<{ error?: string }> }) {
+export default async function ReviewPage({ params, searchParams }: { params: Promise<{ job: string }>; searchParams: Promise<{ error?: string; matched?: string }> }) {
   const { job: id } = await params;
   const sp = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
@@ -25,6 +26,11 @@ export default async function ReviewPage({ params, searchParams }: { params: Pro
   const rows = job.rows as JobRow[];
   const problems = (job.problems ?? []) as { line: number; reason: string }[];
   const c = ctx.space.currency;
+  const closing = job.statement_closing_minor == null ? null : Number(job.statement_closing_minor);
+  const closingDate = (job.statement_closing_date as string | null) ?? null;
+  const { data: acct } = closing !== null ? await ctx.supabase.from("accounts").select("name, type").eq("id", job.account_id).maybeSingle() : { data: null };
+  const matchable = closing !== null && closingDate !== null && acct && BANK_LIKE.has(acct.type as string);
+  const asOf = matchable ? await balanceAsOf(ctx, job.account_id as string, closingDate!) : null;
 
   if (job.status === "committed") {
     const s = (job.summary ?? {}) as { imported?: number; skipped_already_imported?: number; excluded?: number };
@@ -36,6 +42,19 @@ export default async function ReviewPage({ params, searchParams }: { params: Pro
           {s.excluded ? `${s.excluded} were left out by you or flagged for review.` : ""}
         </Notice>
         {sp.error ? <Notice kind="error">{sp.error}</Notice> : null}
+        {sp.matched ? <Notice kind="success">{acct?.name ?? "The account"} now matches the balance on your statement.</Notice> : null}
+        {matchable && asOf !== null && asOf !== closing ? (
+          <section aria-labelledby="match" className="mb-6 rounded-xl border border-warn/50 bg-warn/10 p-5 text-sm">
+            <h2 id="match" className="font-semibold">Your bank says <Money minor={closing!} currency={c} />, FinTrack says <Money minor={asOf} currency={c} /></h2>
+            <p className="mt-2 max-w-[62ch] leading-relaxed text-muted">On {closingDate}, the statement&rsquo;s closing balance and {acct!.name} in FinTrack differ by <Money minor={Math.abs(closing! - asOf)} currency={c} />. This usually means the opening balance was never entered, or some transactions from before this statement are missing. Matching adds one adjustment, labelled &ldquo;Balance matched to bank statement&rdquo;, that you can reverse at any time.</p>
+            <form action={matchStatementBalanceAction} className="mt-4">
+              <input type="hidden" name="job" value={id} />
+              <button type="submit" className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-fg hover:bg-primary-hover">Match FinTrack to the statement</button>
+            </form>
+          </section>
+        ) : matchable && asOf === closing && !sp.matched ? (
+          <p className="mb-6 text-sm text-pos-text">{acct!.name} matches the closing balance on your statement (<Money minor={closing!} currency={c} /> on {closingDate}).</p>
+        ) : null}
         {problems.length > 0 ? (
           <p className="mb-6 text-sm">
             {problems.length} row{problems.length === 1 ? "" : "s"} in the file could not be read. <a href={`/app/import/${id}/errors`} className="font-medium text-primary hover:underline">Download the error report (CSV)</a>.
@@ -63,6 +82,13 @@ export default async function ReviewPage({ params, searchParams }: { params: Pro
           <> {problems.length} row{problems.length === 1 ? "" : "s"} could not be read, see below.</>
         ) : null}
       </p>
+
+      {matchable && asOf !== null ? (
+        <p className="mb-6 rounded-xl border border-line bg-surface p-4 text-sm leading-relaxed">
+          Your statement ends on {closingDate} with a balance of <Money minor={closing!} currency={c} className="font-semibold" />. With the ticked new rows, FinTrack would show about{" "}
+          <Money minor={asOf + rows.filter((r) => r.include && r.date <= closingDate!).reduce((t, r) => t + r.amount, 0)} currency={c} className="font-semibold" /> for {acct!.name} on that date. If they differ after the import, you can match them in one step.
+        </p>
+      ) : null}
 
       <form action={commitImportAction}>
         <input type="hidden" name="job" value={id} />

@@ -31,7 +31,7 @@ export async function readAttachment(file: File): Promise<Attachment> {
         ok: false,
         message:
           r.reason === "encrypted"
-            ? "That PDF is password-protected. Remove the password and try again."
+            ? "That PDF is password-protected. To read a locked bank statement, use Import and export, where you can enter its password."
             : r.reason === "no_text"
               ? "That PDF has no readable text (it may be a scan or photo). Export a text-based PDF or a CSV instead."
               : "That PDF could not be read. Try a CSV export or a smaller PDF.",

@@ -6,12 +6,15 @@ import { z } from "zod";
 import { parseCsv, CsvError } from "@/domain/csv";
 import { startOfLocalDay } from "@/domain/period";
 import { detectMapping, fingerprints, parseStatementRows, type DateOrder, type ParsedRow, type RowProblem } from "@/domain/statement";
-import { pdfText } from "@/server/pdf-text";
+import { closingBalanceFromText } from "@/domain/statement-balance";
+import { PDF_MESSAGES, pdfText } from "@/server/pdf-text";
 import { AI_STATEMENT_MESSAGES, categoriseWithAi, readStatementWithAi, type CategoryChoice } from "@/server/ai/statement";
 import { usageStoreFor } from "@/server/ai/usage-store";
 import { aiStatus } from "@/server/ai/config";
 import { requireSpace } from "@/server/context";
-import { friendlyDbError } from "@/server/ledger-write";
+import { friendlyDbError, persistPosting } from "@/server/ledger-write";
+import { adjustmentPosting } from "@/domain/ledger";
+import { balanceAsOf, BANK_LIKE } from "@/server/statement-match";
 import { sniffType } from "@/lib/upload";
 
 export interface ImportState {
@@ -64,19 +67,26 @@ export async function uploadStatementAction(_: ImportState | undefined, form: Fo
 
   let rows: ParsedRow[];
   let problems: RowProblem[];
+  // The closing balance the statement prints, read by code. Null when it prints none or it is ambiguous.
+  let closing: number | null = null;
   if (isPdf) {
     if (kind !== "application/pdf") return { fieldErrors: { file: "That does not look like a PDF file." } };
     if (!aiStatus().available) return { fieldErrors: { file: AI_STATEMENT_MESSAGES.disabled } };
     if (!useAi) return { fieldErrors: { useAi: "Tick the box to let the AI reader process this PDF." } };
-    const pdf = await pdfText(bytes);
+    // The statement password opens the file in memory for this read only. It is never stored, echoed back or logged.
+    const rawPassword = form.get("pdfPassword");
+    const password = typeof rawPassword === "string" && rawPassword.length > 0 && rawPassword.length <= 128 ? rawPassword : undefined;
+    const pdf = await pdfText(bytes, password);
     if (!pdf.ok) {
-      const msg = pdf.reason === "encrypted" ? "That PDF is password protected. Remove the password and upload it again." : pdf.reason === "no_text" ? AI_STATEMENT_MESSAGES.unreadable : "That PDF could not be read, or it has more than 30 pages. Split it by month.";
+      if (pdf.reason === "encrypted" || pdf.reason === "wrong_password") return { fieldErrors: { pdfPassword: PDF_MESSAGES[pdf.reason] } };
+      const msg = pdf.reason === "no_text" ? AI_STATEMENT_MESSAGES.unreadable : "That PDF could not be read, or it has more than 30 pages. Split it by month.";
       return { fieldErrors: { file: msg } };
     }
     const read = await readStatementWithAi(pdf.text, aiDeps, { currency: ctx.space.currency, dateOrder: parsed.data.dateOrder as DateOrder });
     if (!read.ok) return { fieldErrors: { file: AI_STATEMENT_MESSAGES[read.reason] } };
     rows = read.rows;
     problems = read.problems;
+    closing = closingBalanceFromText(pdf.text, ctx.space.currency);
   } else {
     if (kind !== "text/plain") return { fieldErrors: { file: "That does not look like a text CSV file." } };
     let text: string;
@@ -161,13 +171,41 @@ export async function uploadStatementAction(_: ImportState | undefined, form: Fo
     };
   });
 
-  const { data: job, error } = await ctx.supabase
-    .from("import_jobs")
-    .insert({ space_id: ctx.space.id, account_id: parsed.data.accountId, filename: file.name.slice(0, 200), rows: jobRows, problems, created_by: ctx.user.id })
-    .select("id")
-    .single();
+  const base = { space_id: ctx.space.id, account_id: parsed.data.accountId, filename: file.name.slice(0, 200), rows: jobRows, problems, created_by: ctx.user.id };
+  const lastDate = rows.reduce((m, r) => (r.date > m ? r.date : m), rows[0].date);
+  const withBalance = closing !== null ? { ...base, statement_closing_minor: closing, statement_closing_date: lastDate } : base;
+  let { data: job, error } = await ctx.supabase.from("import_jobs").insert(withBalance).select("id").single();
+  // Before migration 20 the balance columns do not exist: import without the balance check rather than fail.
+  if (error && closing !== null && /statement_closing/.test(error.message)) ({ data: job, error } = await ctx.supabase.from("import_jobs").insert(base).select("id").single());
   if (error || !job) return { error: friendlyDbError(error?.message ?? "") };
   redirect(`/app/import/${job.id}`);
+}
+
+/**
+ * After an import, makes the account match the closing balance the bank printed: one adjustment for the difference,
+ * dated at the end of the statement, labelled so it is easy to find and reverse. Posts at most once per import.
+ */
+export async function matchStatementBalanceAction(form: FormData) {
+  const ctx = await requireSpace();
+  const id = z.string().uuid().safeParse(form.get("job"));
+  if (!id.success) redirect("/app/import");
+  const back = (q: string) => redirect(`/app/import/${id.data}?${q}`);
+  const { data: job } = await ctx.supabase.from("import_jobs").select("account_id, status, statement_closing_minor, statement_closing_date").eq("id", id.data).maybeSingle();
+  if (!job || job.status !== "committed" || job.statement_closing_minor === null || !job.statement_closing_date) back("error=" + encodeURIComponent("This import has no statement balance to match."));
+  const { data: acct } = await ctx.supabase.from("accounts").select("id, type").eq("id", job!.account_id).maybeSingle();
+  if (!acct || !BANK_LIKE.has(acct.type as string)) back("error=" + encodeURIComponent("Only bank, cash and wallet accounts can be matched to a statement."));
+  const asOf = await balanceAsOf(ctx, acct!.id as string, job!.statement_closing_date as string);
+  if (asOf === null) back("error=" + encodeURIComponent("The account balance could not be read. Try again."));
+  const diff = Number(job!.statement_closing_minor) - asOf!;
+  if (diff === 0) back("matched=1");
+  const { data: eq } = await ctx.supabase.from("categories").select("id").eq("space_id", ctx.space.id).eq("kind", "equity").eq("name", "Opening balance").maybeSingle();
+  if (!eq) back("error=" + encodeURIComponent("The balance category is missing. Add the difference as an adjustment from the account page."));
+  const [y, m, d] = (job!.statement_closing_date as string).split("-").map(Number);
+  const occurredAt = new Date(startOfLocalDay(y, m, d, ctx.profile.timezone).getTime() + 23 * 3600 * 1000);
+  const posting = adjustmentPosting({ id: "statement-match", occurredAt, amount: diff, accountId: acct!.id as string, equityId: eq!.id as string });
+  const res = await persistPosting(ctx.supabase, { spaceId: ctx.space.id, posting, currency: ctx.space.currency, accountIds: new Set([acct!.id as string]), description: "Balance matched to bank statement", clientKey: `statement-match:${id.data}` });
+  revalidatePath("/app", "layout");
+  back(res.error ? "error=" + encodeURIComponent(res.error) : "matched=1");
 }
 
 export async function commitImportAction(form: FormData) {

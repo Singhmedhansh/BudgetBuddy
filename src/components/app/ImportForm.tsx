@@ -22,6 +22,25 @@ export function ImportForm({ accounts }: { accounts: { id: string; name: string 
         </p>
       </div>
       <div>
+        <label htmlFor="stmt-password" className="mb-1.5 block text-sm font-medium">
+          Statement password <span className="font-normal text-muted">(if the PDF has one)</span>
+        </label>
+        <input
+          id="stmt-password"
+          name="pdfPassword"
+          type="password"
+          autoComplete="off"
+          maxLength={128}
+          aria-describedby="pw-help"
+          aria-invalid={fe.pdfPassword ? true : undefined}
+          className="w-full rounded-md border border-line-strong bg-surface px-3 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+        />
+        <p id="pw-help" className={`mt-1.5 text-sm ${fe.pdfPassword ? "text-neg-text" : "text-xs text-muted"}`}>
+          {fe.pdfPassword ??
+            "Most Indian banks lock e-statements with a password, often part of your name with your date of birth, or your customer ID. It is used only to open the file on our server for this one import: it is never saved, never shown again and never sent to the AI."}
+        </p>
+      </div>
+      <div>
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" name="useAi" defaultChecked aria-describedby="ai-help" className="mt-1" />
           <span>Use AI to read PDFs and suggest categories</span>
