@@ -9,6 +9,7 @@ import {
   factsSummary,
   savingsPlan,
   splitTag,
+  statedFigures,
   generalPrompt,
   systemPrompt,
   type Facts,
@@ -254,6 +255,9 @@ export async function ask(
     return fail("unavailable");
   }
 
+  // Figures they typed themselves are theirs to repeat; the check must not mistake them for invented ones.
+  const said = general ? undefined : statedFigures(q, earlier);
+  if (said) facts = { ...facts, said };
   const plan = savingsPlan(q, facts);
   if (plan) facts = { ...facts, savingsPlan: plan };
   const calculation = detectCalculation(q);
@@ -286,6 +290,7 @@ export async function ask(
     system: general
       ? generalPrompt(facts, { brief: deps.brief })
       : systemPrompt(facts, { brief: deps.brief }),
+    ...(general ? { general: true } : {}),
     ...(general && !facts.calculation ? { tier: "light" as const } : {}),
     messages: [...turns, { role: "user", content: q }],
     maxOutputTokens: deps.brief
@@ -349,7 +354,11 @@ export async function ask(
         }
       : {
           ok: true,
-          answer: factsSummary(facts),
+          answer: `${
+            said
+              ? "I could not turn those figures into a reliable answer. Tell me what you want worked out, such as how long the money lasts or how to split it, and I will use them. For now, here is what your records show. "
+              : "I could not put together a reliable answer to that one, so here is what your records show. "
+          }${factsSummary(facts)}`,
           verified: true,
           source: "figures",
         };

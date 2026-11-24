@@ -4,8 +4,9 @@ import { cacheKey, type AnswerCache } from "./answer-cache";
 import { ask, MESSAGES, type UsageStore } from "./assistant";
 import { readAiConfig } from "./config";
 import { CASES } from "./eval/cases";
-import type { Facts } from "./grounding";
-import { AiUnavailableError } from "./router";
+import { statedFigures, type Facts } from "./grounding";
+import { AiUnavailableError, generate } from "./router";
+import { ProviderError, type ProviderClient } from "./types";
 import {
   emptyFacts,
   isGeneralQuestion,
@@ -337,5 +338,149 @@ describe("when every free provider is out of quota", () => {
       5,
       expect.objectContaining({ status: "error" }),
     );
+  });
+});
+
+describe("figures the person types themselves", () => {
+  const config = readAiConfig({
+    GEMINI_API_KEYS: "k",
+    GROQ_API_KEYS: "k",
+    AI_ENABLED: "true",
+  });
+  const usage = (): UsageStore => ({
+    reserve: vi.fn(async () => ({ allowed: true as const, id: 1 })),
+    settle: vi.fn(async () => undefined),
+  });
+  const reply = (text: string) =>
+    vi.fn(async () => ({
+      text,
+      promptTokens: 10,
+      completionTokens: 10,
+      provider: "groq",
+      model: "m",
+      attempts: 1,
+      fallbacks: 0,
+      rateLimited: 0,
+    }));
+
+  it("reads amounts with K and lakh, and skips list numbers", () => {
+    expect(
+      statedFigures(
+        "I have 569 in my bank and 1000 in cash, 5K coming and 1.5 lakh saved",
+      ),
+    ).toEqual({
+      amounts: ["569.00", "1000.00", "5000.00", "150000.00"],
+      totalOfThisMessage: "156569.00",
+    });
+    expect(
+      statedFigures("1. Flights 4500 2. Hotel 3000 3. Car Rental - 560")
+        ?.amounts,
+    ).toEqual(["4500.00", "3000.00", "560.00"]);
+    expect(statedFigures("How am I doing?")).toBeUndefined();
+  });
+
+  it("lets an answer repeat what they said instead of replacing it with a records summary", async () => {
+    const r = await ask(
+      "Currently I have 569 in my bank and 1000 in cash, I will get an allowance of 5K externally",
+      {
+        config,
+        usage: usage(),
+        loadFacts: async () => rich,
+        region,
+        generate: reply(
+          "[A] You mentioned ₹569 in the bank, ₹1,000 in cash and ₹5,000 coming, so ₹6,569 to plan with. Tell me your trip costs and I will split it.",
+        ),
+      },
+    );
+    expect(r).toMatchObject({ ok: true, source: "model" });
+    expect(r.ok && r.answer).toContain("6,569");
+    expect(r.ok && r.answer).not.toContain("As of");
+  });
+
+  it("still removes a figure that neither the records nor the person gave", async () => {
+    const r = await ask("I have 569 in my bank", {
+      config,
+      usage: usage(),
+      loadFacts: async () => rich,
+      region,
+      generate: reply(
+        "[A] You mentioned ₹569 in the bank. You will have ₹88,888 left by December.",
+      ),
+    });
+    expect(r.ok && r.answer).toContain("569");
+    expect(r.ok && r.answer).not.toContain("88,888");
+  });
+
+  it("explains itself when nothing usable remains", async () => {
+    const r = await ask("I have 569 in my bank", {
+      config,
+      usage: usage(),
+      loadFacts: async () => rich,
+      region,
+      generate: reply("[A] You will have ₹88,888 left."),
+    });
+    expect(r).toMatchObject({ ok: true, source: "figures" });
+    expect(r.ok && r.answer).toMatch(/could not turn those figures/);
+  });
+});
+
+describe("OpenRouter as a free last fallback", () => {
+  const keys = {
+    GEMINI_API_KEYS: "g",
+    GROQ_API_KEYS: "q",
+    OPENROUTER_API_KEY_1: "o",
+    AI_ENABLED: "true",
+  };
+  it("is read last, defaults to the free router and is limited to general questions", () => {
+    const c = readAiConfig(keys);
+    expect(c.providers.map((p) => p.id)).toEqual([
+      "gemini",
+      "groq",
+      "openrouter",
+    ]);
+    const o = c.providers.at(-1)!;
+    expect(o.model).toBe("openrouter/free");
+    expect(o.generalOnly).toBe(true);
+    expect(
+      readAiConfig({ ...keys, OPENROUTER_ALLOW_PERSONAL: "true" }).providers.at(
+        -1,
+      )!.generalOnly,
+    ).toBe(false);
+  });
+
+  const fakeClient = (id: "gemini" | "groq" | "openrouter", fails: boolean) => {
+    const complete = vi.fn(async () => {
+      if (fails) throw new ProviderError("rate_limit");
+      return { text: `from ${id}`, promptTokens: 1, completionTokens: 1 };
+    });
+    return { id, complete } as ProviderClient & { complete: typeof complete };
+  };
+  const clients = (openOk: boolean) => ({
+    gemini: fakeClient("gemini", true),
+    groq: fakeClient("groq", true),
+    openrouter: fakeClient("openrouter", !openOk),
+  });
+  const req = (general?: boolean) => ({
+    system: "s",
+    messages: [{ role: "user" as const, content: "q" }],
+    maxOutputTokens: 50,
+    ...(general ? { general: true } : {}),
+  });
+
+  it("answers a general question when the others are out of quota", async () => {
+    const c = clients(true);
+    const r = await generate(readAiConfig(keys), req(true), c);
+    expect(r).toMatchObject({
+      provider: "openrouter",
+      model: "openrouter/free",
+    });
+  });
+
+  it("is never sent a request built from the person's records", async () => {
+    const c = clients(true);
+    await expect(
+      generate(readAiConfig(keys), req(false), c),
+    ).rejects.toBeInstanceOf(AiUnavailableError);
+    expect(c.openrouter.complete).not.toHaveBeenCalled();
   });
 });

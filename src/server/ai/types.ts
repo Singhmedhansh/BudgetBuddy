@@ -9,6 +9,8 @@ export interface CompletionRequest {
   signal?: AbortSignal;
   /** "light": a simple, general question that a smaller, roomier model can answer. */
   tier?: "light";
+  /** True when nothing about the person is in the request. Only then may a provider that can log inputs be used. */
+  general?: boolean;
   /** Per-call timeout; the gateway sets it from configuration. */
   timeoutMs?: number;
 }
@@ -43,7 +45,7 @@ export class ProviderError extends Error {
 }
 
 export interface ProviderClient {
-  id: "gemini" | "groq";
+  id: "gemini" | "groq" | "openrouter";
   complete(
     apiKey: string,
     model: string,

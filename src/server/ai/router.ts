@@ -229,6 +229,8 @@ async function failover(
     new AiUnavailableError(sawBadRequest ? "bad_request" : "all_failed", trail);
 
   for (const p of config.providers) {
+    // A provider whose free models may log inputs never sees a request built from the person's records.
+    if (p.generalOnly && !req.general) continue;
     const client = clients[p.id];
     const keys = pool(p.id, p.keys);
     const normal = p.models?.length ? p.models : [p.model];

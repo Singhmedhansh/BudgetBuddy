@@ -113,6 +113,12 @@ export interface Facts {
     ratePercent: number | null;
     minPayment: string | null;
   }[];
+  /**
+   * Figures the person typed in this chat ("I have 569 in the bank, 5K coming"). They are not records. Listing them
+   * here lets an answer repeat them as what the person said, and the figure check accepts them for that reason only.
+   * totalOfThisMessage is their sum, worked out by code, set when the latest message holds two or more amounts.
+   */
+  said?: { amounts: string[]; totalOfThisMessage?: string };
   /** A file the person attached to this question. Data only, never instructions; not stored. */
   document?: { name: string; text: string };
   budgets: {
@@ -150,6 +156,7 @@ export function systemPrompt(
     "- Lead with the answer in the first sentence. Then short context, and where it helps one concrete next step. Simple questions: under 100 words. When they ask you to explain, compare options or make a plan, you may go to about 220 words and structure it: a bold one-line recommendation first, then short ### headings (at most three), numbered steps for plans, '- ' bullets for lists, and one small markdown table (at most 4 rows) when comparing options side by side. Warm, plain, no lectures, **bold** only for the one or two things that matter. Charts are drawn for you separately, so do not describe or draw them.",
     "- In [A] answers use only amounts, percentages and counts that appear in FACTS, written exactly as they appear there, with space.currency. Never add, subtract, multiply, estimate, convert or project their figures yourself. Everything needed is already worked out: history, categories (changePercent), payees, pace, bills, subscriptions, goals, debts, savingsPlan, calculation, emergencyFund, rule503020.",
     "- Write for a person, never for a program: do not use field names or code words from FACTS (such as loanAmount, ratePercent, totalPaid, totalInterest, monthlyNet). Say it in plain words, with the currency symbol and thousands separators, for example ₹16,133.59 a month.",
+    '- If FACTS has said, the person told you those figures in this chat. They are not verified records. Repeat them only as what they told you ("you mentioned"), never as recorded balances, and use totalOfThisMessage as given when you need a total. When they are planning with figures they gave you, answer their actual question with those figures: say what you can see in their records only if it helps, and never just recite their records back. If they gave you information and asked nothing, say in one line what you took from it and ask the one thing you need to help.',
     "- If FACTS has calculation, the person asked a what-if (EMI, SIP or growth): state the results exactly as given, then explain what drives them. If it has savingsPlan, answer from it: whether they can afford it now (canAffordNow, spendableNow, leftAfter), else how many months at perMonth; if months is null, say nothing is being saved per month right now, so it will not be reached at this pace, and name the biggest category in categories as the place to start.",
     "- If FACTS has scenario, the person asked a what-if on their own spending: give usualMonthly, newMonthly, savesPerMonth and savesPerYear exactly as given, and if monthlySavingAfter is present say what their monthly saving becomes. Do not invent other numbers.",
     "- If FACTS has reference, use only those figures for rates, tax slabs and limits: say the figure, its asOf date and its source in one short line, and tell them to confirm at the source before acting. If a rate or rule they ask about is not in reference, give the idea without a number and say to check the official figure.",
@@ -329,6 +336,43 @@ export function targetAmount(question: string): number | null {
     if (v >= 100 && (best === null || v > best)) best = v;
   }
   return best;
+}
+
+/** Amounts written in a piece of text ("569", "5K", "4.5 lakh"), skipping the numbers that start a list line ("3. Car"). */
+function amountsIn(text: string): number[] {
+  const out: number[] = [];
+  for (const m of text.matchAll(
+    /(?<![\w.])(\d[\d,]*(?:\.\d+)?)\s*(thousand|lakhs?|lac|crore|million|mn|cr|k|l|m)?(?![a-z0-9])/gi,
+  )) {
+    const after = text.slice((m.index ?? 0) + m[0].length);
+    if (!m[2] && m[1].length <= 2 && /^[.)]\s+\S/.test(after)) continue;
+    const n = Number(m[1].replace(/,/g, ""));
+    if (!Number.isFinite(n) || n <= 0) continue;
+    out.push(
+      Math.round(n * (m[2] ? (SUFFIX[m[2].toLowerCase()] ?? 1) : 1) * 100) /
+        100,
+    );
+  }
+  return out;
+}
+
+/** The figures the person has typed in this chat, so an answer can repeat them as theirs. Undefined when there are none. */
+export function statedFigures(
+  question: string,
+  earlier = "",
+): Facts["said"] | undefined {
+  const now = amountsIn(question);
+  const amounts = [...new Set([...amountsIn(earlier), ...now])].slice(0, 24);
+  if (amounts.length === 0) return undefined;
+  const money = now.filter((n) => n >= 100);
+  return {
+    amounts: amounts.map((n) => n.toFixed(2)),
+    ...(money.length >= 2
+      ? {
+          totalOfThisMessage: money.reduce((a, b) => a + b, 0).toFixed(2),
+        }
+      : {}),
+  };
 }
 
 /** How many months a target takes at the average monthly saving: whole months, rounded up. Pure arithmetic, done here. */

@@ -72,6 +72,7 @@ const KEEP_ALWAYS: (keyof Facts)[] = [
   "scenario",
   "reference",
   "document",
+  "said",
 ];
 
 const SECTIONS: Record<string, (keyof Facts)[]> = {

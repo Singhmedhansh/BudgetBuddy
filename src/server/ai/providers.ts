@@ -324,4 +324,89 @@ groq.stream = async (apiKey, model, req, onDelta) => {
   return { text: text.trim(), promptTokens, completionTokens };
 };
 
-export const PROVIDERS = { gemini, groq } as const;
+/**
+ * OpenRouter's OpenAI-compatible endpoint, used with its free models (ids ending in :free, or the openrouter/free
+ * router). Free use is capped per account, not per key, so it is only ever a last fallback. The two headers are
+ * OpenRouter's optional attribution, and carry no key or user data.
+ */
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const openrouterHeaders = (apiKey: string) => ({
+  "content-type": "application/json",
+  authorization: `Bearer ${apiKey}`,
+  "http-referer": "https://getfintrack.online",
+  "x-title": "FinTrack",
+});
+const openrouterBody = (model: string, req: CompletionRequest) => ({
+  model,
+  messages: [{ role: "system", content: req.system }, ...req.messages],
+  max_tokens: req.maxOutputTokens,
+  temperature: 0.2,
+});
+
+export const openrouter: ProviderClient = {
+  id: "openrouter",
+  async complete(apiKey, model, req): Promise<CompletionResult> {
+    const json = (await send(
+      OPENROUTER_URL,
+      {
+        method: "POST",
+        headers: openrouterHeaders(apiKey),
+        body: JSON.stringify(openrouterBody(model, req)),
+      },
+      req,
+      TIMEOUT,
+    )) as {
+      choices?: { message?: { content?: string } }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+    };
+    const text = (json.choices?.[0]?.message?.content ?? "").trim();
+    if (!text) throw new ProviderError("empty");
+    return {
+      text,
+      promptTokens: json.usage?.prompt_tokens ?? 0,
+      completionTokens: json.usage?.completion_tokens ?? 0,
+    };
+  },
+};
+
+openrouter.stream = async (apiKey, model, req, onDelta) => {
+  let failed = false;
+  let text = "";
+  let promptTokens = 0;
+  let completionTokens = 0;
+  await sendStream(
+    OPENROUTER_URL,
+    {
+      method: "POST",
+      headers: openrouterHeaders(apiKey),
+      body: JSON.stringify({
+        ...openrouterBody(model, req),
+        stream: true,
+        stream_options: { include_usage: true },
+      }),
+    },
+    req,
+    (j) => {
+      const e = j as {
+        choices?: { delta?: { content?: string } }[];
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
+        error?: unknown;
+      };
+      // OpenRouter reports a failure that happens mid-stream as an event rather than a status code.
+      if (e.error) failed = true;
+      const t = e.choices?.[0]?.delta?.content ?? "";
+      if (t) {
+        text += t;
+        onDelta(t);
+      }
+      if (e.usage) {
+        promptTokens = e.usage.prompt_tokens ?? promptTokens;
+        completionTokens = e.usage.completion_tokens ?? completionTokens;
+      }
+    },
+  );
+  if (!text.trim()) throw new ProviderError(failed ? "server" : "empty");
+  return { text: text.trim(), promptTokens, completionTokens };
+};
+
+export const PROVIDERS = { gemini, groq, openrouter } as const;

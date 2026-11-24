@@ -5,14 +5,16 @@
  *   AI_ENABLED=true              master switch; off by default
  *   GEMINI_API_KEY_1..3 / GEMINI_API_KEYS=k1,k2   keys for Google Gemini (both forms are read)
  *   GROQ_API_KEY_1..4 / GROQ_API_KEYS=k1,k2       keys for Groq
- *   AI_PROVIDER_ORDER=gemini,groq   which provider is tried first; the next is the fallback
+ *   OPENROUTER_API_KEY_1.. / OPENROUTER_API_KEYS=k1   key for OpenRouter's free models (general questions only,
+ *                                unless OPENROUTER_ALLOW_PERSONAL=true); OPENROUTER_MODEL defaults to openrouter/free
+ *   AI_PROVIDER_ORDER=gemini,groq   which provider is tried first; the next is the fallback (openrouter is last)
  *   GEMINI_MODEL / GROQ_MODEL    model ids, comma-separated for ordered alternatives (defaults below)
  *   AI_<FEATURE>_<PROVIDER>_MODEL   per-feature override, e.g. AI_ASSISTANT_GEMINI_MODEL
  *   AI_KEYS_INDEPENDENT_QUOTA=true  only if each key is in a separate project / organisation
  *   AI_REQUESTS_PER_HOUR, AI_TOKENS_PER_DAY, AI_MAX_OUTPUT_TOKENS, AI_MAX_QUESTION_CHARS   per-person limits
  */
-export type ProviderId = "gemini" | "groq";
-export const PROVIDER_IDS: ProviderId[] = ["gemini", "groq"];
+export type ProviderId = "gemini" | "groq" | "openrouter";
+export const PROVIDER_IDS: ProviderId[] = ["gemini", "groq", "openrouter"];
 
 /**
  * Features that call the gateway. Only the assistant exists today; add an id here when a feature is built, and it
@@ -23,15 +25,18 @@ export type AiFeature = "assistant";
 const KEYS_ENV: Record<ProviderId, string> = {
   gemini: "GEMINI_API_KEYS",
   groq: "GROQ_API_KEYS",
+  openrouter: "OPENROUTER_API_KEYS",
 };
 /** Numbered variables (GEMINI_API_KEY_1, GEMINI_API_KEY_2, ...) are read as well as the comma-separated pool. */
 const NUMBERED_ENV: Record<ProviderId, string> = {
   gemini: "GEMINI_API_KEY",
   groq: "GROQ_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
 };
 const MODEL_ENV: Record<ProviderId, string> = {
   gemini: "GEMINI_MODEL",
   groq: "GROQ_MODEL",
+  openrouter: "OPENROUTER_MODEL",
 };
 /**
  * Defaults are ordered: the first is tried, the next only when the provider reports the model gone. The previous
@@ -42,16 +47,20 @@ const MODEL_ENV: Record<ProviderId, string> = {
 const MODEL_DEFAULT: Record<ProviderId, string[]> = {
   gemini: ["gemini-3.5-flash-lite", "gemini-3.6-flash"],
   groq: ["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
+  // OpenRouter's own free router picks whichever free model is up, so a retired free model never breaks it.
+  openrouter: ["openrouter/free"],
 };
 
 /** Smaller models for simple, general questions. Their free allowances are much larger than the big models'. */
 const LIGHT_DEFAULT: Record<ProviderId, string[]> = {
   gemini: [],
   groq: ["llama-3.1-8b-instant"],
+  openrouter: [],
 };
 const LIGHT_ENV: Record<ProviderId, string> = {
   gemini: "GEMINI_LIGHT_MODEL",
   groq: "GROQ_LIGHT_MODEL",
+  openrouter: "OPENROUTER_LIGHT_MODEL",
 };
 
 const int = (
@@ -105,6 +114,11 @@ export interface AiProviderConfig {
   models?: string[];
   /** Smaller models tried first for simple, general questions. */
   lightModels?: string[];
+  /**
+   * True for a provider whose free models may log or train on what they are sent. It is then used only for questions
+   * that carry nothing about the person, never for one built from their records.
+   */
+  generalOnly?: boolean;
   keys: string[];
 }
 
@@ -162,6 +176,8 @@ export function readAiConfig(
           model: models[0],
           models,
           lightModels,
+          generalOnly:
+            id === "openrouter" && env.OPENROUTER_ALLOW_PERSONAL !== "true",
           keys: collectKeys(env, id),
         };
       })
