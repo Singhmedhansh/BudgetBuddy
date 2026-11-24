@@ -3,7 +3,9 @@
 import { ChevronDown, Menu as MenuIcon, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Avatar } from "@/components/app/AccountMenu";
 import { Logo } from "@/components/brand/Logo";
+import { HeaderAccountPill, useSignedIn } from "./HeaderAccount";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 
 export interface MenuItem {
@@ -26,6 +28,7 @@ export function HeaderClient({ menus }: { menus: Menu[] }) {
   const [section, setSection] = useState<string>("");
   const rootRef = useRef<HTMLElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const who = useSignedIn();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -128,12 +131,18 @@ export function HeaderClient({ menus }: { menus: Menu[] }) {
 
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
           <ThemeToggle />
-          <Link href="/login" className="hidden rounded-md px-2 py-2 text-sm font-medium transition-colors hover:text-primary sm:block">
-            Sign in
-          </Link>
-          <Link href="/signup" className="hidden rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-fg shadow-sm transition-all hover:-translate-y-px hover:bg-primary-hover hover:shadow-card sm:block">
-            Get started
-          </Link>
+          {who ? (
+            <HeaderAccountPill who={who} />
+          ) : (
+            <>
+              <Link href="/login" className="hidden rounded-md px-2 py-2 text-sm font-medium transition-colors hover:text-primary sm:block">
+                Sign in
+              </Link>
+              <Link href="/signup" className="hidden rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-fg shadow-sm transition-all hover:-translate-y-px hover:bg-primary-hover hover:shadow-card sm:block">
+                Get started
+              </Link>
+            </>
+          )}
           <button
             type="button"
             aria-label={mobile ? "Close menu" : "Open menu"}
@@ -172,14 +181,21 @@ export function HeaderClient({ menus }: { menus: Menu[] }) {
             <Link href="/#pricing" onClick={close} className="flex min-h-12 items-center border-b border-line text-base font-medium">
               Pricing
             </Link>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <Link href="/login" onClick={close} className="grid min-h-12 place-items-center rounded-full border border-line-strong text-sm font-semibold">
-                Sign in
+            {who ? (
+              <Link href="/app" onClick={close} className="mt-5 flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary text-sm font-semibold text-primary-fg">
+                <Avatar name={who.name} url={null} size={26} />
+                Open FinTrack as {who.name}
               </Link>
-              <Link href="/signup" onClick={close} className="grid min-h-12 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-fg">
-                Get started
-              </Link>
-            </div>
+            ) : (
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <Link href="/login" onClick={close} className="grid min-h-12 place-items-center rounded-full border border-line-strong text-sm font-semibold">
+                  Sign in
+                </Link>
+                <Link href="/signup" onClick={close} className="grid min-h-12 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-fg">
+                  Get started
+                </Link>
+              </div>
+            )}
           </nav>
         </div>
       </div>

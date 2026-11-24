@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowRight, BookOpen, Calculator, CalendarClock, Camera, FileText, FileUp, LineChart, LockKeyhole, MessageSquareText, PiggyBank, ReceiptText, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { ArrowRight, BookOpen, Check, Calculator, CalendarClock, Camera, FileText, FileUp, LineChart, LockKeyhole, MessageSquareText, PiggyBank, ReceiptText, ShieldCheck, Sparkles, Users } from "lucide-react";
 import Link from "next/link";
 import { AssistantMark } from "@/components/app/AssistantMark";
 import { FinnDemo } from "@/components/demo/FinnDemo";
@@ -36,6 +36,45 @@ const FINN_TRUST = [
   `${FINN} gives general guidance and education. It is not a SEBI-registered investment adviser and never tells you to buy or sell a specific stock, fund or policy.`,
 ];
 
+// The trial terms in one place, from the plan config, so the page can never disagree with what is charged.
+const ONE = PLANS.find((p) => p.id === "pro")!;
+const YEARLY_INR = formatPrice(priceFor(ONE, "year")!);
+const YEARLY_USD = formatPrice(priceFor(ONE, "year", "USD")!);
+const MONTHLY_INR = formatPrice(priceFor(ONE, "month")!);
+const MONTHLY_USD = formatPrice(priceFor(ONE, "month", "USD")!);
+
+const HERO_POINTS = ["No card needed", "Recording spends is unlimited", `${FINN} asks before changing anything`];
+
+type Say = { text: string; kind: "log" | "ask"; Icon: typeof Sparkles };
+/** Examples only: quick records (filled) and questions (outlined). All of these work today. */
+const SAY_ROW_ONE: Say[] = [
+  { text: "400 on food", kind: "log", Icon: ReceiptText },
+  { text: "Where did my money go this month?", kind: "ask", Icon: Sparkles },
+  { text: "Rent 15k paid", kind: "log", Icon: ReceiptText },
+  { text: "Can I afford a ₹7,000 monitor?", kind: "ask", Icon: Sparkles },
+  { text: "200 auto, 150 chai yesterday", kind: "log", Icon: ReceiptText },
+  { text: "EMI on a ₹5 lakh loan at 10% for 3 years", kind: "ask", Icon: Calculator },
+  { text: "Swiggy 340", kind: "log", Icon: ReceiptText },
+  { text: "How long until my trip fund is full?", kind: "ask", Icon: PiggyBank },
+];
+const SAY_ROW_TWO: Say[] = [
+  { text: "What is a SIP?", kind: "ask", Icon: BookOpen },
+  { text: "Salary 65,000 received", kind: "log", Icon: ReceiptText },
+  { text: "Which subscriptions renew this week?", kind: "ask", Icon: CalendarClock },
+  { text: "Petrol 1,200 on card", kind: "log", Icon: ReceiptText },
+  { text: "Old or new tax regime for me?", kind: "ask", Icon: BookOpen },
+  { text: "Am I over my food budget?", kind: "ask", Icon: LineChart },
+  { text: "Groceries 2,350 last Sunday", kind: "log", Icon: ReceiptText },
+  { text: "Save ₹1 lakh by March: how much a month?", kind: "ask", Icon: Calculator },
+];
+
+const HERO_FACTS = [
+  { label: `${FINN} on the free plan`, value: `${FREE_AI.questionsPerWindow} messages`, note: `every ${FREE_AI.windowHours} hours` },
+  { label: "Recording what you spend", value: "Unlimited", note: "never counts against the allowance" },
+  { label: "FinTrack One", value: `${TRIAL_DAYS} days free`, note: `then ${MONTHLY_INR} a month` },
+  { label: "To start", value: "₹0", note: "no card, no bank login" },
+];
+
 const FEATURES = [
   { Icon: ReceiptText, title: "A ledger underneath", body: "Every entry balances. Transfers between your own accounts and credit card repayments are never counted as spending, so totals match what actually happened." },
   { Icon: PiggyBank, title: "Budgets that say what is left", body: "Set limits by category and period. See what you have spent and what remains, with alerts at the threshold you choose." },
@@ -58,12 +97,6 @@ const AUDIENCES = [
   { who: "Couples and families", body: "Share household bills and goals, see who contributed, and keep personal spending personal.", example: "Groceries, school fees, a holiday pot" },
 ];
 
-// The trial terms in one place, from the plan config, so the page can never disagree with what is charged.
-const ONE = PLANS.find((p) => p.id === "pro")!;
-const YEARLY_INR = formatPrice(priceFor(ONE, "year")!);
-const YEARLY_USD = formatPrice(priceFor(ONE, "year", "USD")!);
-const MONTHLY_INR = formatPrice(priceFor(ONE, "month")!);
-const MONTHLY_USD = formatPrice(priceFor(ONE, "month", "USD")!);
 const TRIAL_CTA = `Start your ${TRIAL_DAYS}-day free trial`;
 
 const FAQ = [
@@ -101,7 +134,7 @@ export default function Home() {
         <section className="relative -mt-16 overflow-hidden pt-16">
           <div aria-hidden className="ledger-grid absolute inset-0 -z-10" />
           <div aria-hidden className="absolute -right-40 -top-40 -z-10 h-[34rem] w-[34rem] rounded-full bg-primary/15 blur-3xl" />
-          <div className="mx-auto grid max-w-6xl items-center gap-10 px-5 pb-16 pt-14 lg:grid-cols-[1.05fr_1fr] lg:pb-24 lg:pt-20">
+          <div className="mx-auto grid max-w-6xl items-center gap-10 px-5 pb-14 pt-14 lg:grid-cols-[1.05fr_1fr] lg:pb-16 lg:pt-20">
             <div>
               <h1 className="font-display anim-rise max-w-[14ch] text-[2.6rem] leading-[1.02] sm:text-6xl lg:text-[4.4rem]">{BRAND.tagline}</h1>
               <p className="anim-rise mt-6 max-w-[46ch] text-lg leading-relaxed text-muted" style={{ animationDelay: "90ms" }}>
@@ -116,11 +149,59 @@ export default function Home() {
                   See what {FINN} does
                 </Link>
               </div>
-              <p className="anim-rise mt-6 text-sm text-muted" style={{ animationDelay: "260ms" }}>
-                The free plan includes {FINN}: {FREE_AI.questionsPerWindow} messages every {FREE_AI.windowHours} hours, and recording what you spend never counts. Or try FinTrack One free for {TRIAL_DAYS} days, then {MONTHLY_INR} a month or {YEARLY_INR} a year ({MONTHLY_USD} or {YEARLY_USD} outside India).
+              <ul className="anim-rise mt-7 flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium" style={{ animationDelay: "260ms" }}>
+                {HERO_POINTS.map((p) => (
+                  <li key={p} className="flex items-center gap-2">
+                    <span aria-hidden className="grid h-5 w-5 place-items-center rounded-full bg-sage text-primary">
+                      <Check size={12} strokeWidth={3} />
+                    </span>
+                    {p}
+                  </li>
+                ))}
+              </ul>
+              <p className="anim-rise mt-5 max-w-[52ch] text-sm leading-relaxed text-muted" style={{ animationDelay: "320ms" }}>
+                The free plan includes {FINN}: {FREE_AI.questionsPerWindow} messages every {FREE_AI.windowHours} hours. Or try FinTrack One free for {TRIAL_DAYS} days, then {MONTHLY_INR} a month or {YEARLY_INR} a year ({MONTHLY_USD} or {YEARLY_USD} outside India).
               </p>
             </div>
             <FinnDemo />
+          </div>
+
+          {/* Things people say to Finn: fills the width under the hero and shows the range in one glance */}
+          <div className="anim-rise relative pb-6" style={{ animationDelay: "400ms" }}>
+            <p className="mx-auto mb-5 flex max-w-6xl items-center gap-2 px-5 text-xs font-semibold uppercase tracking-[0.14em] text-muted">
+              <AssistantMark size={16} /> Things people say to {FINN}
+            </p>
+            <div className="space-y-3">
+              {[SAY_ROW_ONE, SAY_ROW_TWO].map((row, r) => (
+                <div key={r} className="marquee-mask overflow-hidden">
+                  <ul className={`marquee-track flex w-max gap-3 ${r === 1 ? "reverse" : ""}`}>
+                    {[...row, ...row].map((s, i) => (
+                      <li
+                        key={i}
+                        aria-hidden={i >= row.length || undefined}
+                        className={`flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm shadow-sm ${s.kind === "log" ? "border-primary/25 bg-primary text-primary-fg" : "border-line bg-surface text-fg"}`}
+                      >
+                        <s.Icon size={14} aria-hidden className={s.kind === "log" ? "opacity-80" : "text-primary"} />
+                        {s.text}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Plain facts from the plan config, so they can never disagree with what is offered */}
+          <div className="mx-auto max-w-6xl px-5 pb-16 pt-10 lg:pb-20">
+            <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line lg:grid-cols-4">
+              {HERO_FACTS.map((f) => (
+                <div key={f.label} className="bg-surface/90 px-5 py-6 backdrop-blur sm:px-7">
+                  <dt className="text-sm text-muted">{f.label}</dt>
+                  <dd className="num font-display mt-1 text-3xl leading-tight sm:text-4xl">{f.value}</dd>
+                  <dd className="mt-1 text-xs text-muted">{f.note}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </section>
 
