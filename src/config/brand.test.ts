@@ -7,7 +7,7 @@ import { formatPrice, PLANS, planName, priceFor } from "./plans";
 describe("brand and pricing", () => {
   it("has the approved identity", () => {
     expect(BRAND.name).toBe("FinTrack");
-    expect(BRAND.tagline).toBe("Your finances. In focus.");
+    expect(BRAND.tagline).toBe("Meet Finn. Your money, handled.");
   });
 
   it("names and prices the plans from one config", () => {

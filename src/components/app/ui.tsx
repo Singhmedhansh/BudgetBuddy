@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { Inbox, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { BackButton } from "@/components/nav/BackButton";
 import { formatMoney } from "@/domain/money";
@@ -28,11 +28,12 @@ export function PageHeader({ title, description, action, help, back }: { title: 
   );
 }
 
-export function EmptyState({ title, body, action }: { title: string; body: string; action?: { href: string; label: string } }) {
+/** An empty list or page. The icon names what belongs here; the default is a plain empty tray (never an AI sparkle). */
+export function EmptyState({ title, body, action, Icon = Inbox }: { title: string; body: string; action?: { href: string; label: string }; Icon?: LucideIcon }) {
   return (
     <div className="rounded-xl border border-dashed border-line-strong bg-surface/60 px-6 py-14 text-center">
       <span aria-hidden className="mx-auto mb-4 grid h-11 w-11 place-items-center rounded-full bg-sage text-primary">
-        <Sparkles size={19} />
+        <Icon size={19} />
       </span>
       <h2 className="font-display text-xl">{title}</h2>
       <p className="mx-auto mt-2 max-w-[46ch] text-sm leading-relaxed text-muted">{body}</p>

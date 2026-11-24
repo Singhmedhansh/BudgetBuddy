@@ -1,18 +1,20 @@
-import { PLANS, formatPrice, planName, priceFor } from "@/config/plans";
+import { PLANS, TRIAL_DAYS, formatPrice, planName, priceFor } from "@/config/plans";
 import type { Block } from "./help/articles";
 
 const ONE = PLANS.find((x) => x.id === "pro")!;
-const oneMonthly = formatPrice(priceFor(ONE, "month")!);
+const oneUsd = formatPrice(priceFor(ONE, "year", "USD")!);
+const oneMonthlyInr = formatPrice(priceFor(ONE, "month")!);
+const oneMonthlyUsd = formatPrice(priceFor(ONE, "month", "USD")!);
 const oneYearly = formatPrice(priceFor(ONE, "year")!);
 
 /**
  * Policy text for the product as built today. These are drafts for qualified
- * legal review before public launch: they make no compliance claims, and they
- * describe capabilities that are not live yet (paid plans, AI assistant, bank
- * connections) only as not live. Update this file in the same change as any
+ * legal review: they make no compliance claims, and they describe capabilities
+ * that are not live yet (bank connections) only as not live. Paid plans and
+ * Finn, the AI assistant, are live. Update this file in the same change as any
  * feature that alters what data is collected or shared.
  */
-export const LEGAL_UPDATED = "13 November 2026";
+export const LEGAL_UPDATED = "24 November 2026";
 
 export interface LegalDoc {
   slug: string;
@@ -50,8 +52,8 @@ export const LEGAL_DOCS: LegalDoc[] = [
         heading: "Who handles your data",
         blocks: [
           p("We use service providers to run FinTrack. Today these are a database, authentication and file-storage provider (Supabase) and a web hosting provider. They process data on our behalf and only to provide those services."),
-          p("Paid plans, when they launch, will use Razorpay for customers in India and PayPal for international customers. Card numbers go to the payment provider and never reach FinTrack. Payments are not live today."),
-          p("An AI assistant is planned but is not available. Before it launches we will describe here what data it uses and give you a way to opt out."),
+          p("Payments for FinTrack One go through Razorpay for customers in India (cards, UPI and net banking) and PayPal for international customers. Card numbers, UPI details and bank logins go to the payment provider and never reach FinTrack. We receive what we need to run your plan: the payment's status, amount, date and the provider's reference."),
+          p("Finn, the money assistant, uses outside AI providers to write its answers. What it sends and to whom is described in the last section of this policy, \"Finn and the AI providers it uses\"."),
           p("We do not sell your personal data."),
         ],
       },
@@ -73,6 +75,20 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Security",
         blocks: [p("Access to your data is controlled in the database itself, so another user cannot read your records. See [Security and privacy](/security). No system is perfectly secure, and we cannot guarantee absolute security.")],
+      },
+      {
+        heading: "Finn and the AI providers it uses",
+        blocks: [
+          p("When you ask Finn about your own money, the figures that question needs (for example totals by category, upcoming bills or progress on a goal) and the last few messages of the chat are sent to an AI provider, which writes the answer. A question that is not about your own money is sent with none of your records. Your password and payment details are never sent."),
+          list(
+            "Questions about your own money go to Groq, Google (the Gemini API) or Cloudflare (Workers AI), whichever is available.",
+            "Questions with nothing about you in them may also go to Mistral AI or OpenRouter.",
+            "A file you attach to a question is read for that question only and is not stored.",
+            "Answers to general questions (never ones about you) are kept for seven days under a code made from the question, so the same question from someone else can be answered without asking a provider again.",
+            "Your chats with Finn are saved in your account so you can come back to them, and you can delete any chat.",
+          ),
+          p("Please note: Google's free Gemini API service, which can receive the figures a question about your own money needs when other providers are busy, may use what it is sent to improve Google's products. Mistral AI's free plan may do the same, which is why it is only sent questions with nothing about you in them. If you prefer that none of your figures reach these services, do not ask Finn about your own records; every other part of FinTrack works without Finn."),
+        ],
       },
       { heading: "Contact", blocks: [p("Questions about this policy: [Contact us](/contact).")] },
     ],
@@ -102,7 +118,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       },
       {
         heading: "Plans and payment",
-        blocks: [p("The free plan has no charge. Paid plans are not available yet. When they are, prices, billing periods and cancellation will be shown before you pay and are described in [Pricing and billing](/legal/billing). Refunds are covered by the [Refund policy](/legal/refunds).")],
+        blocks: [p(`The free plan has no charge. ${planName("pro")} starts with a ${TRIAL_DAYS}-day free trial and then renews monthly or yearly, as you chose. Prices, the trial, renewal and cancellation are shown before you pay and are described in [Pricing and billing](/legal/billing). Refunds are covered by the [Refund policy](/legal/refunds).`)],
       },
       {
         heading: "Availability and changes",
@@ -130,14 +146,14 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Paid plans",
         blocks: [
-          p("Paid plans are not available yet. When they launch, this is how refunds will work:"),
+          p(`${planName("pro")} starts with a ${TRIAL_DAYS}-day free trial. If you cancel before the trial ends you are not charged. This is how refunds work after a charge:`),
           list(
             "Refund requests are reviewed under these terms and the law that applies to you. Where consumer law gives you a right, that right comes first.",
             "A duplicate charge, where you were billed twice for the same period, is investigated and refunded once verified.",
             "If you see a charge you did not authorise, tell us through [Contact us](/contact) and we will investigate.",
             "Cancelling stops future renewals. It does not automatically refund a billing period that has already been charged.",
           ),
-          p("How long a refund takes to reach you depends on your bank and the payment provider. We will state expected timelines here once they are confirmed with our payment providers."),
+          p("How long a refund takes to reach you depends on your bank and the payment provider."),
         ],
       },
     ],
@@ -176,11 +192,32 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Plans",
         blocks: [
-          p(`${planName("free")} costs nothing. ${planName("pro")} is ${oneMonthly} a month, or ${oneYearly} a year. Prices are shown on the [home page](/#pricing) in the currency they are charged in, and you will see the final amount before you pay. Paid plans are not available yet.`),
+          p(`${planName("free")} costs nothing. ${planName("pro")} is billed monthly (${oneMonthlyInr} in India, or ${oneMonthlyUsd} elsewhere) or yearly (${oneYearly} in India, or ${oneUsd} elsewhere), as you choose. Prices are shown on the [home page](/#pricing) in the currency they are charged in, and you will see the final amount before you pay.`),
         ],
       },
       {
-        heading: "How billing will work",
+        heading: "The free trial and renewal",
+        blocks: [
+          list(
+            `${planName("pro")} starts with a ${TRIAL_DAYS}-day free trial. Nothing is charged when you start it.`,
+            `When the ${TRIAL_DAYS} days end, the price of the plan you chose (monthly or yearly) is charged automatically to the payment method you added, and then every month or year until you cancel.`,
+            "Cancel any time in Settings, Plan and billing. Cancel before the trial ends and you are not charged. After a charge, you keep access until the end of the year you paid for.",
+            "In India, setting up a card or UPI autopay may involve a small authorisation charge of up to ₹5, which is refunded. It is not a purchase.",
+            "One free trial per person.",
+          ),
+        ],
+      },
+      {
+        heading: "Promotion codes",
+        blocks: [
+          list(
+            "A promotion code can give a longer free trial. It applies only to new subscribers, only once per person, and only to the plans and dates stated with the code.",
+            "A code has no cash value, cannot be combined with another, and is applied when you start the trial. We may withdraw a code that is abused.",
+          ),
+        ],
+      },
+      {
+        heading: "How billing works",
         blocks: [
           list(
             "Customers in India are billed in INR through Razorpay. International customers are billed through PayPal in a supported currency.",

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { profileTheme, resetTheme } from "./helpers";
 
 /** Runs at 1440, 1280, 768 and 390 px as real browser viewports (see playwright.config.ts). */
 const PUBLIC = ["/", "/help", "/help/getting-started", "/contact", "/security", "/legal/privacy", "/login", "/signup", "/forgot-password"];
@@ -108,6 +109,13 @@ test.describe("navigation", () => {
 });
 
 test.describe("theme and motion", () => {
+  // The theme is stored on the shared test user's profile: start from a known state and leave it that way.
+  test.beforeEach(async ({ page }) => {
+    await resetTheme(page, "light");
+  });
+  test.afterEach(async ({ page }) => {
+    await resetTheme(page, "light");
+  });
   test("theme switching persists across reloads and changes real colours", async ({ page }) => {
     await page.goto("/");
     const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
@@ -119,6 +127,7 @@ test.describe("theme and motion", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await page.getByRole("radio", { name: "Light theme" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await profileTheme("light", expect); // the save has finished before the test ends
     expect(await bg()).toBe(light);
   });
 

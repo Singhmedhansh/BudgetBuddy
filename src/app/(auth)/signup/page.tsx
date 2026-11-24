@@ -12,7 +12,7 @@ export default function SignupPage() {
   return (
     <AuthShell
       title="Create your account"
-      description="Free to start. You can add accounts, budgets and goals after you sign up."
+      description="Free to start. After you sign up you can start a 5-day free trial of FinTrack One from Settings, Plan and billing, or stay on the free plan."
       footer={
         <>
           Already have an account?{" "}

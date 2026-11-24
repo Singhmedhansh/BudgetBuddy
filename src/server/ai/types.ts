@@ -7,6 +7,12 @@ export interface CompletionRequest {
   messages: ChatMessage[];
   maxOutputTokens: number;
   signal?: AbortSignal;
+  /** "light": a simple, general question that a smaller, roomier model can answer. */
+  tier?: "light";
+  /** True when nothing about the person is in the request. Only then may a provider that can log inputs be used. */
+  general?: boolean;
+  /** Per-call timeout; the gateway sets it from configuration. */
+  timeoutMs?: number;
 }
 export interface CompletionResult {
   text: string;
@@ -14,7 +20,15 @@ export interface CompletionResult {
   completionTokens: number;
 }
 
-export type ProviderErrorKind = "rate_limit" | "auth" | "server" | "bad_request" | "network" | "timeout" | "empty";
+export type ProviderErrorKind =
+  | "rate_limit"
+  | "auth"
+  | "server"
+  | "bad_request"
+  | "network"
+  | "timeout"
+  | "empty"
+  | "model_unavailable";
 
 /** A provider failure with a safe, key-free message. `kind` decides whether failing over to another key is sensible. */
 export class ProviderError extends Error {
@@ -31,6 +45,17 @@ export class ProviderError extends Error {
 }
 
 export interface ProviderClient {
-  id: "gemini" | "groq";
-  complete(apiKey: string, model: string, req: CompletionRequest): Promise<CompletionResult>;
+  id: "gemini" | "groq" | "openrouter" | "cloudflare" | "mistral";
+  complete(
+    apiKey: string,
+    model: string,
+    req: CompletionRequest,
+  ): Promise<CompletionResult>;
+  /** Same call, but text is handed over as it is written. Optional: a provider without it is called once and shown whole. */
+  stream?(
+    apiKey: string,
+    model: string,
+    req: CompletionRequest,
+    onDelta: (text: string) => void,
+  ): Promise<CompletionResult>;
 }

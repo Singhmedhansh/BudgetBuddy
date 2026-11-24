@@ -10,7 +10,8 @@ import {
   ChartColumn,
   LineChart,
   Settings,
-  Sparkles,
+  Aperture,
+  CreditCard,
   Target,
   Users,
   TrendingUp,
@@ -52,13 +53,14 @@ export const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/app/analytics", label: "Analytics", Icon: ChartColumn },
       { href: "/app/forecast", label: "Forecast", Icon: LineChart },
-      { href: "/app/assistant", label: "Assistant", Icon: Sparkles },
+      { href: "/app/assistant", label: "Finn", Icon: Aperture },
     ],
   },
   {
     title: "Share and manage",
     items: [
       { href: "/app/members", label: "Members", Icon: Users },
+      { href: "/app/billing", label: "Plan and billing", Icon: CreditCard },
       { href: "/app/settings", label: "Settings", Icon: Settings },
     ],
   },

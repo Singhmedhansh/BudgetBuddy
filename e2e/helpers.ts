@@ -52,3 +52,25 @@ export async function pickDate(page: Page, label: string | RegExp, isoDate: stri
   }
   await cell.click();
 }
+
+/**
+ * The theme lives on the shared test user's profile, so a test that changes it can leak into the next one. This puts
+ * both stores (the profile row and the browser's local storage) into a known light state before a test and waits for
+ * the database to confirm it, so no test depends on what ran before it.
+ */
+export async function resetTheme(page: Page, theme: "light" | "dark" | "system" = "light") {
+  const sb = await api();
+  const { data: s } = await sb.auth.getUser();
+  await sb.from("profiles").update({ theme }).eq("user_id", s.user!.id);
+  // Once per tab, not on every load: a reload in the middle of a test must keep whatever theme the test chose.
+  await page.context().addInitScript((t) => {
+    if (!sessionStorage.getItem("bb-theme-seeded")) {
+      sessionStorage.setItem("bb-theme-seeded", "1");
+      localStorage.setItem("bb-theme", t);
+    }
+  }, theme);
+}
+/** Waits until the profile row shows `theme`, so a click is known to have been saved before the test ends. */
+export async function profileTheme(expected: string, expectFn: typeof import("@playwright/test").expect) {
+  await expectFn.poll(async () => (await (await api()).from("profiles").select("theme").single()).data?.theme, { timeout: 15_000 }).toBe(expected);
+}

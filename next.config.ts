@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
   cacheComponents: true,
+  // Statement uploads (CSV or PDF, up to 4 MB) arrive as server action bodies; the default cap is 1 MB.
+  experimental: { serverActions: { bodySizeLimit: "5mb" } },
   async headers() {
     return [
       {
@@ -11,7 +13,7 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(self)" },
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
         ],
       },

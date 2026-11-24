@@ -14,11 +14,39 @@ export function ImportForm({ accounts }: { accounts: { id: string; name: string 
       <SelectField label="Which account is this statement for?" name="accountId" placeholder="Choose an account" options={accounts.map((a) => ({ value: a.id, label: a.name }))} error={fe.accountId} />
       <div>
         <label htmlFor="stmt-file" className="mb-1.5 block text-sm font-medium">
-          Statement file (.csv)
+          Statement file (.csv or .pdf)
         </label>
-        <input id="stmt-file" name="file" type="file" accept=".csv,text/csv" aria-describedby="stmt-help" className="block w-full text-sm file:mr-3 file:rounded-md file:border file:border-line-strong file:bg-surface file:px-3 file:py-2 file:text-sm" />
+        <input id="stmt-file" name="file" type="file" accept=".csv,text/csv,.pdf,application/pdf" aria-describedby="stmt-help" className="block w-full text-sm file:mr-3 file:rounded-md file:border file:border-line-strong file:bg-surface file:px-3 file:py-2 file:text-sm" />
         <p id="stmt-help" className={`mt-1.5 text-sm ${fe.file ? "text-neg-text" : "text-xs text-muted"}`}>
-          {fe.file ?? "Up to 2 MB. Needs a header row with Date, Description and Amount (or separate Debit and Credit)."}
+          {fe.file ?? "Up to 4 MB. A CSV needs a header row with Date, Description and Amount (or separate Debit and Credit). A PDF must be a text statement from your bank, not a scan."}
+        </p>
+      </div>
+      <div>
+        <label htmlFor="stmt-password" className="mb-1.5 block text-sm font-medium">
+          Statement password <span className="font-normal text-muted">(if the PDF has one)</span>
+        </label>
+        <input
+          id="stmt-password"
+          name="pdfPassword"
+          type="password"
+          autoComplete="off"
+          maxLength={128}
+          aria-describedby="pw-help"
+          aria-invalid={fe.pdfPassword ? true : undefined}
+          className="w-full rounded-md border border-line-strong bg-surface px-3 py-2.5 text-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30"
+        />
+        <p id="pw-help" className={`mt-1.5 text-sm ${fe.pdfPassword ? "text-neg-text" : "text-xs text-muted"}`}>
+          {fe.pdfPassword ??
+            "Most Indian banks lock e-statements with a password, often part of your name with your date of birth, or your customer ID. It is used only to open the file on our server for this one import: it is never saved, never shown again and never sent to the AI."}
+        </p>
+      </div>
+      <div>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="useAi" defaultChecked aria-describedby="ai-help" className="mt-1" />
+          <span>Use AI to read PDFs and suggest categories</span>
+        </label>
+        <p id="ai-help" className={`mt-1.5 text-sm ${fe.useAi ? "text-neg-text" : "text-xs text-muted"}`}>
+          {fe.useAi ?? "Needed for PDF statements. The text of a PDF, or only the descriptions of a CSV (never the amounts), is sent to an AI provider. Untick it to keep a CSV fully on our servers. Every row is checked against your file and you review everything before it is saved."}
         </p>
       </div>
       <SelectField label="Dates in the file are written as" name="dateOrder" defaultValue="dmy" options={[{ value: "dmy", label: "Day first (31/12/2026)" }, { value: "mdy", label: "Month first (12/31/2026)" }]} />

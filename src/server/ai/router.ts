@@ -1,15 +1,22 @@
 import { PROVIDERS } from "./providers";
 import { type AiConfig } from "./config";
-import { ProviderError, type CompletionRequest, type CompletionResult, type ProviderClient } from "./types";
+import {
+  ProviderError,
+  type CompletionRequest,
+  type CompletionResult,
+  type ProviderClient,
+  type ProviderErrorKind,
+} from "./types";
 
 /**
  * Failover, deliberately not rotation. A key is used until it fails; only then is the next one tried, and only a
  * limited number of times per request. Keys are never cycled to get around a quota: per-person limits are enforced
- * before any call is made, and a key that reports rate limiting or a bad credential is set aside for a cooldown so
- * traffic is not thrown at it again.
+ * before any call is made, and a key that reports a bad credential, or a provider that reports rate limiting, is set
+ * aside for a cooldown so traffic is not thrown at it again.
  */
 export class KeyPool {
   private coolingUntil = new Map<string, number>();
+  private modelCoolingUntil = new Map<string, number>();
   private next = 0;
   constructor(
     private readonly keys: string[],
@@ -31,17 +38,58 @@ export class KeyPool {
     const i = this.available().indexOf(key);
     if (i >= 0) this.next = i;
   }
-  markFailed(key: string, err: ProviderError) {
-    const cooldown = err.kind === "rate_limit" ? (err.retryAfterMs ?? 60_000) : err.kind === "auth" ? 15 * 60_000 : err.kind === "server" ? 30_000 : 0;
-    if (cooldown > 0) this.coolingUntil.set(key, this.now() + cooldown);
+  /**
+   * `providerWide` rests every key, used for rate limits when the keys may share one quota: asking another key
+   * would be refused the same way and only burn an attempt.
+   */
+  markFailed(key: string, err: ProviderError, providerWide = false) {
+    const cooldown =
+      err.kind === "rate_limit"
+        ? (err.retryAfterMs ?? 60_000)
+        : err.kind === "auth"
+          ? 15 * 60_000
+          : err.kind === "server"
+            ? 30_000
+            : 0;
+    if (cooldown <= 0) return;
+    const until = this.now() + cooldown;
+    if (providerWide && err.kind === "rate_limit")
+      this.keys.forEach((k) => this.coolingUntil.set(k, until));
+    else this.coolingUntil.set(key, until);
+  }
+  /** A model the provider says is gone is not asked again for a while; the next model in the list is used. */
+  markModelUnavailable(model: string, ms = 30 * 60_000) {
+    this.modelCoolingUntil.set(model, this.now() + ms);
+  }
+  modelAvailable(model: string) {
+    return (this.modelCoolingUntil.get(model) ?? 0) <= this.now();
   }
   get size() {
     return this.keys.length;
   }
+  /** Counts only, for health display. Never the keys. */
+  health() {
+    return {
+      keys: this.keys.length,
+      keysAvailable: this.available().length,
+      modelsResting: [...this.modelCoolingUntil.keys()].filter(
+        (m) => !this.modelAvailable(m),
+      ),
+    };
+  }
+}
+
+export interface AttemptRecord {
+  provider: string;
+  model: string;
+  kind: ProviderErrorKind;
 }
 
 export class AiUnavailableError extends Error {
-  constructor(public readonly cause_: "no_providers" | "all_failed" | "bad_request") {
+  constructor(
+    public readonly cause_: "no_providers" | "all_failed" | "bad_request",
+    public readonly trail: AttemptRecord[] = [],
+  ) {
     super(`AI unavailable: ${cause_}`);
   }
 }
@@ -49,6 +97,12 @@ export class AiUnavailableError extends Error {
 export interface RouterResult extends CompletionResult {
   provider: string;
   model: string;
+  /** Upstream calls made for this question, including the successful one. */
+  attempts: number;
+  /** Failed attempts that preceded the answer (0 when the first call worked). */
+  fallbacks: number;
+  /** How many of those failures were rate limits. */
+  rateLimited: number;
 }
 
 const pools = new Map<string, KeyPool>();
@@ -59,39 +113,195 @@ const poolFor = (id: string, keys: string[]) => {
   return p;
 };
 
-/** At most this many upstream calls for one question, across all providers and keys. */
-export const MAX_UPSTREAM_ATTEMPTS = 3;
+/** Health of the pools in this server instance: counts and model names only. Instances do not share it. */
+export function gatewayHealth(
+  config: AiConfig,
+  pool: (id: string, keys: string[]) => KeyPool = poolFor,
+) {
+  return config.providers.map((p) => ({
+    provider: p.id,
+    models: p.models ?? [p.model],
+    ...pool(p.id, p.keys).health(),
+  }));
+}
+
+/** At most this many upstream calls for one question, across all providers, keys and retries. */
+export const MAX_UPSTREAM_ATTEMPTS = 4;
+/** A transient failure (5xx, timeout, network) is retried once on the same key before moving on. */
+export const MAX_SAME_KEY_RETRIES = 1;
+export const BACKOFF_BASE_MS = 300;
+
+/** Exponential backoff with full jitter: random in [0, base * 2^attempt). Bounded so a retry never stalls a request. */
+export function backoffMs(
+  attempt: number,
+  random: () => number = Math.random,
+  base = BACKOFF_BASE_MS,
+) {
+  return Math.floor(random() * Math.min(base * 2 ** attempt, 2_000));
+}
+
+const TRANSIENT: ProviderErrorKind[] = ["server", "timeout", "network"];
+
+export interface GatewayHooks {
+  sleep?: (ms: number) => Promise<void>;
+  random?: () => number;
+}
+
+type Invoke = (
+  client: ProviderClient,
+  key: string,
+  model: string,
+  call: CompletionRequest,
+) => Promise<CompletionResult>;
 
 export async function generate(
   config: AiConfig,
   req: CompletionRequest,
   clients: Record<string, ProviderClient> = PROVIDERS,
   pool: (id: string, keys: string[]) => KeyPool = poolFor,
+  hooks: GatewayHooks = {},
 ): Promise<RouterResult> {
-  if (config.providers.length === 0) throw new AiUnavailableError("no_providers");
+  return failover(
+    config,
+    req,
+    (c, k, m, call) => c.complete(k, m, call),
+    clients,
+    pool,
+    hooks,
+  );
+}
+
+/**
+ * Like generate, but text is passed to onDelta as it is written. Failover works as before until the first text has
+ * been handed out; after that a failure ends the answer (it cannot be restarted under text the person has already seen).
+ */
+export async function generateStream(
+  config: AiConfig,
+  req: CompletionRequest,
+  onDelta: (text: string) => void,
+  clients: Record<string, ProviderClient> = PROVIDERS,
+  pool: (id: string, keys: string[]) => KeyPool = poolFor,
+  hooks: GatewayHooks = {},
+): Promise<RouterResult> {
+  let started = false;
+  const out = (t: string) => {
+    started = true;
+    onDelta(t);
+  };
+  return failover(
+    config,
+    req,
+    async (c, k, m, call) => {
+      try {
+        if (c.stream) return await c.stream(k, m, call, out);
+        const r = await c.complete(k, m, call);
+        out(r.text);
+        return r;
+      } catch (e) {
+        // Half an answer cannot be retried elsewhere, so it must not look like a failover-worthy error.
+        if (started) throw new ProviderError("bad_request");
+        throw e;
+      }
+    },
+    clients,
+    pool,
+    hooks,
+  );
+}
+
+async function failover(
+  config: AiConfig,
+  req: CompletionRequest,
+  invoke: Invoke,
+  clients: Record<string, ProviderClient>,
+  pool: (id: string, keys: string[]) => KeyPool,
+  hooks: GatewayHooks,
+): Promise<RouterResult> {
+  if (config.providers.length === 0)
+    throw new AiUnavailableError("no_providers");
+  const sleep =
+    hooks.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)));
+  const call = { ...req, timeoutMs: req.timeoutMs ?? config.limits.timeoutMs };
+  const trail: AttemptRecord[] = [];
   let attempts = 0;
   let sawBadRequest = false;
-  for (const p of config.providers) {
+  const fail = () =>
+    new AiUnavailableError(sawBadRequest ? "bad_request" : "all_failed", trail);
+
+  // General questions go first to providers with a large free allowance for them, keeping the rest for personal ones.
+  const providers = req.general
+    ? [
+        ...config.providers.filter((p) => p.preferForGeneral),
+        ...config.providers.filter((p) => !p.preferForGeneral),
+      ]
+    : config.providers;
+  for (const p of providers) {
+    // A provider whose free models may log inputs never sees a request built from the person's records.
+    if (p.generalOnly && !req.general) continue;
     const client = clients[p.id];
     const keys = pool(p.id, p.keys);
-    for (const key of keys.candidates()) {
-      if (attempts >= MAX_UPSTREAM_ATTEMPTS) throw new AiUnavailableError(sawBadRequest ? "bad_request" : "all_failed");
-      attempts++;
-      try {
-        const out = await client.complete(key, p.model, req);
-        keys.markOk(key);
-        return { ...out, provider: p.id, model: p.model };
-      } catch (e) {
-        const err = e instanceof ProviderError ? e : new ProviderError("network");
-        keys.markFailed(key, err);
-        // The same request will be refused the same way by the next key, so do not spend more calls on it.
-        if (!err.failoverWorthy) {
-          sawBadRequest = true;
-          break;
+    const normal = p.models?.length ? p.models : [p.model];
+    // A light question tries the provider's small model first, then its usual ones.
+    const list =
+      req.tier === "light" && p.lightModels?.length
+        ? [
+            ...p.lightModels,
+            ...normal.filter((m) => !p.lightModels!.includes(m)),
+          ]
+        : normal;
+    for (const model of list) {
+      if (!keys.modelAvailable(model)) continue;
+      let nextModel = false;
+      let providerRested = false;
+      for (const key of keys.candidates()) {
+        if (nextModel || providerRested) break;
+        for (let retry = 0; ; retry++) {
+          if (attempts >= MAX_UPSTREAM_ATTEMPTS) throw fail();
+          attempts++;
+          try {
+            const out = await invoke(client, key, model, call);
+            keys.markOk(key);
+            return {
+              ...out,
+              provider: p.id,
+              model,
+              attempts,
+              fallbacks: trail.length,
+              rateLimited: trail.filter((t) => t.kind === "rate_limit").length,
+            };
+          } catch (e) {
+            const err =
+              e instanceof ProviderError ? e : new ProviderError("network");
+            trail.push({ provider: p.id, model, kind: err.kind });
+            keys.markFailed(key, err, !config.independentKeyQuota);
+            // The same request will be refused the same way by the next key, so do not spend more calls on it.
+            if (!err.failoverWorthy) {
+              sawBadRequest = true;
+              throw fail();
+            }
+            if (err.kind === "model_unavailable") {
+              keys.markModelUnavailable(model);
+              nextModel = true;
+              break;
+            }
+            // A transient failure gets one jittered retry on the same key; everything else moves on.
+            if (
+              TRANSIENT.includes(err.kind) &&
+              retry < MAX_SAME_KEY_RETRIES &&
+              attempts < MAX_UPSTREAM_ATTEMPTS
+            ) {
+              await sleep(backoffMs(retry, hooks.random));
+              continue;
+            }
+            // Shared quota: the provider is rested, so stop asking its other keys and fall back to the next provider.
+            if (err.kind === "rate_limit" && !config.independentKeyQuota)
+              providerRested = true;
+            break;
+          }
         }
-        // A rate-limited or failing key moves on to the next key of the same provider, then the next provider.
       }
+      if (!nextModel) break; // only a retired model moves to the provider's next model
     }
   }
-  throw new AiUnavailableError(sawBadRequest ? "bad_request" : "all_failed");
+  throw fail();
 }

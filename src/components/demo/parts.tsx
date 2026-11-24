@@ -3,7 +3,7 @@ import { formatMoney } from "@/domain/money";
 /** Sample-data helpers shared by the landing page previews. All figures are examples, never a real user's. */
 export const rs = (rupees: number) => formatMoney(Math.round(rupees * 100), "INR", "en-IN").replace(/\.00$/, "");
 
-export function Window({ title, children, className = "" }: { title: string; children: React.ReactNode; className?: string }) {
+export function Window({ title, children, className = "", badge = "Sample data" }: { title: string; children: React.ReactNode; className?: string; badge?: string }) {
   return (
     <div className={`overflow-hidden rounded-xl border border-line-strong bg-surface text-fg shadow-float ${className}`}>
       <div className="flex items-center gap-3 border-b border-line bg-sunken px-4 py-2.5">
@@ -13,7 +13,7 @@ export function Window({ title, children, className = "" }: { title: string; chi
           <i className="h-2.5 w-2.5 rounded-full bg-line-strong" />
         </span>
         <span className="text-xs text-muted">{title}</span>
-        <span className="ml-auto rounded-full bg-sage px-2 py-0.5 text-[10px] font-medium text-fg">Sample data</span>
+        <span className="ml-auto rounded-full bg-sage px-2 py-0.5 text-[10px] font-medium text-fg">{badge}</span>
       </div>
       {children}
     </div>

@@ -8,6 +8,7 @@ import { isRecoveryTokenValid, RECOVERY_COOKIE } from "@/lib/auth/recovery-guard
 import { safeNext } from "@/lib/auth/safe-redirect";
 import { passwordProblems } from "@/lib/password";
 import { createClient } from "@/lib/supabase/server";
+import { claimTries, TRY_COOKIE, writeTryCookie } from "@/server/ai/finn-try";
 
 export interface FormState {
   error?: string;
@@ -62,6 +63,15 @@ async function finishSignIn(provider: string) {
   await supabase.rpc("ensure_profile");
   // A per-browser hint only: it stores the provider name, never an email.
   (await cookies()).set("bb-last-provider", provider, { maxAge: 60 * 60 * 24 * 180, sameSite: "lax", path: "/", httpOnly: true });
+  await claimHomePageTries(supabase);
+}
+
+/** Messages tried on the home page before signing in count towards this account's Finn allowance. */
+async function claimHomePageTries(supabase: NonNullable<Awaited<ReturnType<typeof createClient>>>) {
+  const jar = await cookies();
+  const next = await claimTries(supabase, jar.get(TRY_COOKIE)?.value).catch(() => null);
+  const cookie = next ? writeTryCookie(next) : null;
+  if (cookie) jar.set(cookie.name, cookie.value, cookie.options);
 }
 
 export async function signIn(_: FormState | undefined, form: FormData): Promise<FormState> {
@@ -107,6 +117,7 @@ export async function signUp(_: FormState | undefined, form: FormData): Promise<
     // Email confirmation is off for this project: the user is already signed in.
     await supabase.rpc("ensure_profile");
     await supabase.from("profiles").update({ display_name: parsed.data.name }).eq("user_id", data.user!.id);
+    await claimHomePageTries(supabase);
     redirect("/app");
   }
   // Same message whether or not the address was already registered.

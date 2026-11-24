@@ -31,7 +31,7 @@ const SECTIONS: { heading: string; blocks: Block[] }[] = [
         t: "list",
         items: [
           "It never asks for your bank password and does not scrape bank sites.",
-          "It does not see your card number. Payments, when they launch, use the payment provider's own checkout.",
+          "It does not see your card number or UPI details. Payments use the payment provider's own checkout: Razorpay in India, PayPal elsewhere.",
           "It cannot move money or pay bills.",
           "It does not sell your data.",
         ],

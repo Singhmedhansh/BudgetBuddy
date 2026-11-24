@@ -1,10 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/server/admin";
-import { razorpayEventToUpdate, verifyRazorpaySignature } from "@/server/payments/webhooks";
+import { razorpayEventToBilling } from "@/server/payments/razorpay";
+import { applyBillingEvent } from "@/server/payments/store";
+import { verifyRazorpaySignature } from "@/server/payments/webhooks";
 
 /**
- * Razorpay webhook. Until the sandbox credentials are configured this answers 503 and changes nothing. Once they are,
- * it verifies the signature on the raw body, processes each event id once, and updates only the entitlement table.
+ * Razorpay webhook. Until the secret and service key exist this answers 503 and changes nothing. After that it
+ * verifies the signature on the raw body, then records the event through the database function that stores the event
+ * id, applies the change and updates the plan in one transaction: a redelivery is a no-op, and a failure rolls
+ * everything back so Razorpay's retry is processed. Events carry Razorpay's own timestamp, so a late event never
+ * overwrites newer state.
  */
 export async function POST(request: NextRequest) {
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
@@ -23,17 +28,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
 
-  // Insert first: a duplicate event id violates the primary key and is acknowledged without being processed twice.
-  const { error: dup } = await admin.from("payment_events").insert({ provider: "razorpay", event_id: eventId });
-  if (dup) return NextResponse.json({ ok: true, duplicate: true });
-
-  const update = razorpayEventToUpdate(body);
-  if (update) {
-    const { error } = await admin.from("entitlements").upsert({ user_id: update.userId, ...update.row, updated_at: new Date().toISOString() });
-    if (error) {
-      await admin.from("payment_events").delete().eq("provider", "razorpay").eq("event_id", eventId); // let Razorpay retry
-      return NextResponse.json({ error: "processing_failed" }, { status: 500 });
-    }
+  const event = razorpayEventToBilling(body, eventId);
+  if (!event) return NextResponse.json({ ok: true, ignored: true });
+  try {
+    const outcome = await applyBillingEvent(admin, event);
+    return NextResponse.json(outcome === "duplicate" ? { ok: true, duplicate: true } : { ok: true, outcome });
+  } catch {
+    return NextResponse.json({ error: "processing_failed" }, { status: 500 }); // Razorpay retries
   }
-  return NextResponse.json({ ok: true });
 }

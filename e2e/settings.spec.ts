@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { api, USER, choose } from "./helpers";
+import { api, USER, choose, profileTheme, resetTheme } from "./helpers";
 
 /**
  * Settings, account menu, sign-in options, assistant and sample data, on the disposable test user only.
@@ -34,7 +34,7 @@ test.describe("settings area", () => {
       expect(res?.status()).toBeLessThan(400);
       await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
       const nav = page.getByRole("navigation", { name: "Settings" });
-      await expect(nav.getByRole("link")).toHaveCount(6);
+      await expect(nav.getByRole("link")).toHaveCount(7);
       await expect(nav.locator("[aria-current='page']")).toHaveCount(1);
     });
   }
@@ -222,7 +222,7 @@ test.describe("sign-in options that are not configured stay hidden", () => {
 test.describe("assistant", () => {
   test("is visibly not switched on until credentials exist, and sends nothing", async ({ page }) => {
     await open(page, "/app/assistant");
-    await expect(page.getByRole("heading", { name: "Assistant", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Ask Finn", level: 1 })).toBeVisible();
     await expect(page.getByText(/not switched on yet/i)).toBeVisible();
     await expect(page.getByLabel("Your question")).toBeDisabled();
     await expect(page.getByRole("button", { name: "Ask" })).toHaveCount(0);
@@ -318,6 +318,7 @@ test.describe("profile completion and preferences (needs migration 9)", () => {
 
   test("the theme chosen in the app is saved to the profile and applied on a fresh browser", async ({ page, browser, baseURL }) => {
     needMigration();
+    await resetTheme(page, "light");
     await open(page, "/app");
     await page.getByRole("radio", { name: "Dark theme" }).click();
     await expect.poll(async () => (await (await api()).from("profiles").select("theme").single()).data?.theme).toBe("dark");
@@ -327,6 +328,7 @@ test.describe("profile completion and preferences (needs migration 9)", () => {
     await expect(other.locator("html")).toHaveAttribute("data-theme", "dark");
     await ctx.close();
     await page.getByRole("radio", { name: "Light theme" }).click();
+    await profileTheme("light", expect); // leave the shared profile as found, and wait until it is saved
   });
 
   test("notification choices persist", async ({ page }) => {

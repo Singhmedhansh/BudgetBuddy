@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import { Suspense } from "react";
 import { Fraunces, Hanken_Grotesk } from "next/font/google";
 import { NavTracker } from "@/components/nav/NavTracker";
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Suspense fallback={null}>
           <NavTracker />
         </Suspense>
+        <Analytics />
       </body>
     </html>
   );

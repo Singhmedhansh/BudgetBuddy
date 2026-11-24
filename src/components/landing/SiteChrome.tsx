@@ -8,8 +8,9 @@ const MENUS: Menu[] = [
   {
     id: "product",
     label: "Product",
-    intro: "One ledger behind every screen.",
+    intro: `${BRAND.assistantName}, with one ledger behind it.`,
     items: [
+      { href: "/#finn", label: `Meet ${BRAND.assistantName}`, description: "Your money assistant: record, ask and plan in plain words." },
       { href: "/#showcase", label: "See it working", description: "Interactive previews of the dashboard, budgets and goals." },
       { href: "/help/how-totals-work", label: "How totals work", description: "Why transfers and repayments are never spending." },
       { href: "/help/import-a-statement", label: "Imports", description: "Review every row before anything is saved." },
@@ -56,6 +57,7 @@ const FOOTER = [
   {
     title: "Product",
     links: [
+      { href: "/#finn", label: `Meet ${BRAND.assistantName}` },
       { href: "/#showcase", label: "See it working" },
       { href: "/#features", label: "Features" },
       { href: "/#pricing", label: "Pricing" },
