@@ -46,11 +46,11 @@ export function HeaderAccountPill({ who }: { who: SignedIn }) {
     <Link
       href="/app"
       aria-label={`Open FinTrack, signed in as ${who.name}`}
-      className="group hidden h-10 items-center gap-2 rounded-full border border-line-strong bg-surface py-1 pl-1 pr-3 text-sm font-medium transition-colors hover:border-primary sm:flex"
+      className="group flex h-11 items-center gap-2 rounded-full border border-line-strong bg-surface p-1 text-sm font-medium transition-colors hover:border-primary sm:h-10 sm:pr-3"
     >
-      <Avatar name={who.name} url={null} size={30} />
-      <span className="max-w-[9rem] truncate">{who.name}</span>
-      <span className="flex items-center gap-1 border-l border-line pl-2 text-primary">
+      <Avatar name={who.name} url={null} size={32} />
+      <span className="hidden max-w-[9rem] truncate sm:block">{who.name}</span>
+      <span className="hidden items-center gap-1 border-l border-line pl-2 text-primary sm:flex">
         Open app
         <ArrowRight size={14} aria-hidden className="transition-transform group-hover:translate-x-0.5" />
       </span>
