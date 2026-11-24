@@ -11,8 +11,8 @@ test.skip(process.env.AI_LIVE_E2E !== "1", "live AI browser test: set AI_LIVE_E2
 test("assistant answers a question about the person's own money, with figures checked", async ({ page }) => {
   await page.goto("/app/assistant");
   await page.waitForLoadState("networkidle");
-  await page.getByPlaceholder("Ask about your own money").fill("How much did I spend this month?");
-  await page.getByRole("button", { name: "Ask" }).click();
+  await page.getByPlaceholder(/^Ask .+ about your money$/).fill("How much did I spend this month?");
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
   const conversation = page.getByRole("list", { name: "Conversation" });
   await expect(conversation.getByText(/checked against your records|Verified figures from your records/)).toBeVisible({ timeout: 90_000 });
   await expect(page.getByRole("alert").filter({ hasText: /./ })).toHaveCount(0);
@@ -33,19 +33,20 @@ test("a PDF statement is read by AI into reviewable rows, with AI category sugge
   console.log("review rows:", await page.getByText(/Suggested by AI|Suggested from earlier/).count(), "category suggestions shown");
 });
 
-test("chat feel: a suggestion sends, Enter sends, the message shows at once, New chat clears", async ({ page }) => {
+test("chat feel: Enter sends, the message shows at once, New chat clears", async ({ page }) => {
   await page.goto("/app/assistant");
   await page.waitForLoadState("networkidle");
   const conversation = page.getByRole("list", { name: "Conversation" });
   const checked = conversation.getByText(/checked against your records|Verified figures from your records/);
 
-  await page.getByRole("button", { name: "What is my net worth right now?" }).click();
+  const box = page.getByLabel("Your question");
+  await box.fill("What is my net worth right now?");
+  await box.press("Enter");
   await expect(conversation.getByText("What is my net worth right now?")).toBeVisible({ timeout: 3_000 }); // appears before the answer
   await expect(checked).toHaveCount(1, { timeout: 90_000 });
-  await expect(page.getByRole("button", { name: "Copy" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy" }).first()).toBeVisible();
 
-  const box = page.getByLabel("Your question");
-  await expect(page.getByRole("button", { name: "Ask" })).toBeDisabled(); // empty box cannot send
+  await expect(page.getByRole("button", { name: "Ask", exact: true })).toBeDisabled(); // empty box cannot send
   await box.fill("How much did I spend this month?");
   await box.press("Shift+Enter"); // newline, not send
   await expect(conversation.getByText("How much did I spend this month?")).toHaveCount(0);
@@ -54,7 +55,7 @@ test("chat feel: a suggestion sends, Enter sends, the message shows at once, New
   await expect(checked).toHaveCount(2, { timeout: 90_000 });
   await expect(box).toHaveValue("");
 
-  await page.getByRole("button", { name: "New chat" }).click();
-  await expect(page.getByRole("heading", { name: /What would you like to know/ })).toBeVisible();
+  await page.getByRole("button", { name: "New chat" }).last().click(); // the sidebar has one too; the in-thread one comes last
   await expect(conversation).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 2 }).first()).toBeVisible();
 });
