@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { makeRecoveryToken, RECOVERY_COOKIE, RECOVERY_MAX_AGE_SECONDS } from "@/lib/auth/recovery-guard";
 import { safeNext } from "@/lib/auth/safe-redirect";
 import { createClient } from "@/lib/supabase/server";
+import { claimTries, TRY_COOKIE, writeTryCookie } from "@/server/ai/finn-try";
 
 /**
  * Landing route for links in confirmation and password-reset emails. Verifies
@@ -22,7 +23,12 @@ export async function GET(request: NextRequest) {
     if (!error) {
       if (type !== "recovery") {
         await supabase.rpc("ensure_profile");
-        return NextResponse.redirect(new URL(next, request.url));
+        const res = NextResponse.redirect(new URL(next, request.url));
+        // Messages tried on the home page before signing up count towards this account's Finn allowance.
+        const claimed = await claimTries(supabase, request.cookies.get(TRY_COOKIE)?.value).catch(() => null);
+        const tryCookie = claimed ? writeTryCookie(claimed) : null;
+        if (tryCookie) res.cookies.set(tryCookie.name, tryCookie.value, tryCookie.options);
+        return res;
       }
       // Mark this session as arriving through a verified reset link. The reset
       // action refuses to change a password without this short-lived cookie.

@@ -3,6 +3,7 @@ import { lastProviderOf, oauthReason, providerDisplayName, type OAuthReason } fr
 import { isSocialProvider } from "@/lib/auth/providers";
 import { safeNext } from "@/lib/auth/safe-redirect";
 import { createClient } from "@/lib/supabase/server";
+import { claimTries, TRY_COOKIE, writeTryCookie } from "@/server/ai/finn-try";
 
 /**
  * Return route for OAuth (Google, GitHub), magic links and identity linking. Exchanges the one-time code for a
@@ -44,5 +45,9 @@ export async function GET(request: NextRequest) {
   const res = NextResponse.redirect(new URL(next, request.url));
   // A per-browser hint only: the provider name, never an email.
   res.cookies.set("bb-last-provider", lastProviderOf(data.user), { maxAge: 60 * 60 * 24 * 180, sameSite: "lax", path: "/", httpOnly: true });
+  // Messages tried on the home page before signing in count towards this account's Finn allowance.
+  const claimed = await claimTries(supabase, request.cookies.get(TRY_COOKIE)?.value).catch(() => null);
+  const tryCookie = claimed ? writeTryCookie(claimed) : null;
+  if (tryCookie) res.cookies.set(tryCookie.name, tryCookie.value, tryCookie.options);
   return res;
 }
