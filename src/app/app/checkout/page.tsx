@@ -26,6 +26,12 @@ export default async function CheckoutPage() {
   const usdPrices = { month: formatPrice(priceFor(one, "month", "USD")!), year: formatPrice(priceFor(one, "year", "USD")!) };
   // How much the yearly plan saves against twelve months of the monthly one, per currency.
   const saving = (cur: "INR" | "USD") => Math.max(0, Math.round((1 - priceFor(one, "year", cur)!.amountMinor / (12 * priceFor(one, "month", cur)!.amountMinor)) * 100));
+  // The yearly price spread over twelve months, rounded down to a whole unit so it never overstates the saving.
+  const perMonth = (cur: "INR" | "USD") => {
+    const year = priceFor(one, "year", cur)!;
+    const minor = cur === "INR" ? Math.floor(year.amountMinor / 12 / 100) * 100 : Math.floor(year.amountMinor / 12);
+    return formatPrice({ ...year, amountMinor: minor }).replace(/\.00$/, "");
+  };
   // One free trial per person: a person whose subscription has ever started pays from day one.
   const trialEligible = (startedBefore ?? 0) === 0;
   const rz = razorpayConfig();
@@ -33,8 +39,8 @@ export default async function CheckoutPage() {
   return (
     <>
       <PageHeader
-        title={trialEligible ? `Try ${one.name} free for ${TRIAL_DAYS} days` : `Upgrade to ${one.name}`}
-        description={one.summary}
+        title={`Upgrade to ${one.name}`}
+        description={trialEligible ? `${one.summary} Start with a ${TRIAL_DAYS}-day free trial, or pay today and start straight away.` : one.summary}
         back={{ href: "/app/billing", label: "Plan and billing" }}
       />
       {providers.testMode && (providers.razorpay.length > 0 || providers.paypal.length > 0) ? (
@@ -49,6 +55,7 @@ export default async function CheckoutPage() {
         defaultProvider={profile.country === "IN" ? "razorpay" : "paypal"}
         prices={{ razorpay: inrPrices, paypal: usdPrices }}
         savings={{ razorpay: saving("INR"), paypal: saving("USD") }}
+        yearlyPerMonth={{ razorpay: perMonth("INR"), paypal: perMonth("USD") }}
         trial={trialEligible}
         trialDays={TRIAL_DAYS}
         razorpayOneTime={!!rz && isRazorpayOrderMode(rz)}

@@ -113,8 +113,9 @@ export async function insertPending(
     amount_minor: row.amountMinor,
     currency: row.currency,
     status: "pending",
-    // Only written when a coupon chose the trial or the plan, so ordinary checkouts do not depend on migration 13.
-    ...(row.couponId ? { coupon_id: row.couponId, trial_days: row.trialDays, plan_ref: row.planRef ?? null } : {}),
+    // The trial this checkout promised (absent: none), so an unfinished checkout is only reused on the same terms.
+    ...(row.trialDays && row.trialDays > 0 ? { trial_days: row.trialDays } : {}),
+    ...(row.couponId ? { coupon_id: row.couponId, plan_ref: row.planRef ?? null } : {}),
   });
   if (error) throw new BillingError("provider_error", 500);
   await audit(admin, { userId: row.userId, provider: row.provider, actor: "checkout", action: "checkout_created", detail: { interval: row.interval, subscription: row.providerSubscriptionId } });

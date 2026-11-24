@@ -25,30 +25,32 @@ export async function POST(request: NextRequest) {
     const cfg = razorpayConfig();
     const admin = createAdminClient();
     if (!cfg || !admin) throw new BillingError("not_configured", 503);
-    const body = z.object({ interval: z.enum(INTERVALS), coupon: z.string().max(40).optional() }).safeParse(await request.json().catch(() => null));
+    const body = z.object({ interval: z.enum(INTERVALS), coupon: z.string().max(40).optional(), startNow: z.boolean().optional() }).safeParse(await request.json().catch(() => null));
     if (!body.success) throw new BillingError("invalid_request");
     const { interval } = body.data;
+    // "Start now": pay today and skip the free trial. A code only grants trial days, so it is ignored then.
+    const startNow = body.data.startNow === true;
     const orderMode = isRazorpayOrderMode(cfg);
     if (!orderMode && !cfg.planIds[interval]) throw new BillingError("interval_unavailable");
 
     // A code needs a subscription (a mandate), so it cannot apply to a one-time order.
     let coupon: Coupon | null = null;
-    if (body.data.coupon?.trim()) {
+    if (body.data.coupon?.trim() && !startNow) {
       if (orderMode) throw new BillingError("coupon_invalid");
       coupon = await checkCoupon(admin, { code: body.data.coupon, interval, userId: session.user.id, provider: "razorpay" });
     }
     const { existing } = await reservePending(admin, { userId: session.user.id, provider: "razorpay", interval });
     // A free trial for a first subscription only, and only as a subscription (it needs a mandate).
-    const trialDays = orderMode ? 0 : coupon ? coupon.trial_days : (await trialEligible(admin, session.user.id)) ? TRIAL_DAYS : 0;
-    // An unfinished checkout made with a different code (or none) is retired rather than reused with the wrong terms.
+    const trialDays = orderMode || startNow ? 0 : coupon ? coupon.trial_days : (await trialEligible(admin, session.user.id)) ? TRIAL_DAYS : 0;
+    // An unfinished checkout made with a different code or trial is retired rather than reused with the wrong terms.
     let providerId = existing?.provider_subscription_id;
-    if (existing && (existing.coupon_id ?? null) !== (coupon?.id ?? null)) {
+    if (existing && ((existing.coupon_id ?? null) !== (coupon?.id ?? null) || (existing.trial_days ?? 0) !== trialDays)) {
       await admin.from("billing_subscriptions").update({ status: "expired" }).eq("id", existing.id);
       providerId = undefined;
     }
     if (!providerId) {
       const created = orderMode ? await createRazorpayOrder(cfg, interval, session.user.id) : await createRazorpaySubscription(cfg, interval, session.user.id, undefined, { trialDays });
-      await insertPending(admin, { userId: session.user.id, provider: "razorpay", providerSubscriptionId: created.id, interval, amountMinor: created.amountMinor, currency: created.currency, ...(coupon ? { couponId: coupon.id, trialDays } : {}) });
+      await insertPending(admin, { userId: session.user.id, provider: "razorpay", providerSubscriptionId: created.id, interval, amountMinor: created.amountMinor, currency: created.currency, trialDays, ...(coupon ? { couponId: coupon.id } : {}) });
       providerId = created.id;
     }
     const price = expectedRazorpayPrice(interval);

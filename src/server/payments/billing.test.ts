@@ -632,6 +632,21 @@ describe("webhook and checkout routes", () => {
       expect(j).toMatchObject({ keyId: "rzp_test_abc", subscriptionId: "sub_NEW", amountMinor: 14900, currency: "INR", testMode: true });
       expect(JSON.stringify(j)).not.toContain(SECRET);
     });
+    it("offers the trial to a first-time subscriber, and skips it when they choose to start now", async () => {
+      const sent: Record<string, unknown>[] = [];
+      const base = router({ "/plans/plan_M": { id: "plan_M", period: "monthly", interval: 1, item: { amount: 14900, currency: "INR" } }, "/subscriptions": { id: "sub_NEW", plan_id: "plan_M", status: "created" } });
+      vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+        if (String(url).endsWith("/subscriptions") && init?.body) sent.push(JSON.parse(String(init.body)));
+        return base(url, init);
+      });
+      const trial = await (await checkout({ interval: "month" })).json();
+      expect(trial.trial).toBe(true);
+      expect(sent[0].start_at).toBeTypeOf("number");
+      const now = await (await checkout({ interval: "month", startNow: true, coupon: "IGNORED" })).json();
+      expect(now.trial).toBe(false);
+      expect(now.description).toBe("FinTrack One, billed monthly");
+      expect(sent[1].start_at).toBeUndefined();
+    });
 
     describe("verify", () => {
       const verify = async (b: unknown, headers: Record<string, string> = origin) => (await import("@/app/api/billing/razorpay/verify/route")).POST(post("/api/billing/razorpay/verify", b, headers));

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowRight, BookOpen, Check, Calculator, CalendarClock, Camera, FileText, FileUp, LineChart, LockKeyhole, MessageSquareText, PiggyBank, ReceiptText, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { ArrowRight, BookOpen, Check, Calculator, CalendarClock, Camera, FileText, FileUp, LineChart, LockKeyhole, MessageSquareText, MessageCircleQuestion, PiggyBank, ReceiptText, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import { AssistantMark } from "@/components/app/AssistantMark";
 import { FinnDemo } from "@/components/demo/FinnDemo";
@@ -20,9 +20,9 @@ const FREE_AI = AI_ALLOWANCE.free;
 const ONE_AI = AI_ALLOWANCE.pro;
 
 /** What Finn does, in the order people meet it. Only "Photo of a bill" is not built yet, and it says so. */
-const FINN_DOES: { Icon: typeof Sparkles; title: string; body: string; note?: string; soon?: boolean }[] = [
+const FINN_DOES: { Icon: typeof MessageCircleQuestion; title: string; body: string; note?: string; soon?: boolean }[] = [
   { Icon: MessageSquareText, title: `Just tell ${FINN}`, body: `Type "400 on food" or "200 auto, 150 chai yesterday" and it is recorded in the right category and account. Say it into the mic if that is quicker.`, note: "Never counts against your allowance" },
-  { Icon: Sparkles, title: "Ask anything about your money", body: "Where did my money go this month? Can I afford a ₹7,000 monitor? How long until my trip fund is full? Answers come from your own records, with charts." },
+  { Icon: MessageCircleQuestion, title: "Ask anything about your money", body: "Where did my money go this month? Can I afford a ₹7,000 monitor? How long until my trip fund is full? Answers come from your own records, with charts." },
   { Icon: Calculator, title: "Plan with real numbers", body: `EMIs, SIPs, savings plans and what-ifs on your spending are worked out exactly, then ${FINN} explains them in plain words.` },
   { Icon: BookOpen, title: "Learn money as you go", body: "What is a SIP? How does a credit score work? Old or new tax regime? Clear answers for your country, without jargon." },
   { Icon: FileText, title: "Bring a statement", body: `Attach a bank statement, salary slip or loan sheet as a PDF or CSV and ask about it. ${FINN} reads it for that question only and never stores it.` },
@@ -45,13 +45,13 @@ const MONTHLY_USD = formatPrice(priceFor(ONE, "month", "USD")!);
 
 const HERO_POINTS = ["No card needed", "Recording spends is unlimited", `${FINN} asks before changing anything`];
 
-type Say = { text: string; kind: "log" | "ask"; Icon: typeof Sparkles };
+type Say = { text: string; kind: "log" | "ask"; Icon: typeof MessageCircleQuestion };
 /** Examples only: quick records (filled) and questions (outlined). All of these work today. */
 const SAY_ROW_ONE: Say[] = [
   { text: "400 on food", kind: "log", Icon: ReceiptText },
-  { text: "Where did my money go this month?", kind: "ask", Icon: Sparkles },
+  { text: "Where did my money go this month?", kind: "ask", Icon: MessageCircleQuestion },
   { text: "Rent 15k paid", kind: "log", Icon: ReceiptText },
-  { text: "Can I afford a ₹7,000 monitor?", kind: "ask", Icon: Sparkles },
+  { text: "Can I afford a ₹7,000 monitor?", kind: "ask", Icon: MessageCircleQuestion },
   { text: "200 auto, 150 chai yesterday", kind: "log", Icon: ReceiptText },
   { text: "EMI on a ₹5 lakh loan at 10% for 3 years", kind: "ask", Icon: Calculator },
   { text: "Swiggy 340", kind: "log", Icon: ReceiptText },
@@ -439,7 +439,7 @@ function PlanCard({ plan, featured }: { plan: Plan; featured?: boolean }) {
             {TRIAL_DAYS} days free
           </p>
           <p className="num mt-1 text-sm text-muted">
-            then {MONTHLY_INR} a month or {YEARLY_INR} a year ({MONTHLY_USD} or {YEARLY_USD} outside India), billed automatically unless you cancel first
+            then {MONTHLY_INR} a month or {YEARLY_INR} a year ({MONTHLY_USD} or {YEARLY_USD} outside India), billed automatically unless you cancel first. Or skip the trial, pay today and start straight away.
           </p>
         </>
       ) : (

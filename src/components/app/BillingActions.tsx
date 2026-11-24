@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -61,6 +62,8 @@ export interface CheckoutProps {
   prices: { razorpay: PlanPrices; paypal: PlanPrices };
   /** How much cheaper the yearly plan is than twelve months, in percent, per provider. */
   savings: { razorpay: number; paypal: number };
+  /** The yearly price spread over twelve months, formatted, per provider. */
+  yearlyPerMonth?: { razorpay: string; paypal: string };
   /** This person can start the free trial (first subscription only). */
   trial?: boolean;
   trialDays?: number;
@@ -74,7 +77,7 @@ export interface CheckoutProps {
 const PROVIDER_NAME: Record<Provider, string> = { razorpay: "Razorpay", paypal: "PayPal" };
 const pill = (on: boolean) => `cursor-pointer rounded-full border px-4 py-1.5 text-sm transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary ${on ? "border-primary bg-sage font-medium" : "border-line-strong hover:border-primary"}`;
 
-export function CheckoutPanel({ razorpay, paypal, paypalTrial, defaultProvider, prices, savings, trial = false, trialDays = 0, razorpayOneTime = false, planName, features }: CheckoutProps) {
+export function CheckoutPanel({ razorpay, paypal, paypalTrial, defaultProvider, prices, savings, yearlyPerMonth, trial = false, trialDays = 0, razorpayOneTime = false, planName, features }: CheckoutProps) {
   const router = useRouter();
   const available: Provider[] = [...(razorpay.length ? (["razorpay"] as const) : []), ...(paypal.length ? (["paypal"] as const) : [])];
   const [provider, setProvider] = useState<Provider>(available.includes(defaultProvider) ? defaultProvider : available[0]);
@@ -91,7 +94,11 @@ export function CheckoutPanel({ razorpay, paypal, paypalTrial, defaultProvider, 
   const key = `${provider}:${chosen}`;
   const subscription = provider === "paypal" || !razorpayOneTime;
   const coupon = applied && applied.key === key ? applied : null;
-  const trialHere = subscription && trial && (provider === "razorpay" ? true : paypalTrial.includes(chosen));
+  // The trial is offered, never forced: a first-time subscriber chooses between it and paying today.
+  const [start, setStart] = useState<"trial" | "now">("trial");
+  const trialAvailable = subscription && trial && (provider === "razorpay" ? true : paypalTrial.includes(chosen));
+  const trialHere = trialAvailable && start === "trial";
+  const startNow = trialAvailable && start === "now";
   const days = coupon ? coupon.days : trialDays;
   const price = prices[provider][chosen];
   const per = chosen === "month" ? "month" : "year";
@@ -132,7 +139,7 @@ export function CheckoutPanel({ razorpay, paypal, paypalTrial, defaultProvider, 
         setBusy(false);
         return;
       }
-      const withCode = trialHere && code.trim() ? { coupon: code.trim() } : {};
+      const withCode = trialHere && code.trim() ? { coupon: code.trim() } : startNow ? { startNow: true } : {};
       if (provider === "paypal") {
         const r = await post<{ approveUrl?: string }>("/api/billing/paypal/checkout", { interval: chosen, ...withCode });
         if (!r.ok || !r.data.approveUrl) throw new Error(r.data.message ?? "Could not start PayPal.");
@@ -203,6 +210,32 @@ export function CheckoutPanel({ razorpay, paypal, paypalTrial, defaultProvider, 
                 </label>
               ))}
             </div>
+            {chosen === "year" && yearlyPerMonth ? (
+              <p className="mt-2 text-sm text-muted">
+                Works out to <span className="num">{yearlyPerMonth[provider]}</span> a month, paid once a year.
+              </p>
+            ) : null}
+          </fieldset>
+        ) : null}
+        {trialAvailable ? (
+          <fieldset>
+            <legend className="mb-2 font-semibold">{(available.length > 1 ? 1 : 0) + (periods.length > 1 ? 1 : 0) + 1}. How do you want to start?</legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {(
+                [
+                  { id: "trial", title: `Try free for ${days} days`, body: <>Nothing to pay today. {price} on <span suppressHydrationWarning>{firstCharge}</span>, unless you cancel before then.</> },
+                  { id: "now", title: "Start now and pay today", body: <>Pay {price} today. {planName} is active straight away and renews every {per}.</> },
+                ] as const
+              ).map((o) => (
+                <label key={o.id} className={`flex cursor-pointer gap-3 rounded-xl border p-4 transition-colors has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary ${start === o.id ? "border-primary bg-sage" : "border-line-strong bg-surface hover:border-primary"}`}>
+                  <input type="radio" name="start" value={o.id} checked={start === o.id} onChange={() => setStart(o.id)} className="mt-1 accent-[var(--primary)]" />
+                  <span>
+                    <span className="block text-sm font-semibold">{o.title}</span>
+                    <span className="mt-1 block text-sm leading-relaxed text-muted">{o.body}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
           </fieldset>
         ) : null}
         {trialHere ? (
@@ -250,6 +283,39 @@ export function CheckoutPanel({ razorpay, paypal, paypalTrial, defaultProvider, 
             </li>
           ))}
         </ul>
+        <section aria-labelledby="how-billing" className="rounded-xl border border-line bg-surface p-5">
+          <h2 id="how-billing" className="font-semibold">
+            How billing works
+          </h2>
+          <dl className="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
+            {[
+              { q: "The free plan stays free", a: "Budgets, accounts, imports and Finn's free allowance keep working whether or not you upgrade." },
+              trialAvailable
+                ? { q: "Trial or pay now: your choice", a: `The ${days}-day trial is for first-time subscribers. Prefer to start straight away? Choose "Start now" and pay today.` }
+                : { q: "Billed from today", a: `Your first ${per} starts the day you pay, and renews on the same date each ${per}.` },
+              { q: "Cancel any time", a: "Cancel in Plan and billing whenever you like. You keep FinTrack One until the end of the period you paid for, and it does not renew." },
+              { q: "Monthly or yearly", a: savings[provider] > 0 ? `Yearly costs ${savings[provider]}% less than paying monthly for twelve months.` : "Pay monthly or once a year, whichever suits you." },
+              { q: "Safe checkout", a: `${PROVIDER_NAME[provider]} handles the payment. Your card, UPI or bank details never reach FinTrack.` },
+              { q: "Invoices", a: "Every payment gets an invoice in Plan and billing that you can print or save as a PDF." },
+            ].map((x) => (
+              <div key={x.q}>
+                <dt className="font-medium">{x.q}</dt>
+                <dd className="mt-1 leading-relaxed text-muted">{x.a}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-4 border-t border-line pt-3 text-xs text-muted">
+            Questions about a charge? Read the{" "}
+            <Link href="/legal/refunds" className="font-medium text-primary hover:underline">
+              refund policy
+            </Link>{" "}
+            or{" "}
+            <Link href="/legal/billing" className="font-medium text-primary hover:underline">
+              pricing and billing terms
+            </Link>
+            .
+          </p>
+        </section>
       </div>
       <aside aria-labelledby="summary" className="space-y-4 rounded-xl border border-line bg-surface p-5 lg:sticky lg:top-6">
         <h2 id="summary" className="font-semibold">

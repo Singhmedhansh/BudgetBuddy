@@ -41,22 +41,32 @@ const WORDS = {
   income: { noun: "income", payee: "Income name", account: "Received into", category: "Income source", hint: "For example, Salary or Freelance retainer.", back: "/app/income" },
 } as const;
 
+export interface RecurringPreset {
+  name?: string;
+  frequency?: "once" | "weekly" | "monthly" | "quarterly" | "yearly";
+  category?: string;
+}
+
 export function RecurringForm({
   kind,
   currency,
   accounts,
   categories,
   today,
+  preset,
 }: {
   kind: "bill" | "subscription" | "income";
   currency: string;
   accounts: { id: string; name: string }[];
   categories: { id: string; name: string }[];
   today: string;
+  /** Starting values from a starter card (name, how often, a category by name). Typed values always win. */
+  preset?: RecurringPreset;
 }) {
   const [s, action] = useAct(createRecurringAction);
   const fe = s?.fieldErrors ?? {};
-  const v = s?.values ?? {};
+  const presetCategory = preset?.category ? categories.find((c) => c.name.toLowerCase() === preset.category!.toLowerCase())?.id : undefined;
+  const v: Record<string, string | undefined> = s?.values ?? { name: preset?.name, frequency: preset?.frequency, categoryId: presetCategory };
   const w = WORDS[kind];
   return (
     <form action={action} className="space-y-5" noValidate>

@@ -1,5 +1,17 @@
+import { Check, Plus, ReceiptText, Repeat, Wallet } from "lucide-react";
+import Link from "next/link";
 import { settleItemAction, setItemStatusAction } from "@/app/app/planning-actions";
-import { EmptyState, formatDay, Money, Notice, PageHeader } from "@/components/app/ui";
+import { STARTERS, starterHref } from "@/components/app/recurring-starters";
+import { formatDay, Money, Notice, PageHeader } from "@/components/app/ui";
+
+const KIND_ICON = { income: Wallet, bill: ReceiptText, subscription: Repeat } as const;
+
+/** What adding the first item gets you, in plain words. Only things the app does today. */
+const WHY = {
+  income: ["See what is coming in this month, next to what is going out.", "Mark it received in one tap, which records it in the right account.", "Forecasts and Finn plan around the income you expect."],
+  bill: ["See what falls due this month before it does.", "Mark it paid in one tap, which records the expense.", "Overdue bills stand out, so nothing slips."],
+  subscription: ["See what your services cost each month and each year.", "Know when each one renews, before it does.", "Spot the ones you no longer use."],
+} as const;
 import type { RecurringView } from "@/server/planning";
 
 const FREQ_LABEL = { once: "One time", weekly: "Weekly", monthly: "Monthly", quarterly: "Every 3 months", yearly: "Yearly" } as const;
@@ -24,6 +36,7 @@ export function RecurringList({
   flags: { added?: string; settled?: string; error?: string };
 }) {
   const c = COPY[kind];
+  const KindIcon = KIND_ICON[kind];
   const active = items.filter((i) => i.status === "active");
   const monthly = active.reduce((s, i) => s + i.monthly, 0);
   const yearly = active.reduce((s, i) => s + i.yearly, 0);
@@ -38,7 +51,50 @@ export function RecurringList({
       {flags.error ? <Notice kind="error">{flags.error}</Notice> : null}
 
       {items.length === 0 ? (
-        <EmptyState title={c.empty.t} body={c.empty.b} action={{ href: `${base}/new`, label: c.add }} />
+        <section aria-labelledby="empty-title" className="rounded-2xl border border-line bg-surface p-6 sm:p-8">
+          <div className="grid gap-10 lg:grid-cols-[1fr_1.15fr]">
+            <div>
+              <span aria-hidden className="grid h-12 w-12 place-items-center rounded-xl bg-sage text-primary">
+                <KindIcon size={22} />
+              </span>
+              <h2 id="empty-title" className="font-display mt-5 text-2xl">
+                {c.empty.t}
+              </h2>
+              <p className="mt-2 max-w-[44ch] text-sm leading-relaxed text-muted">{c.empty.b}</p>
+              <ul className="mt-6 space-y-3 text-sm">
+                {WHY[kind].map((w) => (
+                  <li key={w} className="flex gap-3">
+                    <span aria-hidden className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-sage text-primary">
+                      <Check size={12} strokeWidth={3} />
+                    </span>
+                    <span className="leading-relaxed">{w}</span>
+                  </li>
+                ))}
+              </ul>
+              <Link href={`${base}/new`} className="mt-7 inline-block rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-fg shadow-sm transition-all hover:-translate-y-px hover:bg-primary-hover hover:shadow-card">
+                {c.add}
+              </Link>
+            </div>
+            <div>
+              <p className="text-sm font-semibold">Start with one of these</p>
+              <p className="mt-1 text-sm text-muted">Opens the form with the details filled in. Add the amount and save.</p>
+              <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+                {STARTERS[kind].map((s) => (
+                  <li key={s.name}>
+                    <Link href={starterHref(base, s)} className="group flex h-full items-start justify-between gap-3 rounded-xl border border-line bg-bg p-4 transition-all hover:-translate-y-0.5 hover:border-primary hover:shadow-card">
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold">{s.name}</span>
+                        <span className="mt-0.5 block text-xs text-muted">{s.note}</span>
+                        <span className="mt-3 inline-block rounded-full bg-sunken px-2 py-0.5 text-[11px] font-medium text-muted">{FREQ_LABEL[s.frequency ?? "monthly"]}</span>
+                      </span>
+                      <Plus size={16} aria-hidden className="mt-0.5 shrink-0 text-muted transition-colors group-hover:text-primary" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </section>
       ) : (
         <>
           {kind !== "bill" ? (

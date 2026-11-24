@@ -246,22 +246,17 @@ export default async function BillingPage({
             className="rounded-xl border border-line bg-surface p-5"
           >
             <h2 id="upgrade" className="mb-2 font-semibold">
-              {trialEligible
-                ? `Try ${one.name} free for ${TRIAL_DAYS} days`
-                : `Upgrade to ${one.name}`}
+              {`Upgrade to ${one.name}`}
             </h2>
             <p className="mb-4 text-sm leading-relaxed text-muted">
-              {trialEligible
-                ? `Free for ${TRIAL_DAYS} days, then ${inrPrices.year} a year (${usdPrices.year} outside India) or ${inrPrices.month} a month. Cancel before the trial ends and you pay nothing.`
-                : `From ${inrPrices.month} a month, or ${inrPrices.year} a year (${usdPrices.month} and ${usdPrices.year} outside India). Cancel any time.`}
+              {`${inrPrices.month} a month or ${inrPrices.year} a year (${usdPrices.month} or ${usdPrices.year} outside India). Cancel any time.`}
+              {trialEligible ? ` Start with a ${TRIAL_DAYS}-day free trial, or pay today and start straight away.` : ""}
             </p>
             <Link
               href="/app/checkout"
               className="inline-block rounded-full bg-primary px-6 py-2.5 text-sm font-semibold text-primary-fg transition-all hover:-translate-y-px hover:bg-primary-hover"
             >
-              {trialEligible
-                ? "Choose a plan and start your trial"
-                : "Choose a plan"}
+              Choose a plan
             </Link>
           </section>
         ) : null}
