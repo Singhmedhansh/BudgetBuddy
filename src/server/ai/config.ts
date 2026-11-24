@@ -7,14 +7,28 @@
  *   GROQ_API_KEY_1..4 / GROQ_API_KEYS=k1,k2       keys for Groq
  *   OPENROUTER_API_KEY_1.. / OPENROUTER_API_KEYS=k1   key for OpenRouter's free models (general questions only,
  *                                unless OPENROUTER_ALLOW_PERSONAL=true); OPENROUTER_MODEL defaults to openrouter/free
+ *   CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN   Workers AI (personal questions allowed: no training on inputs)
+ *   MISTRAL_API_KEY_1..            Mistral free plan (general questions only, unless MISTRAL_ALLOW_PERSONAL=true)
  *   AI_PROVIDER_ORDER=gemini,groq   which provider is tried first; the next is the fallback (openrouter is last)
  *   GEMINI_MODEL / GROQ_MODEL    model ids, comma-separated for ordered alternatives (defaults below)
  *   AI_<FEATURE>_<PROVIDER>_MODEL   per-feature override, e.g. AI_ASSISTANT_GEMINI_MODEL
  *   AI_KEYS_INDEPENDENT_QUOTA=true  only if each key is in a separate project / organisation
  *   AI_REQUESTS_PER_HOUR, AI_TOKENS_PER_DAY, AI_MAX_OUTPUT_TOKENS, AI_MAX_QUESTION_CHARS   per-person limits
  */
-export type ProviderId = "gemini" | "groq" | "openrouter";
-export const PROVIDER_IDS: ProviderId[] = ["gemini", "groq", "openrouter"];
+export type ProviderId =
+  "gemini" | "groq" | "cloudflare" | "mistral" | "openrouter";
+/** Default order after AI_PROVIDER_ORDER: the ones not named there are appended in this order. */
+export const PROVIDER_IDS: ProviderId[] = [
+  "gemini",
+  "groq",
+  "cloudflare",
+  "mistral",
+  "openrouter",
+];
+/** Providers whose free plan may use what they are sent for training: never given a request built from records. */
+const GENERAL_ONLY: ProviderId[] = ["mistral", "openrouter"];
+/** Providers with a large free allowance for general questions, tried first for those so the others are kept for personal ones. */
+const PREFER_FOR_GENERAL: ProviderId[] = ["mistral"];
 
 /**
  * Features that call the gateway. Only the assistant exists today; add an id here when a feature is built, and it
@@ -26,17 +40,23 @@ const KEYS_ENV: Record<ProviderId, string> = {
   gemini: "GEMINI_API_KEYS",
   groq: "GROQ_API_KEYS",
   openrouter: "OPENROUTER_API_KEYS",
+  cloudflare: "CLOUDFLARE_API_TOKENS",
+  mistral: "MISTRAL_API_KEYS",
 };
 /** Numbered variables (GEMINI_API_KEY_1, GEMINI_API_KEY_2, ...) are read as well as the comma-separated pool. */
 const NUMBERED_ENV: Record<ProviderId, string> = {
   gemini: "GEMINI_API_KEY",
   groq: "GROQ_API_KEY",
   openrouter: "OPENROUTER_API_KEY",
+  cloudflare: "CLOUDFLARE_API_TOKEN",
+  mistral: "MISTRAL_API_KEY",
 };
 const MODEL_ENV: Record<ProviderId, string> = {
   gemini: "GEMINI_MODEL",
   groq: "GROQ_MODEL",
   openrouter: "OPENROUTER_MODEL",
+  cloudflare: "CLOUDFLARE_MODEL",
+  mistral: "MISTRAL_MODEL",
 };
 /**
  * Defaults are ordered: the first is tried, the next only when the provider reports the model gone. The previous
@@ -49,6 +69,11 @@ const MODEL_DEFAULT: Record<ProviderId, string[]> = {
   groq: ["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
   // OpenRouter's own free router picks whichever free model is up, so a retired free model never breaks it.
   openrouter: ["openrouter/free"],
+  cloudflare: [
+    "@cf/openai/gpt-oss-120b",
+    "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  ],
+  mistral: ["mistral-small-latest", "mistral-medium-latest"],
 };
 
 /** Smaller models for simple, general questions. Their free allowances are much larger than the big models'. */
@@ -56,11 +81,15 @@ const LIGHT_DEFAULT: Record<ProviderId, string[]> = {
   gemini: [],
   groq: ["llama-3.1-8b-instant"],
   openrouter: [],
+  cloudflare: [],
+  mistral: [],
 };
 const LIGHT_ENV: Record<ProviderId, string> = {
   gemini: "GEMINI_LIGHT_MODEL",
   groq: "GROQ_LIGHT_MODEL",
   openrouter: "OPENROUTER_LIGHT_MODEL",
+  cloudflare: "CLOUDFLARE_LIGHT_MODEL",
+  mistral: "MISTRAL_LIGHT_MODEL",
 };
 
 const int = (
@@ -119,6 +148,8 @@ export interface AiProviderConfig {
    * that carry nothing about the person, never for one built from their records.
    */
   generalOnly?: boolean;
+  /** Tried before the others for general questions, to keep the rest of the free budget for personal ones. */
+  preferForGeneral?: boolean;
   keys: string[];
 }
 
@@ -177,11 +208,19 @@ export function readAiConfig(
           models,
           lightModels,
           generalOnly:
-            id === "openrouter" && env.OPENROUTER_ALLOW_PERSONAL !== "true",
+            GENERAL_ONLY.includes(id) &&
+            env[`${id.toUpperCase()}_ALLOW_PERSONAL`] !== "true",
+          preferForGeneral: PREFER_FOR_GENERAL.includes(id),
           keys: collectKeys(env, id),
         };
       })
-      .filter((p) => p.keys.length > 0),
+      // Cloudflare's endpoint needs the account id as well as a token.
+      .filter(
+        (p) =>
+          p.keys.length > 0 &&
+          (p.id !== "cloudflare" ||
+            /^[a-f0-9]{32}$/i.test(env.CLOUDFLARE_ACCOUNT_ID?.trim() ?? "")),
+      ),
     independentKeyQuota: env.AI_KEYS_INDEPENDENT_QUOTA === "true",
     limits: {
       perHour: int(env.AI_REQUESTS_PER_HOUR, 30, 1, 500),

@@ -325,88 +325,128 @@ groq.stream = async (apiKey, model, req, onDelta) => {
 };
 
 /**
- * OpenRouter's OpenAI-compatible endpoint, used with its free models (ids ending in :free, or the openrouter/free
- * router). Free use is capped per account, not per key, so it is only ever a last fallback. The two headers are
- * OpenRouter's optional attribution, and carry no key or user data.
+ * A client for any OpenAI-compatible chat endpoint (OpenRouter, Cloudflare Workers AI, Mistral). The key travels in the
+ * Authorization header only. A failure reported as an event mid-stream (OpenRouter does this) is treated as a server
+ * error so the gateway can fail over.
  */
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const openrouterHeaders = (apiKey: string) => ({
-  "content-type": "application/json",
-  authorization: `Bearer ${apiKey}`,
-  "http-referer": "https://getfintrack.online",
-  "x-title": "FinTrack",
-});
-const openrouterBody = (model: string, req: CompletionRequest) => ({
-  model,
-  messages: [{ role: "system", content: req.system }, ...req.messages],
-  max_tokens: req.maxOutputTokens,
-  temperature: 0.2,
-});
-
-export const openrouter: ProviderClient = {
-  id: "openrouter",
-  async complete(apiKey, model, req): Promise<CompletionResult> {
-    const json = (await send(
-      OPENROUTER_URL,
+function openAiCompatible(
+  id: ProviderClient["id"],
+  url: () => string | null,
+  extraHeaders: Record<string, string> = {},
+): ProviderClient {
+  const headers = (apiKey: string) => ({
+    "content-type": "application/json",
+    authorization: `Bearer ${apiKey}`,
+    ...extraHeaders,
+  });
+  const body = (model: string, req: CompletionRequest) => ({
+    model,
+    messages: [{ role: "system", content: req.system }, ...req.messages],
+    max_tokens: req.maxOutputTokens,
+    temperature: 0.2,
+  });
+  const endpoint = () => {
+    const u = url();
+    if (!u) throw new ProviderError("auth");
+    return u;
+  };
+  const client: ProviderClient = {
+    id,
+    async complete(apiKey, model, req): Promise<CompletionResult> {
+      const json = (await send(
+        endpoint(),
+        {
+          method: "POST",
+          headers: headers(apiKey),
+          body: JSON.stringify(body(model, req)),
+        },
+        req,
+        TIMEOUT,
+      )) as {
+        choices?: { message?: { content?: string } }[];
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
+      };
+      const text = (json.choices?.[0]?.message?.content ?? "").trim();
+      if (!text) throw new ProviderError("empty");
+      return {
+        text,
+        promptTokens: json.usage?.prompt_tokens ?? 0,
+        completionTokens: json.usage?.completion_tokens ?? 0,
+      };
+    },
+  };
+  client.stream = async (apiKey, model, req, onDelta) => {
+    let failed = false;
+    let text = "";
+    let promptTokens = 0;
+    let completionTokens = 0;
+    await sendStream(
+      endpoint(),
       {
         method: "POST",
-        headers: openrouterHeaders(apiKey),
-        body: JSON.stringify(openrouterBody(model, req)),
+        headers: headers(apiKey),
+        body: JSON.stringify({
+          ...body(model, req),
+          stream: true,
+          stream_options: { include_usage: true },
+        }),
       },
       req,
-      TIMEOUT,
-    )) as {
-      choices?: { message?: { content?: string } }[];
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-    const text = (json.choices?.[0]?.message?.content ?? "").trim();
-    if (!text) throw new ProviderError("empty");
-    return {
-      text,
-      promptTokens: json.usage?.prompt_tokens ?? 0,
-      completionTokens: json.usage?.completion_tokens ?? 0,
-    };
-  },
-};
+      (j) => {
+        const e = j as {
+          choices?: { delta?: { content?: string } }[];
+          usage?: { prompt_tokens?: number; completion_tokens?: number };
+          error?: unknown;
+        };
+        if (e.error) failed = true;
+        const t = e.choices?.[0]?.delta?.content ?? "";
+        if (t) {
+          text += t;
+          onDelta(t);
+        }
+        if (e.usage) {
+          promptTokens = e.usage.prompt_tokens ?? promptTokens;
+          completionTokens = e.usage.completion_tokens ?? completionTokens;
+        }
+      },
+    );
+    if (!text.trim()) throw new ProviderError(failed ? "server" : "empty");
+    return { text: text.trim(), promptTokens, completionTokens };
+  };
+  return client;
+}
 
-openrouter.stream = async (apiKey, model, req, onDelta) => {
-  let failed = false;
-  let text = "";
-  let promptTokens = 0;
-  let completionTokens = 0;
-  await sendStream(
-    OPENROUTER_URL,
-    {
-      method: "POST",
-      headers: openrouterHeaders(apiKey),
-      body: JSON.stringify({
-        ...openrouterBody(model, req),
-        stream: true,
-        stream_options: { include_usage: true },
-      }),
-    },
-    req,
-    (j) => {
-      const e = j as {
-        choices?: { delta?: { content?: string } }[];
-        usage?: { prompt_tokens?: number; completion_tokens?: number };
-        error?: unknown;
-      };
-      // OpenRouter reports a failure that happens mid-stream as an event rather than a status code.
-      if (e.error) failed = true;
-      const t = e.choices?.[0]?.delta?.content ?? "";
-      if (t) {
-        text += t;
-        onDelta(t);
-      }
-      if (e.usage) {
-        promptTokens = e.usage.prompt_tokens ?? promptTokens;
-        completionTokens = e.usage.completion_tokens ?? completionTokens;
-      }
-    },
-  );
-  if (!text.trim()) throw new ProviderError(failed ? "server" : "empty");
-  return { text: text.trim(), promptTokens, completionTokens };
-};
+/**
+ * OpenRouter's free models (ids ending in :free, or the openrouter/free router). Free use is capped per account, so it
+ * is a last fallback, for general questions only. The two extra headers are OpenRouter's optional attribution.
+ */
+export const openrouter = openAiCompatible(
+  "openrouter",
+  () => "https://openrouter.ai/api/v1/chat/completions",
+  { "http-referer": "https://getfintrack.online", "x-title": "FinTrack" },
+);
 
-export const PROVIDERS = { gemini, groq, openrouter } as const;
+/**
+ * Cloudflare Workers AI through its OpenAI-compatible endpoint. The URL needs the account id
+ * (CLOUDFLARE_ACCOUNT_ID, not a secret); the key is an API token with Workers AI permission. 10,000 free neurons a day.
+ */
+export const cloudflare = openAiCompatible("cloudflare", () => {
+  const account = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
+  return account && /^[a-f0-9]{32}$/i.test(account)
+    ? `https://api.cloudflare.com/client/v4/accounts/${account}/ai/v1/chat/completions`
+    : null;
+});
+
+/** Mistral's API. On the free Experiment plan requests may be used for training, so it is used for general questions only. */
+export const mistral = openAiCompatible(
+  "mistral",
+  () => "https://api.mistral.ai/v1/chat/completions",
+);
+
+export const PROVIDERS = {
+  gemini,
+  groq,
+  cloudflare,
+  mistral,
+  openrouter,
+} as const;

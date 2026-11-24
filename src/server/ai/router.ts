@@ -228,7 +228,14 @@ async function failover(
   const fail = () =>
     new AiUnavailableError(sawBadRequest ? "bad_request" : "all_failed", trail);
 
-  for (const p of config.providers) {
+  // General questions go first to providers with a large free allowance for them, keeping the rest for personal ones.
+  const providers = req.general
+    ? [
+        ...config.providers.filter((p) => p.preferForGeneral),
+        ...config.providers.filter((p) => !p.preferForGeneral),
+      ]
+    : config.providers;
+  for (const p of providers) {
     // A provider whose free models may log inputs never sees a request built from the person's records.
     if (p.generalOnly && !req.general) continue;
     const client = clients[p.id];

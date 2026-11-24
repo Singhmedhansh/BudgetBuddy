@@ -484,3 +484,65 @@ describe("OpenRouter as a free last fallback", () => {
     expect(c.openrouter.complete).not.toHaveBeenCalled();
   });
 });
+
+describe("Cloudflare Workers AI and Mistral", () => {
+  const env = {
+    GEMINI_API_KEYS: "g",
+    GROQ_API_KEYS: "q",
+    CLOUDFLARE_API_TOKEN_1: "c",
+    CLOUDFLARE_ACCOUNT_ID: "0123456789abcdef0123456789abcdef",
+    MISTRAL_API_KEY_1: "m",
+    OPENROUTER_API_KEY_1: "o",
+    AI_ENABLED: "true",
+  };
+  it("adds both after Groq and Gemini, Cloudflare for any question and Mistral for general ones", () => {
+    const c = readAiConfig(env);
+    expect(c.providers.map((p) => p.id)).toEqual([
+      "gemini",
+      "groq",
+      "cloudflare",
+      "mistral",
+      "openrouter",
+    ]);
+    const by = Object.fromEntries(c.providers.map((p) => [p.id, p]));
+    expect(by.cloudflare.generalOnly).toBe(false);
+    expect(by.mistral.generalOnly).toBe(true);
+    expect(by.mistral.preferForGeneral).toBe(true);
+  });
+  it("leaves Cloudflare out without a valid account id", () => {
+    const c = readAiConfig({ ...env, CLOUDFLARE_ACCOUNT_ID: "nope" });
+    expect(c.providers.map((p) => p.id)).not.toContain("cloudflare");
+  });
+  const ok = (id: string) =>
+    vi.fn(async () => ({
+      text: `from ${id}`,
+      promptTokens: 1,
+      completionTokens: 1,
+    }));
+  const clients = () => ({
+    gemini: { id: "gemini" as const, complete: ok("gemini") },
+    groq: { id: "groq" as const, complete: ok("groq") },
+    cloudflare: { id: "cloudflare" as const, complete: ok("cloudflare") },
+    mistral: { id: "mistral" as const, complete: ok("mistral") },
+    openrouter: { id: "openrouter" as const, complete: ok("openrouter") },
+  });
+  const req = (general: boolean) => ({
+    system: "s",
+    messages: [{ role: "user" as const, content: "q" }],
+    maxOutputTokens: 50,
+    general,
+  });
+  it("sends a general question to Mistral first", async () => {
+    const c = clients();
+    const r = await generate(readAiConfig(env), req(true), c);
+    expect(r.provider).toBe("mistral");
+  });
+  it("never sends a personal question to Mistral", async () => {
+    const c = clients();
+    c.gemini.complete.mockRejectedValue(new ProviderError("rate_limit"));
+    c.groq.complete.mockRejectedValue(new ProviderError("rate_limit"));
+    const r = await generate(readAiConfig(env), req(false), c);
+    expect(r.provider).toBe("cloudflare");
+    expect(c.mistral.complete).not.toHaveBeenCalled();
+  });
+});

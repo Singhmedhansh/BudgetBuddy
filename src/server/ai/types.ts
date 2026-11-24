@@ -45,7 +45,7 @@ export class ProviderError extends Error {
 }
 
 export interface ProviderClient {
-  id: "gemini" | "groq" | "openrouter";
+  id: "gemini" | "groq" | "openrouter" | "cloudflare" | "mistral";
   complete(
     apiKey: string,
     model: string,
