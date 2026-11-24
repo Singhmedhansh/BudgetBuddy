@@ -9,9 +9,9 @@ const oneYearly = formatPrice(priceFor(ONE, "year")!);
 
 /**
  * Policy text for the product as built today. These are drafts for qualified
- * legal review before public launch: they make no compliance claims, and they
- * describe capabilities that are not live yet (paid plans, AI assistant, bank
- * connections) only as not live. Update this file in the same change as any
+ * legal review: they make no compliance claims, and they describe capabilities
+ * that are not live yet (bank connections) only as not live. Paid plans and
+ * Finn, the AI assistant, are live. Update this file in the same change as any
  * feature that alters what data is collected or shared.
  */
 export const LEGAL_UPDATED = "24 November 2026";
@@ -52,7 +52,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
         heading: "Who handles your data",
         blocks: [
           p("We use service providers to run FinTrack. Today these are a database, authentication and file-storage provider (Supabase) and a web hosting provider. They process data on our behalf and only to provide those services."),
-          p("Paid plans, when they launch, will use Razorpay for customers in India and PayPal for international customers. Card numbers go to the payment provider and never reach FinTrack. Payments are not live today."),
+          p("Payments for FinTrack One go through Razorpay for customers in India (cards, UPI and net banking) and PayPal for international customers. Card numbers, UPI details and bank logins go to the payment provider and never reach FinTrack. We receive what we need to run your plan: the payment's status, amount, date and the provider's reference."),
           p("Finn, the money assistant, uses outside AI providers to write its answers. What it sends and to whom is described in the last section of this policy, \"Finn and the AI providers it uses\"."),
           p("We do not sell your personal data."),
         ],
